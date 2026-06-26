@@ -1,0 +1,180 @@
+/* Shared layout for all instrument panels */
+.instrument-panel {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Display area (left, fills remaining space) ── */
+.display-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+  background: var(--bg-display);
+  border-right: 1px solid var(--border);
+}
+
+.display-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.display-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.03em;
+}
+
+.display-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.plotly-display {
+  flex: 1;
+  min-height: 0;
+}
+
+.display-overlay {
+  position: absolute;
+  inset: 40px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--text-secondary);
+  background: rgba(13, 13, 13, 0.75);
+  pointer-events: none;
+  letter-spacing: 0.05em;
+}
+
+/* ── Settings panel (right sidebar) ── */
+.settings-panel {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  padding: 12px 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Waveform selector buttons ── */
+.wave-selector {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.wave-selector button {
+  flex: 1 0 calc(50% - 4px);
+  min-width: 0;
+  font-size: 11px;
+  padding: 5px 4px;
+  text-align: center;
+}
+
+.wave-selector button.active {
+  background: var(--accent-orange);
+  border-color: var(--accent-orange);
+  color: #111;
+}
+
+/* ── Bit-depth selector buttons ── */
+.bit-depth-selector {
+  display: flex;
+  gap: 4px;
+}
+
+.bit-depth-selector button {
+  flex: 1;
+  font-size: 11px;
+  padding: 4px 4px;
+  text-align: center;
+}
+
+.bit-depth-selector button.active {
+  background: #ff8844;
+  border-color: #ff8844;
+  color: #111;
+}
+
+/* ── Run button (overrides global) ── */
+.run-btn {
+  padding: 4px 14px !important;
+  font-size: 11px !important;
+  background: #204020 !important;
+  border-color: #336633 !important;
+  color: #88dd88 !important;
+  font-weight: 600;
+  transition: background 0.1s;
+}
+
+.run-btn:hover {
+  background: #2a5a2a !important;
+}
+
+.run-btn.active {
+  background: #186618 !important;
+  border-color: #22aa22 !important;
+  color: #aaffaa !important;
+}
+
+/* ── Marker table ── */
+.marker-table {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(20, 20, 20, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-family: 'Courier New', monospace;
+  pointer-events: none;
+}
+
+.marker-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.marker-id {
+  color: var(--accent-blue);
+  font-weight: 700;
+  min-width: 18px;
+}
+
+.marker-freq {
+  color: var(--ch1-color);
+  min-width: 80px;
+}
+
+.marker-amp {
+  color: var(--text-primary);
+  min-width: 70px;
+}
+
+.marker-type {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+/* ── Learning mode section title ── */
+.learning-title {
+  color: #44dd88 !important;
+  border-bottom-color: #2a5a3a !important;
+}

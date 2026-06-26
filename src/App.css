@@ -1,0 +1,88 @@
+.app-shell {
+  display: flex;
+  height: 100vh;
+  background: var(--bg-app);
+}
+
+/* ── Left nav panel ── */
+.nav-panel {
+  width: 72px;
+  background: #141414;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.nav-logo {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-blue);
+  letter-spacing: 0.1em;
+  padding: 6px 0 12px;
+  border-bottom: 1px solid var(--border);
+  width: 100%;
+  text-align: center;
+}
+
+.nav-btn {
+  width: 58px;
+  min-height: 52px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  cursor: pointer;
+  padding: 6px 4px;
+  color: var(--text-secondary);
+  transition: all 0.1s;
+}
+
+.nav-btn:hover {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+}
+
+.nav-btn.nav-active {
+  background: var(--bg-panel);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.nav-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.nav-label {
+  font-size: 9px;
+  text-align: center;
+  line-height: 1.3;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Instrument area ── */
+.instrument-area {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+}
+
+/* Split view: both instruments side by side, each gets half */
+.instrument-area.split > * {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Divider between panels in split mode */
+.instrument-area.split > * + * {
+  border-left: 2px solid #222;
+}

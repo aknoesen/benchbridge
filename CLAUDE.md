@@ -237,4 +237,14 @@ set the cutoff frequency, and immediately see the Bode plot emerge in the Spectr
 Analyzer — the same measurement they will make on the bench, but parametric and
 zero-hardware-required. The twin teaches the ideal; hardware teaches the real deviation.
 
-## Things NOT 
+## Things NOT to change without understanding the math
+
+- **`tau = ((i * f) / Fs) % 1`** in `generateSignal` — changing this to 2π-based
+  arithmetic reintroduces transition-boundary errors and breaks the 12-bit noise floor
+- **Periodic window denominator N (not N−1)** in `buildWindow` — changing to N−1
+  breaks exact zero-leakage at harmonic bins
+- **`bluesteinFFT` instead of zero-padded FFT** — reverting to `nextPow2` padding
+  produces −30 to −50 dBFS sidelobes that mask the 8-bit and 12-bit noise floors
+- **Synthetic Gaussian noise** in `computeSpectrum` — replacing with actual
+  `Math.round(x / lsb) * lsb` quantization produces harmonic distortion products
+  that look like signal peaks and obscure the pedagogical bit-depth comparison
