@@ -147,3 +147,9 @@ label {
   min-width: 52px;
   text-align: right;
 }
+
+/* Schematic editor (SCH-1) */
+:root {
+  --node-color: #66ccff;
+  --wire-color: #88aa88;
+}

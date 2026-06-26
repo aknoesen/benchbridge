@@ -5,6 +5,7 @@ import SignalGenerator from './components/SignalGenerator'
 import SpectrumAnalyzer from './components/SpectrumAnalyzer'
 import Oscilloscope from './components/Oscilloscope'
 import NetworkAnalyzer from './components/NetworkAnalyzer'
+import SchematicEditor from './components/SchematicEditor'
 import SpiceDevPanel from './components/SpiceDevPanel'
 import './App.css'
 
@@ -12,7 +13,7 @@ import './App.css'
 // builds the real circuit UI. See docs/specs/schematic-ngspice.md.
 const SHOW_SPICE_DEV = true
 
-type ActiveInstrument = 'siggen' | 'spectrum' | 'scope' | 'network' | 'spice'
+type ActiveInstrument = 'siggen' | 'spectrum' | 'scope' | 'network' | 'schematic' | 'spice'
 type LayoutMode = 'single' | 'split'
 
 const DEFAULT_PARAMS: SignalParams = {
@@ -130,6 +131,15 @@ export default function App() {
         </button>
 
         <button
+          className={`nav-btn ${active === 'schematic' && layout === 'single' ? 'nav-active' : ''}`}
+          onClick={() => { setActive('schematic'); setLayout('single') }}
+          title="Schematic Editor"
+        >
+          <span className="nav-icon">&#9636;</span>
+          <span className="nav-label">Circuit</span>
+        </button>
+
+        <button
           className={`nav-btn ${layout === 'split' ? 'nav-active' : ''}`}
           onClick={() => setLayout(l => l === 'split' ? 'single' : 'split')}
           title="Split view: Signal Gen + Spectrum"
@@ -159,6 +169,8 @@ export default function App() {
             running={running}
             onRunToggle={() => setRunning(r => !r)}
           />
+        ) : layout === 'single' && active === 'schematic' ? (
+          <SchematicEditor />
         ) : layout === 'single' && active === 'network' ? (
           <NetworkAnalyzer />
         ) : layout === 'single' && active === 'spice' && SHOW_SPICE_DEV ? (

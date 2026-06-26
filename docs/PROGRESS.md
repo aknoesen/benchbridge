@@ -36,6 +36,39 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-26 — SCH-1 Browser schematic editor — DONE
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**What I did:**
+- `src/core/schematic.ts`: schematic model (`SchComponent`, `Wire`, `terminalsOf`),
+  `computeNets()` (union-find over grid points + wires), and `toCircuit()` → SPICE-2 `Circuit`
+  with net labelling (ground→`0`, V-source `+`→`in`, probe→`out`) plus validation warnings.
+- `src/components/SchematicEditor.tsx`: SVG grid editor. Palette (Select/Wire/R/C/L/V/Op-amp/
+  Ground/Probe); click-to-place, drag-to-move, Delete/Clear, two-click wiring, value inspector
+  with eng-notation parsing (1k, 159n). Live circuit validity readout from `toCircuit`.
+- `App.tsx`: "Circuit" nav entry; `src/index.css`: `--node-color`, `--wire-color`.
+- `src/core/schematic.test.ts`: hand-built RC schematic.
+
+**Verification (Definition of Done):**
+- build clean: `tsc && vite build` green (30 modules; index.js ~4.84 MB).
+- **Tests: 9/9 pass** (netlist 3, scope 3, bode 1, schematic 2). Schematic test: a hand-drawn
+  RC converts to R[in,out]/C[out,0]/V[in,0] and simulates to -3 dB in (900,1100) Hz.
+- 12-bit spectrum canary: signal.ts untouched; unaffected.
+
+**State for the next session:**
+- `toCircuit(schematic)` is the seam for SCH-2: wire the editor's circuit into the Network
+  Analyzer (`circuit` prop) and Scope CH2. The editor already computes a valid Circuit live.
+- SCH-2 = "Simulate" action + friendlier validation surfacing; LOOP-1 = full generator→circuit
+  →instruments wiring + transient to Scope CH2.
+
+**Open questions / flags for andre:**
+- Rotation supported (press R, or Rotate button; rotates the selected part, else the place
+  angle). Still click-to-place; richer symbols can come later if wanted.
+- Runtime visual check: open "Circuit", place V src + R + C + Ground + Probe, wire them, and
+  confirm the "valid" readout. (Interactions are build-verified but need your eyes.)
+
 ### 2026-06-26 — NET-1 Network Analyzer (Bode) — DONE
 
 **By:** Claude Code session (in Cowork)
