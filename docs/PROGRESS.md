@@ -36,6 +36,38 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-26 — LOOP-1 (Bode half) drawn circuit → Network Analyzer — IN PROGRESS
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**What I did:**
+- Lifted the schematic to `App` state (`schematic` + `setSchematic`); `SchematicEditor` is now
+  controlled via props. App computes `toCircuit(schematic)` and passes the result to the
+  Network Analyzer (`circuit` + `dutName`) ONLY when the drawing is valid (no warnings).
+- The Network Analyzer now sweeps **your drawn circuit** and labels the DUT accordingly; it
+  falls back to the built-in default RC when the drawing is empty/invalid.
+- File-recovery note: a flaky mount write truncated `SchematicEditor.tsx` mid-file; I rebuilt
+  the lost tail (closing tags + `renderSymbol`). Watch for this — verify file line counts after
+  large edits to that file.
+
+**Verification (Definition of Done):**
+- build clean: `tsc && vite build` green (30 modules; index.js ~4.84 MB).
+- Tests: 11/11 pass. The schematic test already covers drawn-RC → engine → -3 dB ≈ 1 kHz,
+  which is exactly the LOOP-1 path (editor circuit → netlist → transferFunction).
+- 12-bit spectrum canary: signal.ts untouched; unaffected.
+
+**Why IN PROGRESS (not DONE):**
+- The **Bode half is done** (draw a circuit → see its Bode in the Network Analyzer).
+- The **scope/transient half** (input on CH1 vs circuit output on CH2 via `.tran` → `circuit-out`)
+  still needs **OSC-2** (the second channel). `channelInputs.circuitOut` is still null.
+- Flip LOOP-1 to DONE once OSC-2 lands and the transient output is routed to Scope CH2.
+
+**Open questions / flags for andre:**
+- Runtime check: draw V src → R → out(C→Gnd) + Probe on out in the Circuit tab, then open the
+  Network tab — the Bode should reflect YOUR R/C values (change C and re-open to see fc move).
+  An empty/invalid drawing shows the default RC.
+
 ### 2026-06-26 — SCH-2 Simulate + validation (plus SCH-1 polish) — DONE
 
 **By:** Claude Code session (in Cowork)

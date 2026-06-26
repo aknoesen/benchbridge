@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { SignalParams, WaveType } from './core/signal'
 import { DEFAULT_CHANNELS, resolveChannelSamples, ChannelInputs } from './core/scope'
+import { toCircuit, type Schematic } from './core/schematic'
 import SignalGenerator from './components/SignalGenerator'
 import SpectrumAnalyzer from './components/SpectrumAnalyzer'
 import Oscilloscope from './components/Oscilloscope'
@@ -47,6 +48,9 @@ export default function App() {
   const [params2] = useState<SignalParams>(DEFAULT_PARAMS2)
   const [channels] = useState(DEFAULT_CHANNELS)
   const [running, setRunning] = useState(true)
+  // LOOP-1: the drawn circuit lives here so the Schematic editor and the Network Analyzer
+  // share it (the editor edits it; the analyzer sweeps it).
+  const [schematic, setSchematic] = useState<Schematic>({ components: [], wires: [] })
   // Tick counter forces signal recompute each frame so noise shimmers like a real SA
   const [tick, setTick] = useState(0)
   const rafRef = useRef<number | null>(null)
@@ -64,7 +68,8 @@ export default function App() {
     return () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current) }
   }, [running])
 
-  // Channel inputs feeding the bus. circuitOut is null until the circuit loop (LOOP-1).
+  // Channel inputs feeding the bus. circuitOut is null until the scope side of the loop
+  // (transient → CH2) lands with OSC-2.
   const channelInputs = useMemo<ChannelInputs>(() => ({
     generatorParams: params,
     generator2Params: params2,
@@ -83,6 +88,10 @@ export default function App() {
 
   // CH1 is the existing generator signal; the current instruments consume it unchanged.
   const signal = channelSignals.CH1
+
+  // Convert the drawing to a circuit; sweep it in the Network Analyzer only when valid.
+  const drawn = useMemo(() => toCircuit(schematic, 'Drawn circuit'), [schematic])
+  const drawnValid = drawn.warnings.length === 0
 
   function updateParam<K extends keyof SignalParams>(key: K, value: SignalParams[K]) {
     setParams(prev => ({ ...prev, [key]: value }))
@@ -170,9 +179,12 @@ export default function App() {
             onRunToggle={() => setRunning(r => !r)}
           />
         ) : layout === 'single' && active === 'schematic' ? (
-          <SchematicEditor />
+          <SchematicEditor schematic={schematic} setSchematic={setSchematic} />
         ) : layout === 'single' && active === 'network' ? (
-          <NetworkAnalyzer />
+          <NetworkAnalyzer
+            circuit={drawnValid ? drawn.circuit : undefined}
+            dutName={drawnValid ? 'your drawn circuit' : undefined}
+          />
         ) : layout === 'single' && active === 'spice' && SHOW_SPICE_DEV ? (
           <SpiceDevPanel />
         ) : (

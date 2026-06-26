@@ -1,7 +1,7 @@
 // Schematic editor (SCH-1) — a lightweight node-and-wire editor (NOT KiCad). Place R/C/L/V/
 // op-amp/ground/probe on a grid, draw wires, edit values. Produces a SPICE-2 Circuit via
 // toCircuit(). See docs/specs/schematic-ngspice.md (SCH-1).
-import { useMemo, useRef, useState, useEffect, type ReactElement } from 'react'
+import { useMemo, useRef, useState, useEffect, type ReactElement, type Dispatch, type SetStateAction } from 'react'
 import {
   Schematic, SchComponent, SchKind, terminalsOf, toCircuit,
 } from '../core/schematic'
@@ -51,9 +51,15 @@ function fmtEng(x: number): string {
 let idSeq = 1
 const newId = (k: SchKind) => `${k[0].toUpperCase()}${idSeq++}`
 
-export default function SchematicEditor() {
+interface EditorProps {
+  schematic: Schematic
+  setSchematic: Dispatch<SetStateAction<Schematic>>
+}
+
+export default function SchematicEditor({ schematic, setSchematic }: EditorProps) {
   const svgRef = useRef<SVGSVGElement>(null)
-  const [sch, setSch] = useState<Schematic>({ components: [], wires: [] })
+  const sch = schematic
+  const setSch = setSchematic
   const [tool, setTool] = useState<Tool>('resistor')
   const [selected, setSelected] = useState<string | null>(null)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
@@ -312,7 +318,7 @@ export default function SchematicEditor() {
         )}
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 8 }}>
           Tip: place parts, wire them, then press Simulate. Needs a V src, a Ground, and a
-          Probe on the output. LOOP-1 will plot the result in the Network Analyzer.
+          Probe on the output. LOOP-1 plots the result in the Network Analyzer.
         </div>
       </div>
     </div>

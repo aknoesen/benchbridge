@@ -34,12 +34,13 @@ const PHASE_COLOR = '#4a9eff'
 
 interface Props {
   circuit?: Circuit
+  dutName?: string
   compact?: boolean
 }
 
 interface BodeData { freq: number[]; magDb: number[]; phaseDeg: number[] }
 
-export default function NetworkAnalyzer({ circuit = DEFAULT_CIRCUIT, compact }: Props) {
+export default function NetworkAnalyzer({ circuit = DEFAULT_CIRCUIT, dutName, compact }: Props) {
   const magRef = useRef<HTMLDivElement>(null)
   const phaseRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<SpiceEngine | null>(null)
@@ -209,7 +210,7 @@ export default function NetworkAnalyzer({ circuit = DEFAULT_CIRCUIT, compact }: 
         <div className="section-title">Status</div>
         <div style={{ fontSize: 11, color: 'var(--accent-blue)', fontFamily: 'monospace' }}>{status}</div>
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 8 }}>
-          DUT: default RC low-pass (LOOP-1 will sweep the drawn circuit).
+          DUT: {dutName ?? 'default RC low-pass (draw a circuit in the Circuit tab to sweep it)'}
         </div>
       </div>
     </div>
