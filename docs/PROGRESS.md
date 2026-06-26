@@ -36,6 +36,82 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-26 — Spectrum Analyzer: CH1 / CH2 / Both channel select — DONE
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**Request:** spectrum should have CH1/CH2 like the scope and network analyzer.
+
+**What I did:**
+- `SpectrumAnalyzer.tsx`: added a Channels selector (CH1 / CH2 / Both) + props `params2`,
+  `signal2`, `onParam2Change`.
+  - Single channel (CH1 or CH2): the **full Learning Mode pipeline** (bit-depth noise floor,
+    theory overlay, peak marker, persistence, average) runs on the selected channel's signal +
+    params; trace colour orange/cyan; the Signal controls edit that channel.
+  - Both: a clean dual live overlay (CH1 orange, CH2 cyan) against the shared noise floor;
+    theory/persistence/average are single-channel concepts and are disabled in Both.
+  - CH2/Both disable until a CH2 signal exists.
+- `App.tsx`: passes `params2`, `signal2={measured2}`, `onParam2Change` to the Spectrum.
+
+**Verification:** build clean; **21/21 tests**; `signal.ts` untouched. **Canary holds by
+construction** — default channel is CH1 with the identical params/signal path as before, so the
+12-bit Hanning floor is unchanged at −104 dBFS.
+
+**State for the next session:**
+- All three frequency/time instruments (Scope, Spectrum, Network Analyzer) are now CH1/CH2 aware
+  and read their breadboard probes. Remaining TODO: OSC-3, LOOP-2, Track E, KICAD-1.
+
+### 2026-06-26 — Network Analyzer: CH1 / CH2 / Both channel select — DONE
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**Request:** like the scope's two channels, let the Network Analyzer plot CH1, CH2, or both.
+
+**What I did:**
+- `NetworkAnalyzer.tsx`: now takes `probes={ ch1?, ch2? }` (the SPICE node each scope probe is
+  wired to). One `.ac` run yields a transfer function per probe vs the W1 input —
+  `bode1 = V(ch1node)/V(in)` (ch1 defaults to `out`), `bode2 = V(ch2node)/V(in)` if a 2+ probe
+  exists. A **Channels** selector (CH1 / CH2 / Both) overlays the traces in scope colours
+  (CH1 orange, CH2 cyan), with a legend when both are shown. CH2/Both disable when no 2+ probe;
+  the fc readout follows the selected channel.
+- `App.tsx`: passes `probes={drawnValid ? drawn.probes : undefined}` to the Network Analyzer.
+
+**Verification:** build clean (tsc + vite); **21/21 tests**; `signal.ts` untouched (canary holds).
+
+**State for the next session:**
+- Each probe drives its own Bode trace (relative to the W1 input), consistent with the WIRE-3
+  scope fix where each probe reads its own node. Default-circuit case (no drawing) shows CH1 only.
+
+### 2026-06-26 — EDIT-1: rubber-band wires (pulled ahead of OSC-3 at andre's request) — DONE
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**What I did:**
+- `core/schematic.ts`: pure helpers — `attachedWireEnds(s, c)` (wire endpoints sitting on a
+  component's terminals), `moveComponentWithWires(s, id, gx, gy, attached)` (carry those ends by
+  the move delta), `rotateComponentWithWires(s, id)` (carry ends to the rotated terminals by
+  index), plus exported `WireEndRef`.
+- `SchematicEditor.tsx`: drag captures attached ends at mousedown (`attachedWireEnds`) so it moves
+  exactly those, never a wire it passes over; drag uses `moveComponentWithWires`; Rotate (button +
+  `r` key) uses `rotateComponentWithWires`.
+- Scope chosen per discussion: drag AND rotate, endpoints-only (straight wires, no auto-elbows),
+  junctions stretch (the moved part's wire follows; others stay).
+
+**Why it mattered (more than cosmetic):** connectivity is by coordinate coincidence, so a wire
+left behind when a part moved was *silently disconnecting* the part. Rubber-banding fixes that
+latent bug too.
+
+**Verification (Definition of Done):**
+- build clean; **21/21 tests** (+2: move carries attached ends & leaves fixed ends; rotate carries
+  ends to rotated terminals and `computeNets` keeps them on one net).
+- 12-bit canary: `signal.ts` untouched.
+
+**State for the next session:**
+- Remaining TODO: OSC-3 (triggers, fully specced incl. capture-phase), LOOP-2, Track E, KICAD-1.
+
 ### 2026-06-26 — Bugfix: scope CH2 (2+) now reads its wired node, not generator2 — DONE
 
 **By:** Claude Code session (in Cowork)

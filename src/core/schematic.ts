@@ -144,6 +144,66 @@ export function computeNets(s: Schematic): Map<string, string> {
   return out
 }
 
+// ── Rubber-band wires (EDIT-1) ─────────────────────────────────────────────────
+// When a component moves or rotates, wire endpoints sitting on its terminals follow, so
+// connections stretch instead of breaking. Connectivity here is by coordinate coincidence,
+// so a wire left behind would silently disconnect — these helpers keep it attached.
+
+export type WireEndRef = { index: number; end: 1 | 2 }
+
+// Wire endpoints currently coincident with any terminal of component `c`. Captured at drag
+// start so the editor moves exactly these, never grabbing a wire it merely passes over.
+export function attachedWireEnds(s: Schematic, c: SchComponent): WireEndRef[] {
+  const terms = new Set(terminalsOf(c).map((t) => key(t.gx, t.gy)))
+  const out: WireEndRef[] = []
+  s.wires.forEach((w, index) => {
+    if (terms.has(key(w.x1, w.y1))) out.push({ index, end: 1 })
+    if (terms.has(key(w.x2, w.y2))) out.push({ index, end: 2 })
+  })
+  return out
+}
+
+// Move component `id` to (gx,gy), carrying the given attached wire endpoints by the same delta.
+export function moveComponentWithWires(
+  s: Schematic, id: string, gx: number, gy: number, attached: WireEndRef[],
+): Schematic {
+  const c = s.components.find((x) => x.id === id)
+  if (!c) return s
+  const dgx = gx - c.gx, dgy = gy - c.gy
+  if (dgx === 0 && dgy === 0) return s
+  const m = new Set(attached.map((a) => `${a.index}:${a.end}`))
+  return {
+    components: s.components.map((x) => (x.id === id ? { ...x, gx, gy } : x)),
+    wires: s.wires.map((w, i) => {
+      let nw = w
+      if (m.has(`${i}:1`)) nw = { ...nw, x1: nw.x1 + dgx, y1: nw.y1 + dgy }
+      if (m.has(`${i}:2`)) nw = { ...nw, x2: nw.x2 + dgx, y2: nw.y2 + dgy }
+      return nw
+    }),
+  }
+}
+
+// Rotate component `id` one quarter-turn clockwise, carrying terminal-attached wire endpoints
+// to the rotated terminal positions (matched by terminal index).
+export function rotateComponentWithWires(s: Schematic, id: string): Schematic {
+  const c = s.components.find((x) => x.id === id)
+  if (!c) return s
+  const oldT = terminalsOf(c)
+  const nc = { ...c, rotation: (((c.rotation ?? 0) + 1) % 4) }
+  const newT = terminalsOf(nc)
+  const map = new Map<string, { gx: number; gy: number }>()
+  oldT.forEach((t, i) => map.set(key(t.gx, t.gy), { gx: newT[i].gx, gy: newT[i].gy }))
+  return {
+    components: s.components.map((x) => (x.id === id ? nc : x)),
+    wires: s.wires.map((w) => {
+      let nw = w
+      const a = map.get(key(w.x1, w.y1)); if (a) nw = { ...nw, x1: a.gx, y1: a.gy }
+      const b = map.get(key(w.x2, w.y2)); if (b) nw = { ...nw, x2: b.gx, y2: b.gy }
+      return nw
+    }),
+  }
+}
+
 export interface ToCircuitResult {
   circuit: Circuit
   warnings: string[]

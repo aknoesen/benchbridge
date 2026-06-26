@@ -192,6 +192,7 @@ export default function App() {
           <NetworkAnalyzer
             circuit={drawnValid ? drawn.circuit : undefined}
             dutName={drawnValid ? 'your drawn circuit' : undefined}
+            probes={drawnValid ? drawn.probes : undefined}
           />
         ) : layout === 'single' && active === 'voltmeter' ? (
           <Voltmeter circuit={drawn.circuit} w1={params} w2={params2} psu={psu} />
@@ -214,9 +215,12 @@ export default function App() {
               <SpectrumAnalyzer
                 params={params}
                 signal={measured}
+                params2={params2}
+                signal2={measured2}
                 running={running}
                 compact={layout === 'split'}
                 onParamChange={updateParam}
+                onParam2Change={(k, v) => setParams2(prev => ({ ...prev, [k]: v }))}
                 onRunToggle={() => setRunning(r => !r)}
               />
             )}

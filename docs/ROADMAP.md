@@ -77,7 +77,7 @@ ADC noise); wired through a circuit it reads a SPICE `.tran` of that node.
 | WIRE-1 | Breadboard ports in the schematic (W1/W2, Scope1/2) + toCircuit net mapping | SCH-1 | DONE |
 | WIRE-2 | Instruments read from their wired node (direct fast path + `.tran`) | WIRE-1, OSC-2 | DONE |
 | WIRE-3 | Scope/Spectrum read their wired node via `.tran`; non-sine PULSE drive | WIRE-2 | DONE |
-| EDIT-1 | Rubber-band wires: endpoints follow a component when it is moved/rotated | SCH-1 | TODO |
+| EDIT-1 | Rubber-band wires: endpoints follow a component when it is moved/rotated | SCH-1 | DONE |
 
 Notes:
 - WIRE-1 replaced the old "V src"/"Probe" palette items with **W1/W2** (gen outputs) and

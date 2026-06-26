@@ -4,6 +4,7 @@
 import { useMemo, useRef, useState, useEffect, type ReactElement, type Dispatch, type SetStateAction } from 'react'
 import {
   Schematic, SchComponent, SchKind, terminalsOf, toCircuit,
+  attachedWireEnds, moveComponentWithWires, rotateComponentWithWires, type WireEndRef,
 } from '../core/schematic'
 import { buildNetlist } from '../core/netlist'
 import { createSpiceEngine, type SpiceEngine, transferFunction } from '../core/spice'
@@ -36,7 +37,7 @@ const TOOLS: { tool: Tool; label: string }[] = [
 
 const UNIT: Partial<Record<SchKind, string>> = { resistor: 'Ω', capacitor: 'F', inductor: 'H', dcrail: 'V', inamp: 'V/V', inamp3: 'V/V' }
 const DEFAULT_VALUE: Partial<Record<SchKind, number>> = {
-  resistor: 1000, capacitor: 1e-9, inductor: 1e-3, dcrail: 5, vplus: 5, vminus: -5, inamp: 10, inamp3: 10,
+  resistor: 1000, capacitor: 100e-9, inductor: 1e-3, dcrail: 5, vplus: 5, vminus: -5, inamp: 10, inamp3: 10,
 }
 
 // Parse engineering notation like "1k", "159n", "4.7u" → number.
@@ -88,7 +89,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
   const [tool, setTool] = useState<Tool>('resistor')
   const [selected, setSelected] = useState<string | null>(null)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
-  const [drag, setDrag] = useState<{ id: string; ox: number; oy: number } | null>(null)
+  const [drag, setDrag] = useState<{ id: string; ox: number; oy: number; attached: WireEndRef[] } | null>(null)
   const [placeRotation, setPlaceRotation] = useState(0)
   const [simStatus, setSimStatus] = useState('')
   const [simBusy, setSimBusy] = useState(false)
@@ -229,7 +230,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
     if (tool !== 'select') return
     const { gx, gy } = gridAt(e)
     const c = sch.components.find((x) => x.id === id)!
-    setDrag({ id, ox: gx - c.gx, oy: gy - c.gy })
+    setDrag({ id, ox: gx - c.gx, oy: gy - c.gy, attached: attachedWireEnds(sch, c) })
   }
   function onWireClick(e: React.MouseEvent, i: number) {
     e.stopPropagation()
@@ -241,10 +242,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
     const { gx, gy } = gridAt(e)
     setHoverGrid({ gx, gy }) // live snap indicator for the wire tool
     if (!drag) return
-    setSch((s) => ({
-      ...s,
-      components: s.components.map((c) => c.id === drag.id ? { ...c, gx: Math.max(0, gx - drag.ox), gy: Math.max(0, gy - drag.oy) } : c),
-    }))
+    setSch((s) => moveComponentWithWires(s, drag.id, Math.max(0, gx - drag.ox), Math.max(0, gy - drag.oy), drag.attached))
   }
   function onMouseUp() { setDrag(null) }
 
@@ -260,7 +258,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
   }
   function rotate() {
     if (selected) {
-      setSch((s) => ({ ...s, components: s.components.map((c) => c.id === selected ? { ...c, rotation: (((c.rotation ?? 0) + 1) % 4) } : c) }))
+      setSch((s) => rotateComponentWithWires(s, selected))
     } else {
       setPlaceRotation((r) => (r + 1) % 4)
     }

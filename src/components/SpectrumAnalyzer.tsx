@@ -3,12 +3,17 @@ import Plotly from 'plotly.js-dist-min'
 import { SignalParams, computeSpectrum, theoreticalHarmonics, WindowType } from '../core/signal'
 import './Instrument.css'
 
+type Samples = { t: Float64Array; x: Float64Array }
+
 interface Props {
   params: SignalParams
-  signal: { t: Float64Array; x: Float64Array } | null
+  signal: Samples | null
+  params2: SignalParams
+  signal2: Samples | null
   running: boolean
   compact?: boolean
   onParamChange: <K extends keyof SignalParams>(key: K, value: SignalParams[K]) => void
+  onParam2Change: <K extends keyof SignalParams>(key: K, value: SignalParams[K]) => void
   onRunToggle: () => void
 }
 
@@ -21,17 +26,70 @@ const WINDOWS: { label: string; value: WindowType }[] = [
 ]
 const BIT_DEPTHS = [4, 8, 12]
 const PERSIST_DEPTH = 20   // frames kept for fade persistence
+const CH1_HEX = '#f0a030'
+const CH2_HEX = '#40c0e0'
+const CH1_RGB = '240,160,48'
+const CH2_RGB = '64,192,224'
 
-export default function SpectrumAnalyzer({ params, signal, running, compact, onParamChange, onRunToggle }: Props) {
-  const plotRef    = useRef<HTMLDivElement>(null)
+type ChannelSel = 'ch1' | 'ch2' | 'both'
+
+interface SpecSlice { freq: number[]; amp: number[]; noiseFloorDbfs: number; binWidthHz: number }
+
+// Compute the displayed spectrum slice (DC bin dropped, limited to freqMax).
+function specSlice(sig: Samples, Fs: number, bits: number, windowType: WindowType, freqMax: number): SpecSlice {
+  const { freqAxis, magnitudeDbfs, noiseFloorDbfs, binWidthHz } = computeSpectrum(sig.x, Fs, bits, 5, windowType)
+  const maxIdx = freqAxis.findIndex(f => f > freqMax) || freqAxis.length
+  return {
+    freq: Array.from(freqAxis.slice(1, maxIdx)),
+    amp: Array.from(magnitudeDbfs.slice(1, maxIdx)),
+    noiseFloorDbfs, binWidthHz,
+  }
+}
+
+// Parabolic-interpolated peak (freq, amp).
+function peakOf(s: SpecSlice): [number, number] {
+  let peakIdx = 0, peak = -200
+  for (let i = 0; i < s.amp.length; i++) if (s.amp[i] > peak) { peak = s.amp[i]; peakIdx = i }
+  let f = s.freq[peakIdx]
+  if (peakIdx > 0 && peakIdx < s.amp.length - 1) {
+    const l = s.amp[peakIdx - 1], m = s.amp[peakIdx], r = s.amp[peakIdx + 1]
+    f = s.freq[peakIdx] + (0.5 * (r - l) / (2 * m - l - r)) * s.binWidthHz
+  }
+  return [f, peak]
+}
+
+function makeLayout(freqMax: number, peakFreq: number | null, peakAmp: number | null): Partial<Plotly.Layout> {
+  return {
+    paper_bgcolor: 'var(--bg-display)', plot_bgcolor: 'var(--bg-display)',
+    font: { color: 'var(--text-primary)', size: 11 },
+    margin: { l: 56, r: 16, t: 24, b: 44 },
+    xaxis: { title: { text: 'Frequency (Hz)', font: { size: 11 } }, range: [0, freqMax],
+      gridcolor: '#2a2a2a', zerolinecolor: '#444', tickfont: { size: 10 }, color: 'var(--text-secondary)' },
+    yaxis: { title: { text: 'Amplitude (dBFS)', font: { size: 11 } }, range: [-120, 5],
+      gridcolor: '#2a2a2a', zerolinecolor: '#444', tickfont: { size: 10 }, color: 'var(--text-secondary)' },
+    legend: { font: { size: 10 }, bgcolor: 'rgba(30,30,30,0.8)', bordercolor: 'var(--border)', borderwidth: 1 },
+    annotations: (peakFreq !== null && peakAmp !== null) ? [{
+      x: peakFreq, y: peakAmp,
+      text: `M1: ${(peakFreq / 1000).toFixed(2)} kHz<br>${peakAmp.toFixed(1)} dBFS`,
+      showarrow: true, arrowhead: 2, arrowcolor: '#ffffff88',
+      font: { size: 10, color: '#ffffff' }, bgcolor: 'rgba(40,40,40,0.9)', bordercolor: '#666', borderwidth: 1,
+    }] : [],
+  }
+}
+
+export default function SpectrumAnalyzer({
+  params, signal, params2, signal2, running, compact, onParamChange, onParam2Change, onRunToggle,
+}: Props) {
+  const plotRef = useRef<HTMLDivElement>(null)
   const initialised = useRef(false)
 
-  // Persistence buffers — cleared whenever the display geometry changes
-  const fadeBufferRef = useRef<number[][]>([])   // last N amplitude arrays
+  // Persistence buffers — cleared whenever the display geometry / channel changes
+  const fadeBufferRef = useRef<number[][]>([])
   const avgBufferRef  = useRef<number[] | null>(null)
   const avgCountRef   = useRef(0)
   const prevBinCountRef = useRef(0)
 
+  const [channel, setChannel] = useState<ChannelSel>('ch1')
   const [bits, setBits]           = useState(12)
   const [showTheory, setShowTheory] = useState(false)
   const [freqMax, setFreqMax]     = useState(10000)
@@ -41,36 +99,61 @@ export default function SpectrumAnalyzer({ params, signal, running, compact, onP
   const [markerFreq, setMarkerFreq] = useState<number | null>(null)
   const [markerAmp, setMarkerAmp]   = useState<number | null>(null)
 
-  // Reset persistence buffers when display settings change
+  // Which params the Signal controls edit (CH2 when CH2 is the sole selection, else CH1).
+  const editIsCh2 = channel === 'ch2'
+  const par = editIsCh2 ? params2 : params
+  const onParChange = editIsCh2 ? onParam2Change : onParamChange
+  const chLabel = channel === 'both' ? 'CH1 + CH2' : channel === 'ch2' ? 'CH2' : 'CH1'
+
+  // Reset persistence buffers when display settings or channel change
   useEffect(() => {
     fadeBufferRef.current = []
     avgBufferRef.current  = null
     avgCountRef.current   = 0
     prevBinCountRef.current = 0
-  }, [bits, freqMax, windowType, params.frequency, params.waveType, params.dutyCycle, params.samplingRate])
+  }, [bits, freqMax, windowType, channel,
+      params.frequency, params.waveType, params.dutyCycle, params.samplingRate,
+      params2.frequency, params2.waveType, params2.dutyCycle])
 
   useEffect(() => {
     if (!plotRef.current) return
     const el = plotRef.current
 
-    if (!signal) {
-      if (initialised.current) Plotly.purge(el)
-      initialised.current = false
-      setMarkerFreq(null)
-      setMarkerAmp(null)
+    // ── Both channels: simple dual live overlay against the shared noise floor ──
+    if (channel === 'both' && signal && signal2) {
+      const s1 = specSlice(signal, params.samplingRate, bits, windowType, freqMax)
+      const s2 = specSlice(signal2, params2.samplingRate, bits, windowType, freqMax)
+      const [pf, pa] = peakOf(s1)
+      setMarkerFreq(pf); setMarkerAmp(pa)
+      const traces: Plotly.Data[] = [
+        { x: s1.freq, y: s1.amp, type: 'scatter', mode: 'lines', line: { color: CH1_HEX, width: 1 }, name: 'CH1' },
+        { x: s2.freq, y: s2.amp, type: 'scatter', mode: 'lines', line: { color: CH2_HEX, width: 1 }, name: 'CH2' },
+        { x: [s1.freq[0], s1.freq[s1.freq.length - 1]], y: [s1.noiseFloorDbfs, s1.noiseFloorDbfs],
+          type: 'scatter', mode: 'lines', line: { color: '#ff4444', width: 1, dash: 'dot' }, name: `Floor (${bits}-bit)` },
+      ]
+      const layout = makeLayout(freqMax, pf, pa)
+      const config: Partial<Plotly.Config> = { displayModeBar: false, responsive: true, scrollZoom: true }
+      if (!initialised.current) { Plotly.newPlot(el, traces, layout, config); initialised.current = true }
+      else Plotly.react(el, traces, layout, config)
       return
     }
 
-    const { freqAxis, magnitudeDbfs, noiseFloorDbfs, binWidthHz } = computeSpectrum(
-      signal.x, params.samplingRate, bits, 5, windowType
-    )
+    // ── Single channel: full Learning-Mode pipeline on the selected channel ──
+    const sig = channel === 'ch2' ? signal2 : signal
+    const sigPar = channel === 'ch2' ? params2 : params
+    const liveHex = channel === 'ch2' ? CH2_HEX : CH1_HEX
+    const liveRgb = channel === 'ch2' ? CH2_RGB : CH1_RGB
 
-    // Limit to display range
-    const maxIdx = freqAxis.findIndex(f => f > freqMax) || freqAxis.length
-    const freqDisp = Array.from(freqAxis.slice(1, maxIdx))
-    const ampDisp  = Array.from(magnitudeDbfs.slice(1, maxIdx))
+    if (!sig) {
+      if (initialised.current) Plotly.purge(el)
+      initialised.current = false
+      setMarkerFreq(null); setMarkerAmp(null)
+      return
+    }
 
-    // If bin count changed (edge case), clear buffers
+    const s = specSlice(sig, sigPar.samplingRate, bits, windowType, freqMax)
+    const freqDisp = s.freq, ampDisp = s.amp
+
     if (ampDisp.length !== prevBinCountRef.current) {
       fadeBufferRef.current = []
       avgBufferRef.current  = null
@@ -78,16 +161,12 @@ export default function SpectrumAnalyzer({ params, signal, running, compact, onP
       prevBinCountRef.current = ampDisp.length
     }
 
-    // ── Persistence buffers ──────────────────────────────────────────────────
-
-    // Fade buffer: rolling window of last PERSIST_DEPTH frames
     if (persistence) {
       fadeBufferRef.current = [ampDisp, ...fadeBufferRef.current].slice(0, PERSIST_DEPTH)
     } else {
       fadeBufferRef.current = []
     }
 
-    // Running average (exponential moving average)
     if (showAvg) {
       if (!avgBufferRef.current) {
         avgBufferRef.current = [...ampDisp]
@@ -104,77 +183,43 @@ export default function SpectrumAnalyzer({ params, signal, running, compact, onP
       avgCountRef.current  = 0
     }
 
-    // ── Peak marker ──────────────────────────────────────────────────────────
-    let peakIdx = 0, localPeakAmp = -200
-    for (let i = 0; i < ampDisp.length; i++) {
-      if (ampDisp[i] > localPeakAmp) { localPeakAmp = ampDisp[i]; peakIdx = i }
-    }
-    let localPeakFreq = freqDisp[peakIdx]
-    if (peakIdx > 0 && peakIdx < ampDisp.length - 1) {
-      const left = ampDisp[peakIdx - 1], mid = ampDisp[peakIdx], right = ampDisp[peakIdx + 1]
-      const delta = 0.5 * (right - left) / (2 * mid - left - right)
-      localPeakFreq = freqDisp[peakIdx] + delta * binWidthHz
-    }
+    const [localPeakFreq, localPeakAmp] = peakOf(s)
     setMarkerFreq(localPeakFreq)
     setMarkerAmp(localPeakAmp)
 
-    // ── Build traces ─────────────────────────────────────────────────────────
     const traces: Plotly.Data[] = []
 
-    // Fade persistence: oldest frames first (drawn behind), most transparent
     if (persistence && fadeBufferRef.current.length > 1) {
       for (let i = fadeBufferRef.current.length - 1; i >= 1; i--) {
-        const age = i  // 1 = most recent old frame, PERSIST_DEPTH-1 = oldest
-        const opacity = Math.pow(0.78, age) * 0.7
+        const opacity = Math.pow(0.78, i) * 0.7
         traces.push({
-          x: freqDisp,
-          y: fadeBufferRef.current[i],
-          type: 'scatter',
-          mode: 'lines',
-          line: { color: `rgba(240,160,48,${opacity.toFixed(3)})`, width: 1 },
-          showlegend: false,
-          hoverinfo: 'none' as const,
+          x: freqDisp, y: fadeBufferRef.current[i], type: 'scatter', mode: 'lines',
+          line: { color: `rgba(${liveRgb},${opacity.toFixed(3)})`, width: 1 },
+          showlegend: false, hoverinfo: 'none' as const,
         })
       }
     }
 
-    // Current frame — dimmed when average is active (average becomes the primary display)
     traces.push({
-      x: freqDisp,
-      y: ampDisp,
-      type: 'scatter',
-      mode: 'lines',
-      line: { color: showAvg ? 'rgba(240,160,48,0.25)' : '#f0a030', width: 1 },
-      name: 'CH1 (live)',
+      x: freqDisp, y: ampDisp, type: 'scatter', mode: 'lines',
+      line: { color: showAvg ? `rgba(${liveRgb},0.25)` : liveHex, width: 1 },
+      name: `${chLabel} (live)`,
     })
 
-    // Running average
     if (showAvg && avgBufferRef.current) {
       traces.push({
-        x: freqDisp,
-        y: avgBufferRef.current,
-        type: 'scatter',
-        mode: 'lines',
-        line: { color: '#44aaff', width: 2 },
-        name: `Avg (n=${avgCountRef.current})`,
+        x: freqDisp, y: avgBufferRef.current, type: 'scatter', mode: 'lines',
+        line: { color: '#44aaff', width: 2 }, name: `Avg (n=${avgCountRef.current})`,
       })
     }
 
-    // Noise floor reference line
     traces.push({
-      x: [freqDisp[0], freqDisp[freqDisp.length - 1]],
-      y: [noiseFloorDbfs, noiseFloorDbfs],
-      type: 'scatter',
-      mode: 'lines',
-      line: { color: '#ff4444', width: 1, dash: 'dot' },
-      name: `Floor (${bits}-bit)`,
+      x: [freqDisp[0], freqDisp[freqDisp.length - 1]], y: [s.noiseFloorDbfs, s.noiseFloorDbfs],
+      type: 'scatter', mode: 'lines', line: { color: '#ff4444', width: 1, dash: 'dot' }, name: `Floor (${bits}-bit)`,
     })
 
-    // Theoretical overlay
     if (showTheory) {
-      const theory = theoreticalHarmonics(
-        params.waveType, params.amplitude, params.frequency, params.dutyCycle, 15
-      )
+      const theory = theoreticalHarmonics(sigPar.waveType, sigPar.amplitude, sigPar.frequency, sigPar.dutyCycle, 15)
       const theoryFreqs: number[] = [], theoryDbfs: number[] = []
       theory.frequencies.forEach((f, i) => {
         if (f <= freqMax) {
@@ -183,63 +228,25 @@ export default function SpectrumAnalyzer({ params, signal, running, compact, onP
         }
       })
       traces.push({
-        x: theoryFreqs, y: theoryDbfs,
-        type: 'scatter', mode: 'markers',
-        marker: { color: '#44dd88', size: 8, symbol: 'diamond' },
-        name: 'Theory',
+        x: theoryFreqs, y: theoryDbfs, type: 'scatter', mode: 'markers',
+        marker: { color: '#44dd88', size: 8, symbol: 'diamond' }, name: 'Theory',
       })
     }
 
-    // ── Layout ───────────────────────────────────────────────────────────────
-    const layout: Partial<Plotly.Layout> = {
-      paper_bgcolor: 'var(--bg-display)',
-      plot_bgcolor: 'var(--bg-display)',
-      font: { color: 'var(--text-primary)', size: 11 },
-      margin: { l: 56, r: 16, t: 24, b: 44 },
-      xaxis: {
-        title: { text: 'Frequency (Hz)', font: { size: 11 } },
-        range: [0, freqMax],
-        gridcolor: '#2a2a2a', zerolinecolor: '#444',
-        tickfont: { size: 10 }, color: 'var(--text-secondary)',
-      },
-      yaxis: {
-        title: { text: 'Amplitude (dBFS)', font: { size: 11 } },
-        range: [-120, 5],
-        gridcolor: '#2a2a2a', zerolinecolor: '#444',
-        tickfont: { size: 10 }, color: 'var(--text-secondary)',
-      },
-      legend: {
-        font: { size: 10 }, bgcolor: 'rgba(30,30,30,0.8)',
-        bordercolor: 'var(--border)', borderwidth: 1,
-      },
-      annotations: [{
-        x: localPeakFreq, y: localPeakAmp,
-        text: `M1: ${(localPeakFreq / 1000).toFixed(2)} kHz<br>${localPeakAmp.toFixed(1)} dBFS`,
-        showarrow: true, arrowhead: 2, arrowcolor: '#ffffff88',
-        font: { size: 10, color: '#ffffff' },
-        bgcolor: 'rgba(40,40,40,0.9)', bordercolor: '#666', borderwidth: 1,
-      }],
-    }
-
+    const layout = makeLayout(freqMax, localPeakFreq, localPeakAmp)
     const config: Partial<Plotly.Config> = { displayModeBar: false, responsive: true, scrollZoom: true }
-
-    if (!initialised.current) {
-      Plotly.newPlot(el, traces, layout, config)
-      initialised.current = true
-    } else {
-      Plotly.react(el, traces, layout, config)
-    }
+    if (!initialised.current) { Plotly.newPlot(el, traces, layout, config); initialised.current = true }
+    else Plotly.react(el, traces, layout, config)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signal, bits, showTheory, freqMax, params, windowType, persistence, showAvg])
+  }, [signal, signal2, channel, bits, showTheory, freqMax, params, params2, windowType, persistence, showAvg])
 
   const snrDb = (6.02 * bits + 1.76).toFixed(0)
 
   return (
     <div className="instrument-panel">
-      {/* ── Display ── */}
       <div className="display-area">
         <div className="display-header">
-          <span className="display-title">Spectrum Analyzer — CH1</span>
+          <span className="display-title">Spectrum Analyzer — {chLabel}</span>
           <div className="display-controls">
             <button className={`run-btn ${running ? 'active' : ''}`} onClick={onRunToggle}>
               {running ? '⏹ Stop' : '▶ Run'}
@@ -260,10 +267,20 @@ export default function SpectrumAnalyzer({ params, signal, running, compact, onP
         )}
       </div>
 
-      {/* ── Settings ── */}
       <div className="settings-panel" style={compact ? { width: 160 } : undefined}>
-        <div className="section-title">Sweep</div>
+        <div className="section-title">Channels</div>
+        <div className="wave-selector">
+          <button className={channel === 'ch1' ? 'active' : ''} onClick={() => setChannel('ch1')}>CH1</button>
+          <button className={channel === 'ch2' ? 'active' : ''} onClick={() => setChannel('ch2')} disabled={!signal2}>CH2</button>
+          <button className={channel === 'both' ? 'active' : ''} onClick={() => setChannel('both')} disabled={!signal2}>Both</button>
+        </div>
+        {channel === 'both' && (
+          <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4 }}>
+            Both: live overlay only. Learning Mode (theory, persistence, average) applies to a single channel.
+          </div>
+        )}
 
+        <div className="section-title">Sweep</div>
         <div className="control-row-inline">
           <label>Stop freq</label>
           <select value={freqMax} onChange={e => setFreqMax(Number(e.target.value))} style={{ width: 90 }}>
@@ -273,7 +290,6 @@ export default function SpectrumAnalyzer({ params, signal, running, compact, onP
             <option value={50000}>50 kHz</option>
           </select>
         </div>
-
         <div className="control-row-inline">
           <label>Window</label>
           <select value={windowType} onChange={e => setWindowType(e.target.value as WindowType)} style={{ width: 90 }}>
@@ -281,37 +297,34 @@ export default function SpectrumAnalyzer({ params, signal, running, compact, onP
           </select>
         </div>
 
-        <div className="section-title">Signal</div>
-
+        <div className="section-title">Signal — {editIsCh2 ? 'CH2' : 'CH1'}</div>
         <div className="control-row-inline">
           <label>Frequency</label>
           <input type="number" min={10} max={20000} step={10}
-            value={params.frequency}
-            onChange={e => onParamChange('frequency', Number(e.target.value))}
+            value={par.frequency}
+            onChange={e => onParChange('frequency', Number(e.target.value))}
             style={{ width: 80 }} />
         </div>
         <div className="control-row-inline">
           <label>Amplitude</label>
           <input type="number" min={0.1} max={2.5} step={0.1}
-            value={params.amplitude}
-            onChange={e => onParamChange('amplitude', Number(e.target.value))}
+            value={par.amplitude}
+            onChange={e => onParChange('amplitude', Number(e.target.value))}
             style={{ width: 80 }} />
         </div>
-        {params.waveType === 'square' && (
+        {par.waveType === 'square' && (
           <div className="control-row">
             <div className="control-row-inline" style={{ marginBottom: 2 }}>
               <label>Duty Cycle</label>
-              <span className="value-badge">{params.dutyCycle}%</span>
+              <span className="value-badge">{par.dutyCycle}%</span>
             </div>
             <input type="range" min={1} max={99}
-              value={params.dutyCycle}
-              onChange={e => onParamChange('dutyCycle', Number(e.target.value))} />
+              value={par.dutyCycle}
+              onChange={e => onParChange('dutyCycle', Number(e.target.value))} />
           </div>
         )}
 
-        {/* ── Learning Mode ── */}
         <div className="section-title learning-title">⚗ Learning Mode</div>
-
         <div className="control-row">
           <div className="control-row-inline" style={{ marginBottom: 2 }}>
             <label>ADC Bit Depth</label>
@@ -329,21 +342,20 @@ export default function SpectrumAnalyzer({ params, signal, running, compact, onP
           </div>
         </div>
 
-        {/* Persistence */}
         <div className="control-row" style={{ borderTop: '1px solid #333', paddingTop: 8, marginTop: 4 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', marginBottom: 6 }}>
-            <input type="checkbox" checked={persistence} onChange={e => setPersistence(e.target.checked)} />
-            <span style={{ color: persistence ? '#f0a030' : 'var(--text-label)' }}>
+            <input type="checkbox" checked={persistence} onChange={e => setPersistence(e.target.checked)} disabled={channel === 'both'} />
+            <span style={{ color: persistence && channel !== 'both' ? '#f0a030' : 'var(--text-label)' }}>
               Persistence ({PERSIST_DEPTH} frames)
             </span>
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-            <input type="checkbox" checked={showAvg} onChange={e => setShowAvg(e.target.checked)} />
-            <span style={{ color: showAvg ? '#44aaff' : 'var(--text-label)' }}>
+            <input type="checkbox" checked={showAvg} onChange={e => setShowAvg(e.target.checked)} disabled={channel === 'both'} />
+            <span style={{ color: showAvg && channel !== 'both' ? '#44aaff' : 'var(--text-label)' }}>
               Running average
             </span>
           </label>
-          {showAvg && avgCountRef.current > 1 && (
+          {showAvg && channel !== 'both' && avgCountRef.current > 1 && (
             <div style={{ fontSize: 10, color: '#44aaff', marginTop: 3 }}>
               n = {avgCountRef.current} frames
             </div>
@@ -352,7 +364,7 @@ export default function SpectrumAnalyzer({ params, signal, running, compact, onP
 
         <div className="control-row">
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-            <input type="checkbox" checked={showTheory} onChange={e => setShowTheory(e.target.checked)} />
+            <input type="checkbox" checked={showTheory} onChange={e => setShowTheory(e.target.checked)} disabled={channel === 'both'} />
             Show theoretical spectrum ◆
           </label>
         </div>

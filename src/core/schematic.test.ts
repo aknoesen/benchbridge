@@ -126,3 +126,35 @@ describe('scope probe mapping (WIRE-3)', () => {
     expect(probes.ch2).toBe('in')
   })
 })
+
+import { attachedWireEnds, moveComponentWithWires, rotateComponentWithWires, computeNets } from './schematic'
+
+describe('rubber-band wires (EDIT-1)', () => {
+  it('moving a component carries attached wire endpoints by the same delta', () => {
+    const s: Schematic = {
+      components: [{ id: 'R1', kind: 'resistor', gx: 4, gy: 0, value: 1000 }],
+      wires: [
+        { x1: 2, y1: 0, x2: 4, y2: 0 }, // end2 on R.a (4,0)
+        { x1: 6, y1: 0, x2: 8, y2: 0 }, // end1 on R.b (6,0)
+      ],
+    }
+    const attached = attachedWireEnds(s, s.components[0])
+    expect(attached).toEqual([{ index: 0, end: 2 }, { index: 1, end: 1 }])
+    const moved = moveComponentWithWires(s, 'R1', 4, 3, attached) // drag down 3
+    expect(moved.components[0]).toMatchObject({ gx: 4, gy: 3 })
+    expect(moved.wires[0]).toEqual({ x1: 2, y1: 0, x2: 4, y2: 3 }) // attached end followed
+    expect(moved.wires[1]).toEqual({ x1: 6, y1: 3, x2: 8, y2: 0 }) // fixed ends stayed put
+  })
+
+  it('rotating a component carries attached endpoints to the rotated terminals; stays connected', () => {
+    const s: Schematic = {
+      components: [{ id: 'R1', kind: 'resistor', gx: 4, gy: 4, rotation: 0 }],
+      wires: [{ x1: 8, y1: 4, x2: 6, y2: 4 }], // end2 on R.b (6,4)
+    }
+    const r = rotateComponentWithWires(s, 'R1')
+    // R.b rotates (6,4) → (4,6); the wire end follows so the connection is preserved
+    expect(r.wires[0]).toEqual({ x1: 8, y1: 4, x2: 4, y2: 6 })
+    const nets = computeNets(r)
+    expect(nets.get('4,6')).toBe(nets.get('8,4'))
+  })
+})
