@@ -1,0 +1,245 @@
+# SPEC — Schematic editor + NGSpice WASM (the circuit loop)
+
+Goal: close the loop described in `CLAUDE.md` — **Signal Generator output → circuit →
+Spectrum Analyzer / Oscilloscope input** — entirely in the browser, no hardware. A student
+draws an RC filter, sets the cutoff, and sees the Bode curve emerge in the Spectrum
+Analyzer; the same measurement they will later make on the bench.
+
+Read `docs/CONVENTIONS.md` first. SPICE/netlist logic lives in `src/core/`, the editor UI in
+`src/components/SchematicEditor.tsx`.
+
+---
+
+## Engine decision (made — do not re-litigate without sign-off)
+
+**Use `eecircuit-engine`** (npm, MIT license) as the SPICE engine.
+
+Why this one:
+- It is ngspice compiled to WebAssembly with a clean, documented **TypeScript** API:
+  `new Simulation()` → `await sim.start()` → `sim.setNetList(netlist)` → `await sim.runSim()`.
+- **MIT-licensed** wrapper over BSD-licensed ngspice — both permissive, fine for an
+  educational tool. (Underlying ngspice is modified-BSD.)
+- Netlist input is **standard ngspice format**, so the schematic layer stays fully decoupled
+  from the solver — exactly the architecture `CLAUDE.md` calls for.
+- Supports the analyses we need: **transient** (`.tran`) for time-domain into the scope and
+  **AC** (`.ac`) for the Bode plot into the Spectrum Analyzer.
+- It is itself a Vite/TypeScript project, so it fits this toolchain.
+
+Risk and mitigation:
+- It is a **small project** (low stars, few maintainers). Mitigate by putting it behind our
+  own `SpiceEngine` adapter interface (below) so it can be swapped for **tscircuit/ngspice**
+  (MIT wrapper, also ngspice-WASM) or **ngspiceX** with no change to callers.
+- WASM asset loading must respect the `/m2k-scopy-web/` base path (see CONVENTIONS §11).
+
+Alternatives considered (keep as fallbacks, do not install now): `tscircuit/ngspice`,
+`ngspiceX`, `danchitnis/ngspice`. All are ngspice-WASM; the adapter makes them
+interchangeable.
+
+---
+
+## Phase SPICE-1 — Engine integration behind an adapter, in a Worker
+
+**Goal:** prove ngspice WASM loads and runs a hardcoded netlist, off the main thread, in a
+production build under the GitHub Pages base path. This de-risks the hardest unknown — do it
+early (see ROADMAP sequence).
+
+**Implement:**
+- `npm install eecircuit-engine` (note it in PROGRESS).
+- `src/core/spice.ts` — define the **adapter interface** and an `eecircuit-engine`-backed
+  implementation:
+
+```typescript
+export interface SimResult {
+  // parsed, engine-agnostic shape — NOT the raw engine output
+  variables: string[]               // e.g. ['time', 'v(out)'] or ['frequency', 'v(out)']
+  data: Float64Array[]              // column-major, one array per variable
+  analysis: 'tran' | 'ac' | 'dc' | 'op'
+}
+
+export interface SpiceEngine {
+  init(): Promise<void>
+  run(netlist: string): Promise<SimResult>
+  dispose(): void
+}
+
+export function createSpiceEngine(): SpiceEngine   // returns the eecircuit-engine impl
+```
+
+- Run the engine in a **Web Worker** so `runSim` never blocks rendering. The adapter's
+  async methods hide the worker boundary from callers. (eecircuit-engine's API is already
+  async; the worker is about keeping the heavy WASM call off the UI thread.)
+- Parse the engine's raw result into the normalized `SimResult` (decouples the rest of the
+  app from eecircuit's output format — essential for swappability).
+- A throwaway dev affordance (a button or a temporary panel) that runs a hardcoded RC
+  netlist and logs/plots the result, to prove the pipeline. Remove or gate it before
+  later phases.
+
+**Acceptance criteria:**
+- A hardcoded RC low-pass `.ac` and `.tran` netlist runs and returns parsed data.
+- **Works in `npm run build && npm run preview`**, not only `npm run dev` — confirm the
+  `.wasm` loads under `/m2k-scopy-web/`. This is the real test of this phase; document it.
+- UI stays responsive during `runSim` (worker confirmed).
+- Build clean; spectrum regression canary holds.
+
+**Files allowed:** `src/core/spice.ts` (new), a worker file (e.g. `src/core/spice.worker.ts`),
+`package.json`/lockfile (the one dependency), `vite.config.ts` (only if worker/wasm config is
+required — document any change), a temporary test affordance, docs.
+**Files forbidden:** `core/signal.ts`, the existing instruments' math.
+
+---
+
+## Phase SPICE-2 — Circuit graph model + netlist generator
+
+**Goal:** a typed circuit representation that produces correct ngspice netlists, independent
+of any UI.
+
+**Implement:**
+- `src/core/netlist.ts`:
+  - Types for a circuit graph: `Node` (named net, e.g. `in`, `out`, `0` for ground) and
+    `Component` (discriminated union: resistor, capacitor, inductor, voltage source,
+    op-amp, ground). Each component has an id, value(s), and the nets it connects.
+  - `buildNetlist(circuit, analysis)` → ngspice netlist string. Supports `.tran` and `.ac`
+    directives parameterized by the analysis settings (start/stop freq, points/decade for
+    AC; step/stop for transient).
+  - The input source maps to the **Signal Generator**: a `V` source whose amplitude/
+    frequency/offset/waveshape come from `SignalParams` (sine → `SIN(...)`, for AC a `AC 1`
+    source). Document the mapping.
+- Minimal op-amp model: an ideal/VCVS-based subcircuit is enough for EEC1 (inverting amp,
+  INA-style front end). Do not require students to supply transistor models.
+
+**Acceptance criteria:**
+- `buildNetlist` for a known RC low-pass produces a netlist that, fed to the SPICE-1 engine,
+  yields the expected −3 dB point at `f = 1/(2πRC)` within tolerance. **Add a Vitest test**
+  asserting the netlist string and (if practical) the simulated cutoff. (If no test harness
+  exists yet, this phase may add Vitest as a dev dependency — note it.)
+- Build clean; regression canary holds.
+
+**Files allowed:** `src/core/netlist.ts` (new), test files, `package.json` (dev-only test
+dep if added), docs.
+
+---
+
+## Phase SCH-1 — Browser schematic editor MVP
+
+**Goal:** a lightweight, first-year-friendly node-and-wire editor. **Not** KiCad.
+
+**Implement:**
+- `src/components/SchematicEditor.tsx` + nav entry + split/single layout integration.
+- SVG-based canvas. Component palette: **Resistor, Capacitor, Inductor, Voltage source
+  (= generator input), Op-amp, Ground.** Place by click/drag; move; delete.
+- Wires connect component terminals; junctions create named nets. Auto-name nets, with the
+  generator-input net and the output net specially labelled (`in`, `out`) so the loop phase
+  can find them.
+- Per-component value editing (R in Ω, C in F, etc.) via an inline field or a small
+  inspector.
+- Colors from CSS vars (`--node-color`, `--wire-color`, `--ch1-color` for the source).
+- This phase is **editor only** — it does not have to simulate yet. It produces an
+  in-memory circuit graph (the SPICE-2 model) on demand.
+
+**Acceptance criteria:**
+- A student can draw an RC low-pass (source → R → out node → C → ground) and the editor
+  yields a valid circuit graph object.
+- Place/move/delete/wire all work without console errors.
+- Build clean; regression canary holds.
+
+**Files allowed:** `SchematicEditor.tsx` (new), `App.tsx` (nav/layout),
+`core/netlist.ts` (graph types only — share with SPICE-2), `index.css` (new vars),
+`Instrument.css`, docs.
+
+---
+
+## Phase SCH-2 — Bind editor → graph → netlist
+
+**Goal:** the editor's drawing becomes a runnable netlist.
+
+**Implement:**
+- Convert the editor's circuit graph to the `core/netlist.ts` model and call `buildNetlist`.
+- Validate the circuit (has a ground, source connected, no dangling required terminals) and
+  surface friendly errors ("circuit needs a ground", "output node not connected").
+- A "Simulate" affordance that runs the netlist through the SPICE-1 engine and reports
+  success/failure (full result display comes in LOOP-1).
+
+**Acceptance criteria:**
+- Drawing an RC filter and hitting Simulate runs without error and returns a `SimResult`.
+- Validation catches a missing ground and a floating source.
+- Build clean; regression canary holds.
+
+**Files allowed:** `SchematicEditor.tsx`, `core/netlist.ts`, `core/spice.ts` (call site
+only), docs.
+
+---
+
+## Phase LOOP-1 — Close the loop (headline feature)
+
+**Goal:** generator → circuit → instruments. Draw a filter, see its Bode plot.
+
+**Implement:**
+- Wire the **Signal Generator** params into the circuit's input `V` source via the netlist
+  mapping from SPICE-2.
+- **AC mode → Bode plot:** run an `.ac` sweep, take `v(out)/v(in)` magnitude (dB) and phase,
+  and render it. Reuse the Spectrum Analyzer's display conventions (dB y-axis, log frequency
+  x-axis) — either as a new mode in SpectrumAnalyzer or a dedicated Bode view. Decide and
+  document; prefer adding a "Circuit (Bode)" mode to the Spectrum Analyzer so students see
+  it in the same instrument they already know.
+- **Transient mode → scope:** run `.tran`, and route `v(out)` to the Oscilloscope's **CH2**
+  (`ChannelSource.kind = 'circuit-out'` from the channel bus). CH1 stays the generator input,
+  so the student sees input vs output on one screen.
+- A clear mode toggle (Transient / AC) somewhere sensible in the circuit/instrument UI.
+
+**Acceptance criteria:**
+- An RC low-pass drawn in the editor shows the correct −3 dB rolloff at `1/(2πRC)` in the
+  Bode view (verify against the analytic value in PROGRESS).
+- The scope shows input and filtered output simultaneously on CH1/CH2 in transient mode.
+- Build clean; regression canary holds.
+
+**Note — circuit-loop MVP is shippable here.** Deploy, record the commit hash, and revisit
+the Lab 3 `<!-- TWIN: -->` prelab markers in `CLAUDE.md`.
+
+**Files allowed:** `SchematicEditor.tsx`, `SpectrumAnalyzer.tsx` (add Bode mode),
+`Oscilloscope.tsx` (consume `circuit-out`), `App.tsx` (channel source switch, mode state),
+`core/spice.ts`, `core/netlist.ts`, docs.
+
+---
+
+## Phase LOOP-2 — Live tuning + analysis toggle + −3 dB cursor
+
+**Goal:** make it feel parametric and instrument-like.
+
+**Implement:**
+- Drag/edit a component value (e.g. R or C) → debounced re-simulate → Bode/scope update live.
+- Clean Transient/AC switch with remembered settings per mode.
+- A −3 dB cursor/marker on the Bode plot reading the cutoff frequency, mirroring the
+  Spectrum Analyzer's peak marker style — so the student reads cutoff directly.
+
+**Acceptance criteria:**
+- Changing C visibly shifts the cutoff in real time without UI jank (debounce + worker).
+- −3 dB marker reads the correct cutoff for several R/C combinations.
+- Build clean; regression canary holds.
+
+**Files allowed:** `SchematicEditor.tsx`, `SpectrumAnalyzer.tsx`, `core/spice.ts`,
+`core/netlist.ts`, docs.
+
+---
+
+## Phase KICAD-1 — (Stretch) KiCad netlist import
+
+Defer until LOOP-1 is solid. Allow importing a KiCad-exported netlist, mapping it to the
+`core/netlist.ts` graph, and simulating it — a "bring your KiCad schematic into the M2K
+twin" path for later-course students. Out of scope until the core loop ships.
+
+---
+
+## Cross-phase design notes
+
+- **Decoupling is the whole strategy.** UI → circuit graph → netlist string → `SpiceEngine`
+  → normalized `SimResult` → instrument display. Each arrow is a clean boundary. Never let
+  eecircuit-engine's raw types leak past `core/spice.ts`.
+- **Worker + WASM + base path** are the three integration hazards. SPICE-1 exists to retire
+  all three before any feature depends on them.
+- **Keep circuits simple.** EEC1 needs RC/RL filters, an inverting amp, an INA front end —
+  not a transistor-model library. Resist scope creep in the editor.
+- **Match the teaching goal.** The twin shows the *ideal* response; the bench shows real
+  deviation. The Bode/scope output should be clean and analytic so students learn the model
+  first.
+- **Units everywhere.** Show Ω, F, Hz, dB explicitly; accept engineering notation (1k, 10n,
+  4.7u) in value fields.
