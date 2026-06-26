@@ -54,3 +54,50 @@ export function resolveChannelSamples(
       return inputs.circuitOut
   }
 }
+
+// ── Oscilloscope display helpers (OSC-1) ───────────────────────────────────────
+// Pure geometry: slice the captured samples to a horizontal window and map volts→grid.
+// 10 horizontal divisions × 8 vertical divisions, matching a Scopy-style graticule.
+
+export const SCOPE_H_DIVS = 10
+export const SCOPE_V_DIVS = 8
+
+export interface ScopeTrace {
+  t: number[] // seconds from window start
+  v: number[] // volts
+}
+
+// Slice samples to the horizontal window (nDivs * timePerDiv seconds) starting at
+// offsetSec, downsampled to <= maxPoints for display. If the window exceeds the available
+// capture, returns what is available (the caller should keep timePerDiv within range).
+export function captureWindow(
+  samples: Samples,
+  Fs: number,
+  timePerDiv: number,
+  offsetSec = 0,
+  nDivs: number = SCOPE_H_DIVS,
+  maxPoints = 2000,
+): ScopeTrace {
+  const windowSec = nDivs * timePerDiv
+  const n = samples.x.length
+  const start = Math.max(0, Math.min(n - 1, Math.round(offsetSec * Fs)))
+  const count = Math.max(0, Math.min(n - start, Math.round(windowSec * Fs)))
+  const stride = Math.max(1, Math.ceil(count / maxPoints))
+  const t: number[] = []
+  const v: number[] = []
+  for (let i = 0; i < count; i += stride) {
+    t.push(i / Fs)
+    v.push(samples.x[start + i])
+  }
+  return { t, v }
+}
+
+// Fixed vertical range for a channel: ±(V_DIVS/2)·voltsPerDiv. The trace is plotted with
+// the vertical offset added, so offset shifts the trace within this fixed graticule.
+export function voltsAxisRange(
+  voltsPerDiv: number,
+  vDivs: number = SCOPE_V_DIVS,
+): [number, number] {
+  const half = (vDivs / 2) * voltsPerDiv
+  return [-half, half]
+}

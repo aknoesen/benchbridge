@@ -3,6 +3,7 @@ import { SignalParams, WaveType } from './core/signal'
 import { DEFAULT_CHANNELS, resolveChannelSamples, ChannelInputs } from './core/scope'
 import SignalGenerator from './components/SignalGenerator'
 import SpectrumAnalyzer from './components/SpectrumAnalyzer'
+import Oscilloscope from './components/Oscilloscope'
 import SpiceDevPanel from './components/SpiceDevPanel'
 import './App.css'
 
@@ -10,7 +11,7 @@ import './App.css'
 // builds the real circuit UI. See docs/specs/schematic-ngspice.md.
 const SHOW_SPICE_DEV = true
 
-type ActiveInstrument = 'siggen' | 'spectrum' | 'spice'
+type ActiveInstrument = 'siggen' | 'spectrum' | 'scope' | 'spice'
 type LayoutMode = 'single' | 'split'
 
 const DEFAULT_PARAMS: SignalParams = {
@@ -40,8 +41,7 @@ export default function App() {
   const [active, setActive] = useState<ActiveInstrument>('siggen')
   const [layout, setLayout] = useState<LayoutMode>('single')
   const [params, setParams] = useState<SignalParams>(DEFAULT_PARAMS)
-  // CH2 generator params + channel bus. No UI yet (ARCH-1 is an invisible refactor);
-  // the Oscilloscope panel (OSC-1/OSC-2) will add setters and controls.
+  // CH2 generator params + channel bus. CH2 has no UI yet (enabled at OSC-2).
   const [params2] = useState<SignalParams>(DEFAULT_PARAMS2)
   const [channels] = useState(DEFAULT_CHANNELS)
   const [running, setRunning] = useState(true)
@@ -79,7 +79,7 @@ export default function App() {
     }
   }, [channels, channelInputs, running, tick])
 
-  // CH1 is the existing generator signal; the two current instruments consume it unchanged.
+  // CH1 is the existing generator signal; the current instruments consume it unchanged.
   const signal = channelSignals.CH1
 
   function updateParam<K extends keyof SignalParams>(key: K, value: SignalParams[K]) {
@@ -99,6 +99,15 @@ export default function App() {
         >
           <span className="nav-icon">&#9095;</span>
           <span className="nav-label">Signal<br/>Gen</span>
+        </button>
+
+        <button
+          className={`nav-btn ${active === 'scope' && layout === 'single' ? 'nav-active' : ''}`}
+          onClick={() => { setActive('scope'); setLayout('single') }}
+          title="Oscilloscope"
+        >
+          <span className="nav-icon">&#8767;</span>
+          <span className="nav-label">Scope</span>
         </button>
 
         <button
@@ -133,7 +142,14 @@ export default function App() {
 
       {/* Main instrument area */}
       <main className={`instrument-area ${layout === 'split' ? 'split' : ''}`}>
-        {layout === 'single' && active === 'spice' && SHOW_SPICE_DEV ? (
+        {layout === 'single' && active === 'scope' ? (
+          <Oscilloscope
+            params={params}
+            signal={signal}
+            running={running}
+            onRunToggle={() => setRunning(r => !r)}
+          />
+        ) : layout === 'single' && active === 'spice' && SHOW_SPICE_DEV ? (
           <SpiceDevPanel />
         ) : (
           <>

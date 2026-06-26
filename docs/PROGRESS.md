@@ -36,6 +36,44 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-26 — OSC-1 Oscilloscope panel (timebase + CH1) — DONE
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**What I did:**
+- `src/core/scope.ts`: added display helpers `captureWindow()` (horizontal slice of the CH1
+  capture to a 10-div window, downsampled to <=2000 pts), `voltsAxisRange()`, and
+  `SCOPE_H_DIVS`/`SCOPE_V_DIVS` (10x8 graticule).
+- `src/components/Oscilloscope.tsx`: time-domain Plotly panel, CH1 trace in orange, with
+  Time/div (100 µs..1 ms, 1-2-5), CH1 Volts/div (50 mV..1 V), vertical Offset, Run/Stop, and
+  a readout. Gridlines align to divisions (xaxis dtick = time/div, yaxis dtick = volts/div).
+- `App.tsx`: "Scope" nav entry; scope renders in single view (consumes CH1 from the bus).
+- `src/core/scope.test.ts`: Vitest for the capture math.
+
+**Verification (Definition of Done):**
+- build clean: `tsc && vite build` green (26 modules; index.js ~4.82 MB).
+- **Tests: scope 3/3 + netlist 3/3 pass.** captureWindow at 1 ms/div → 1000 pts over a 10 ms
+  window; 1 kHz period (1 ms) spans exactly one division. Downsample caps at 2000 pts;
+  voltsAxisRange(0.5)=[-2,2].
+- 12-bit spectrum canary: signal.ts untouched; App still resolves CH1 identically — unaffected.
+
+**OSC-1 scope decision (documented per spec):**
+- The scope reads the existing CH1 capture (16 ms at default params), so Time/div is capped
+  at 1 ms/div (10 ms window fits 16 ms). Wider time/div needs a scope-specific longer capture
+  — deferred (a later phase can regenerate at the scope window or extend duration).
+- Scope is single-view only for now; adding it to Split view is deferred (OSC-2 / layout
+  refactor). Split still shows SignalGen + Spectrum.
+
+**State for the next session:**
+- OSC-2 enables CH2 (params2 already in the bus) + per-channel vertical controls + `--ch2-color`.
+- Per ROADMAP sequence after OSC-1: OSC-2, then NET-1 (per andre: OSC-1 then NET-1).
+
+**Open questions / flags for andre:**
+- Runtime visual check: open the Scope tab, confirm the 1 kHz square shows ~1 period/division
+  at 1 ms/div and scales with Volts/div.
+
+
 ### 2026-06-26 — SPICE-2 circuit graph + netlist generator — DONE
 
 **By:** Claude Code session (in Cowork)
