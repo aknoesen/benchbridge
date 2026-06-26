@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Screen recordings / large media — keep local, never commit
+Video/
+*.trec
+*.tscproj/
+*.tscshadervid
+*.mp4
+*.mov
+desktop.ini
