@@ -55,12 +55,24 @@ function fmtEng(x: number): string {
   return String(x)
 }
 
-let idSeq = 1
-const newId = (k: SchKind) => `${k[0].toUpperCase()}${idSeq++}`
-function bumpIdSeq(comps: { id: string }[]) {
+// Reference designators (R1, C2, L1, U1 for op/in-amps, V1). A new part increments from the
+// highest existing number with the same prefix, so deleting one does not renumber the rest.
+// The Ref field in the Selected panel lets the student override any id (must stay unique).
+const REFDES: Partial<Record<SchKind, string>> = {
+  resistor: 'R', capacitor: 'C', inductor: 'L', vsource: 'V',
+  opamp: 'U', inamp: 'U', inamp3: 'U',
+}
+function refPrefix(k: SchKind): string {
+  return REFDES[k] ?? k[0].toUpperCase()
+}
+function newId(k: SchKind, comps: { id: string }[]): string {
+  const p = refPrefix(k)
   let max = 0
-  for (const c of comps) { const m = /(\d+)$/.exec(c.id); if (m) max = Math.max(max, Number(m[1])) }
-  idSeq = max + 1
+  for (const c of comps) {
+    const m = /^(.*?)(\d+)$/.exec(c.id)
+    if (m && m[1] === p) max = Math.max(max, Number(m[2]))
+  }
+  return `${p}${max + 1}`
 }
 
 interface EditorProps {
@@ -166,7 +178,6 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
         const d = JSON.parse(String(reader.result))
         if (Array.isArray(d.components) && Array.isArray(d.wires)) {
           setSch({ components: d.components, wires: d.wires })
-          bumpIdSeq(d.components)
           setSelected(null)
           setSelectedWire(null)
           setSimStatus('loaded ' + f.name)
@@ -206,7 +217,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
     }
     // place a component
     const kind = tool as SchKind
-    const c: SchComponent = { id: newId(kind), kind, gx, gy, rotation: placeRotation, value: DEFAULT_VALUE[kind] }
+    const c: SchComponent = { id: newId(kind, sch.components), kind, gx, gy, rotation: placeRotation, value: DEFAULT_VALUE[kind] }
     setSch((s) => ({ ...s, components: [...s.components, c] }))
     setSelected(c.id)
   }
@@ -265,6 +276,18 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
   })
 
   const sel = sch.components.find((c) => c.id === selected) || null
+
+  function setSelId(text: string) {
+    const name = text.trim()
+    if (!name || !sel || name === sel.id) return
+    if (sch.components.some((c) => c.id !== sel.id && c.id === name)) {
+      setSimStatus(`Ref "${name}" is already in use`)
+      return
+    }
+    const oldId = sel.id
+    setSch((s) => ({ ...s, components: s.components.map((c) => c.id === oldId ? { ...c, id: name } : c) }))
+    setSelected(name)
+  }
 
   function setSelValue(text: string) {
     const v = parseEng(text)
@@ -370,6 +393,13 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
               {sel.id} ({sel.kind}) — {(sel.rotation ?? 0) * 90}°
             </div>
             <button className="run-btn" style={{ marginBottom: 8 }} onClick={rotate}>Rotate this part (R)</button>
+            <div className="control-row-inline">
+              <label>Ref</label>
+              <input type="text" defaultValue={sel.id} key={'ref-' + sel.id}
+                onBlur={(e) => setSelId(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                style={{ width: 80 }} />
+            </div>
             {UNIT[sel.kind] && (
               <div className="control-row-inline">
                 <label>Value ({UNIT[sel.kind]})</label>

@@ -106,3 +106,23 @@ describe('breadboard ports (WIRE-1)', () => {
     expect(cutoff).toBeLessThan(1100)
   }, 30000)
 })
+
+describe('scope probe mapping (WIRE-3)', () => {
+  it('maps 1+ to its node and 2+ to the input it is wired to', () => {
+    const sch: Schematic = {
+      components: [
+        { id: 'W1', kind: 'awg1', gx: 0, gy: 0 },
+        { id: 'R1', kind: 'resistor', gx: 4, gy: 0, value: 1000 },
+        { id: 'C1', kind: 'capacitor', gx: 6, gy: 0, value: 159.155e-9 },
+        { id: 'G1', kind: 'ground', gx: 8, gy: 0 },
+        { id: 'S1', kind: 'scope1', gx: 6, gy: 0 }, // 1+ on the R-C junction → 'out'
+        { id: 'S2', kind: 'scope2', gx: 0, gy: 0 }, // 2+ on the W1 input node → 'in'
+      ],
+      wires: [{ x1: 0, y1: 0, x2: 4, y2: 0 }], // W1 → R.a → 'in'
+    }
+    const { warnings, probes } = toCircuit(sch)
+    expect(warnings).toEqual([])
+    expect(probes.ch1).toBe('out')
+    expect(probes.ch2).toBe('in')
+  })
+})

@@ -147,6 +147,9 @@ export function computeNets(s: Schematic): Map<string, string> {
 export interface ToCircuitResult {
   circuit: Circuit
   warnings: string[]
+  // SPICE node each scope input is wired to (WIRE-3 readback). undefined if the port is not
+  // placed. ch1 = 1+ node, ch2 = 2+ node. Lets the scope show whatever node a probe sits on.
+  probes: { ch1?: string; ch2?: string }
 }
 
 // Convert the schematic to a SPICE-2 Circuit. Net labelling: ground→'0', W1→'in', 1+→'out',
@@ -253,5 +256,9 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
   }
   if (groundNet) comps.push({ kind: 'ground', id: '0', node: '0' })
 
-  return { circuit: { title, components: comps }, warnings }
+  const probes = {
+    ch1: outNet ? rename(outNet) : undefined,
+    ch2: scope2Net ? rename(scope2Net) : undefined,
+  }
+  return { circuit: { title, components: comps }, warnings, probes }
 }

@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { SignalParams, WaveType } from './core/signal'
-import { DEFAULT_CHANNELS, resolveChannelSamples, ChannelInputs } from './core/scope'
+import { SignalParams, WaveType, generateSignal } from './core/signal'
+import { DEFAULT_CHANNELS, resolveChannelSamples, ChannelInputs, type Samples } from './core/scope'
 import { toCircuit, type Schematic } from './core/schematic'
-import { type SupplySettings } from './core/netlist'
+import { type SupplySettings, buildNetlist, applyGeneratorParams } from './core/netlist'
+import { createSpiceEngine, type SpiceEngine, sampleNodeTransient } from './core/spice'
 import SignalGenerator from './components/SignalGenerator'
 import SpectrumAnalyzer from './components/SpectrumAnalyzer'
 import Oscilloscope from './components/Oscilloscope'
@@ -10,13 +11,9 @@ import NetworkAnalyzer from './components/NetworkAnalyzer'
 import SchematicEditor from './components/SchematicEditor'
 import Voltmeter from './components/Voltmeter'
 import PowerSupply from './components/PowerSupply'
-import SpiceDevPanel from './components/SpiceDevPanel'
 import './App.css'
 
-// SPICE-1 throwaway dev affordance. Set false once LOOP-1 builds the real circuit UI.
-const SHOW_SPICE_DEV = true
-
-type ActiveInstrument = 'siggen' | 'spectrum' | 'scope' | 'network' | 'schematic' | 'voltmeter' | 'psu' | 'spice'
+type ActiveInstrument = 'siggen' | 'spectrum' | 'scope' | 'network' | 'schematic' | 'voltmeter' | 'psu'
 type LayoutMode = 'single' | 'split'
 
 const DEFAULT_PARAMS: SignalParams = {
@@ -107,6 +104,48 @@ export default function App() {
   const drawn = useMemo(() => toCircuit(schematic, 'Drawn circuit'), [schematic])
   const drawnValid = drawn.warnings.length === 0
 
+  // WIRE-3: drive the drawn circuit with the generator and read its output back into the
+  // scope/spectrum. circuitOut holds the resampled 1+ node voltage; null when no valid circuit.
+  const [circuitOut, setCircuitOut] = useState<Samples | null>(null)
+  const [circuitOut2, setCircuitOut2] = useState<Samples | null>(null)
+  const spiceRef = useRef<SpiceEngine | null>(null)
+
+  useEffect(() => {
+    spiceRef.current = createSpiceEngine()
+    return () => { spiceRef.current?.dispose(); spiceRef.current = null }
+  }, [])
+
+  useEffect(() => {
+    if (!drawnValid) { setCircuitOut(null); setCircuitOut2(null); return }
+    let cancelled = false
+    const handle = setTimeout(async () => {
+      try {
+        const grid = generateSignal(params).t
+        const N = grid.length
+        const span = N / params.samplingRate
+        // capture the SECOND span so startup/RC transients have settled (near steady state)
+        const sampleTimes = new Float64Array(N)
+        for (let k = 0; k < N; k++) sampleTimes[k] = grid[k] + span
+        const ckt = applyGeneratorParams(drawn.circuit, params, params2)
+        const nl = buildNetlist(ckt, { kind: 'tran', step: span / (N * 2), stop: 2 * span })
+        const res = await spiceRef.current!.run(nl)
+        if (cancelled) return
+        const x1 = sampleNodeTransient(res, drawn.probes.ch1 ?? 'out', sampleTimes)
+        setCircuitOut(x1 ? { t: grid, x: x1 } : null)
+        const x2 = drawn.probes.ch2 ? sampleNodeTransient(res, drawn.probes.ch2, sampleTimes) : null
+        setCircuitOut2(x2 ? { t: grid, x: x2 } : null)
+      } catch {
+        if (!cancelled) setCircuitOut(null)
+      }
+    }, 250)
+    return () => { cancelled = true; clearTimeout(handle) }
+  }, [drawnValid, drawn, params, params2])
+
+  // Two-tier: a scope/spectrum input wired through a circuit reads the .tran; otherwise the
+  // exact generator output (preserving the signal pipeline + the 12-bit canary).
+  const measured = drawnValid && circuitOut ? circuitOut : signal
+  const measured2 = drawnValid && circuitOut2 ? circuitOut2 : signal2
+
   function updateParam<K extends keyof SignalParams>(key: K, value: SignalParams[K]) {
     setParams(prev => ({ ...prev, [key]: value }))
   }
@@ -134,16 +173,14 @@ export default function App() {
           onClick={() => setLayout(l => l === 'split' ? 'single' : 'split')} title="Split view: Signal Gen + Spectrum">
           <span className="nav-icon">&#8863;</span><span className="nav-label">Split<br/>View</span>
         </button>
-
-        {SHOW_SPICE_DEV && navBtn('spice', '○', <>SPICE<br/>dev</>, 'SPICE engine check (dev)')}
       </nav>
 
       <main className={`instrument-area ${layout === 'split' ? 'split' : ''}`}>
         {layout === 'single' && active === 'scope' ? (
           <Oscilloscope
             params={params}
-            signal={signal}
-            signal2={signal2}
+            signal={measured}
+            signal2={measured2}
             params2={params2}
             running={running}
             onRunToggle={() => setRunning(r => !r)}
@@ -160,8 +197,6 @@ export default function App() {
           <Voltmeter circuit={drawn.circuit} w1={params} w2={params2} psu={psu} />
         ) : layout === 'single' && active === 'psu' ? (
           <PowerSupply psu={psu} onChange={setPsu} />
-        ) : layout === 'single' && active === 'spice' && SHOW_SPICE_DEV ? (
-          <SpiceDevPanel />
         ) : (
           <>
             {(layout === 'split' || active === 'siggen') && (
@@ -178,7 +213,7 @@ export default function App() {
             {(layout === 'split' || active === 'spectrum') && (
               <SpectrumAnalyzer
                 params={params}
-                signal={signal}
+                signal={measured}
                 running={running}
                 compact={layout === 'split'}
                 onParamChange={updateParam}

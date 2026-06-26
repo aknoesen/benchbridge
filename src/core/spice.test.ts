@@ -132,5 +132,58 @@ describe('instrumentation amplifier', () => {
     expect(nodeVoltage(r, 'out')).toBeCloseTo(0.5, 2)
   }, 30000)
 })
-0000)
+
+import { sampleNodeTransient } from './spice'
+
+describe('transient drive + resample (WIRE-3)', () => {
+  it('square wave emits a PULSE source line, not SIN', () => {
+    const ckt: Ckt = {
+      title: 'sq',
+      components: [
+        { kind: 'vsource', id: 'W1', nodes: ['in', '0'], wave: { type: 'square', offset: 0, amplitude: 1, freq: 1000, duty: 50 } },
+        { kind: 'resistor', id: '1', nodes: ['in', 'out'], ohms: 1000 },
+        { kind: 'capacitor', id: '1', nodes: ['out', '0'], farads: 159.155e-9 },
+        { kind: 'ground', id: '0', node: '0' },
+      ],
+    }
+    const nl = buildNl(ckt, { kind: 'tran', step: 1e-6, stop: 2e-3 })
+    expect(nl).toContain('PULSE(')
+    expect(nl).not.toContain('SIN(')
+  })
+
+  // RC low-pass (1k, 159nF) → fc ≈ 1 kHz. Drive sine, measure steady-state peak-to-peak of
+  // v(out) via the transient resampler.
+  async function outPP(freq: number): Promise<number> {
+    const ckt: Ckt = {
+      title: 'rc tran',
+      components: [
+        { kind: 'vsource', id: 'W1', nodes: ['in', '0'], wave: { type: 'sine', offset: 0, amplitude: 1, freq, duty: 50 } },
+        { kind: 'resistor', id: '1', nodes: ['in', 'out'], ohms: 1000 },
+        { kind: 'capacitor', id: '1', nodes: ['out', '0'], farads: 159.155e-9 },
+        { kind: 'ground', id: '0', node: '0' },
+      ],
+    }
+    const T = 1 / freq
+    const stop = 6 * T
+    const nl = buildNl(ckt, { kind: 'tran', step: T / 200, stop })
+    const sim = new Simulation()
+    await sim.start()
+    sim.setNetList(nl)
+    const r = normalizeResult(await sim.runSim())
+    const N = 400
+    const grid = new Float64Array(N)
+    for (let k = 0; k < N; k++) grid[k] = stop - 2 * T + (k / (N - 1)) * (2 * T)
+    const x = sampleNodeTransient(r, 'out', grid)!
+    let mn = Infinity, mx = -Infinity
+    for (const v of x) { if (v < mn) mn = v; if (v > mx) mx = v }
+    return mx - mn
+  }
+
+  it('RC low-pass: passband ≈ unity, stopband attenuated', async () => {
+    const passPP = await outPP(100)    // well below fc → ~2 Vpp
+    const stopPP = await outPP(10000)  // well above fc → strongly attenuated
+    expect(passPP).toBeGreaterThan(1.6)
+    expect(stopPP).toBeLessThan(0.6)
+    expect(stopPP).toBeLessThan(passPP)
+  }, 30000)
 })

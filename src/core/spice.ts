@@ -187,3 +187,32 @@ export function hasNode(r: SimResult, node: string): boolean {
 export function differentialVoltage(r: SimResult, pos: string, neg = '0'): number {
   return nodeVoltage(r, pos) - nodeVoltage(r, neg)
 }
+
+// ── Transient node resampling (WIRE-3) ─────────────────────────────────────────
+// ngspice .tran returns non-uniform time steps. Resample a node's voltage onto a uniform
+// time grid (linear interpolation) so the scope/spectrum — which assume uniform sampling at
+// the generator's Fs — can consume the circuit's output exactly like a generated waveform.
+// Returns null if the result is not transient or the node is absent (caller falls back to
+// the direct generator path). `tGrid` must be monotonically increasing.
+export function sampleNodeTransient(r: SimResult, node: string, tGrid: Float64Array): Float64Array | null {
+  const ti = r.variables.findIndex((v) => v.type === 'time')
+  const ni = r.variables.findIndex((v) => v.name.toLowerCase() === `v(${node.toLowerCase()})`)
+  if (ti < 0 || ni < 0) return null
+  const tc = r.columns[ti], vc = r.columns[ni]
+  if (tc.kind !== 'real' || vc.kind !== 'real') return null
+  const time = tc.values, val = vc.values
+  if (time.length === 0) return null
+  const out = new Float64Array(tGrid.length)
+  let j = 0
+  for (let k = 0; k < tGrid.length; k++) {
+    const tk = tGrid[k]
+    while (j < time.length - 1 && time[j + 1] < tk) j++
+    if (tk <= time[0]) out[k] = val[0]
+    else if (tk >= time[time.length - 1]) out[k] = val[val.length - 1]
+    else {
+      const t0 = time[j], t1 = time[j + 1]
+      out[k] = t1 > t0 ? val[j] + ((tk - t0) / (t1 - t0)) * (val[j + 1] - val[j]) : val[j]
+    }
+  }
+  return out
+}

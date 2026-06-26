@@ -36,6 +36,109 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-26 — Bugfix: scope CH2 (2+) now reads its wired node, not generator2 — DONE
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**Symptom (andre):** with 2+ wired to the circuit input (a 1 kHz square), CH2 showed a sine.
+**Cause:** WIRE-3 only routed 1+ (`out`) through the `.tran`; CH2 still displayed `generator2`,
+whose default is a 2 kHz sine — so 2+ ignored its wiring.
+
+**Fix:**
+- `core/schematic.ts`: `ToCircuitResult` now returns `probes: { ch1?, ch2? }` — the SPICE node
+  each scope input is wired to (`ch1` = 1+ node, `ch2` = 2+ node), via the same `rename()` used
+  for the netlist (so 2+ on the input resolves to `'in'`, on its own node to `'scope2'`, etc.).
+- `App.tsx`: the `.tran` effect now resamples BOTH probe nodes from the one run →
+  `circuitOut` (CH1) and `circuitOut2` (CH2); `measured2 = drawnValid && circuitOut2 ?
+  circuitOut2 : signal2` feeds the Oscilloscope CH2. CH1 path generalised to `probes.ch1 ?? 'out'`.
+- Test: `schematic.test.ts` asserts 2+ on the W1 input maps to `probes.ch2 === 'in'` and 1+ to
+  `'out'`.
+
+**Verification:** build clean; **19/19 tests** pass; `signal.ts` untouched (canary holds).
+
+**State for the next session:**
+- Both scope channels now follow their breadboard wiring through a drawn circuit (single-ended,
+  GND-referenced — matches the Voltmeter's simple case). A fully differential CH (subtract the
+  1-/2- node) is a later refinement if a floating-reference circuit needs it.
+
+### 2026-06-26 — Housekeeping (refdes numbering, manual Ref, remove SPICE dev) + OSC-3 spec — DONE
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**What I did:**
+- **Component numbering** (`SchematicEditor.tsx`): replaced the single shared `idSeq` counter
+  with per-prefix refdes numbering. `REFDES` maps kinds to prefixes (R/C/L, U for op-amp+in-amp,
+  V for vsource); `newId(kind, comps)` returns prefix + (max existing number with that prefix)+1,
+  so R1,R2,C1,L1… number independently and deletions don't renumber the rest. Fixes the old bug
+  where inductor and in-amp both numbered as "I".
+- **Manual numbering**: the Selected panel now has an editable **Ref** field; `setSelId` renames
+  the component (rejects duplicates with a status message, keeps the selection).
+- **Removed the SPICE dev panel**: deleted `components/SpiceDevPanel.tsx` and all wiring in
+  `App.tsx` (import, `SHOW_SPICE_DEV`, nav button, render branch, `'spice'` instrument type).
+- **OSC-3 spec** (`docs/specs/oscilloscope.md`): folded in the **free-running capture-phase
+  offset** (per-frame, derived from the tick — not random) as the mechanism that makes triggering
+  observable/testable, plus a concrete `core/trigger.test.ts` plan: phase-invariance property,
+  edge-search unit cases, analytic sine crossings, and a pure `nextTriggerState` mode reducer.
+  **No OSC-3 code yet** — andre asked to hold the build.
+
+**Verification (Definition of Done):**
+- build clean: `tsc && vite build` green; **18/18 tests** still pass.
+- 12-bit canary: `signal.ts` untouched; numbering/dev-panel changes don't touch the signal path.
+
+**State for the next session:**
+- OSC-3 is fully specced (incl. the capture-phase decision) and ready to build when andre is.
+- Numbering is per-type now; existing saved circuits keep their old ids (mixed prefixes are
+  cosmetic only — toCircuit assigns its own SPICE refdes regardless of schematic id).
+- NOTE: mount truncated `oscilloscope.md`, `SchematicEditor.tsx`, `App.tsx` on Edit-tool writes;
+  the spec was recovered from `git show HEAD:` (a stale `.git/index.lock` blocked `git restore` —
+  left it untouched, used read-only `git show`). All rebuilt via Python + verified by build/tests.
+
+**Open questions / flags for andre:**
+- A stale `.git/index.lock` exists in the repo (a crashed/parallel git process). I did not remove
+  it. If `git` complains, delete `.git/index.lock` manually.
+
+### 2026-06-26 — WIRE-3 (closes LOOP-1): scope/spectrum read the wired node via .tran — DONE
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**What I did:**
+- `core/netlist.ts`: `WaveDrive` on `VSource` + `tranDriveSpec()` — transient sources now emit
+  the real generator shape: SIN for sine, **PULSE** for square (duty-aware), triangle, sawtooth
+  (matching `generateSignal` conventions). `applyGeneratorParams` stamps `wave` onto W1/W2.
+- `core/spice.ts`: `sampleNodeTransient(result, node, tGrid)` — linear-interpolates a `.tran`
+  node voltage onto a uniform time grid so the scope/spectrum (which assume uniform Fs) consume
+  the circuit output like a generated waveform.
+- `App.tsx`: a debounced (250 ms) effect runs a `.tran` of the drawn circuit driven by the
+  generator, resamples `v(out)` (the 1+ node) onto the generator grid (captures the 2nd span so
+  startup transients settle), and stores `circuitOut`. `measured = drawnValid && circuitOut ?
+  circuitOut : signal` feeds the **Oscilloscope CH1 and Spectrum**; the Signal Generator panel
+  still shows the raw generator. Engine runs in the existing worker; UI stays responsive.
+
+**Verification (Definition of Done):**
+- build clean: `tsc && vite build` green.
+- **Tests: 18/18 pass** (+2: square→PULSE netlist line; RC low-pass passband≈2 Vpp vs stopband
+  attenuated through the real `.tran` + resampler).
+- 12-bit canary: `signal.ts` untouched; with no circuit drawn `measured === signal` (generator),
+  so the Spectrum input is byte-identical to before → floor stays −104 dBFS by construction.
+
+**State for the next session:**
+- **LOOP-1 is complete** — draw an RC filter, wire W1 → R → node → C → GND and put 1+ on the
+  node: the scope/spectrum show the filtered output; the Network Analyzer shows its Bode curve.
+  This is the shippable circuit-loop MVP (CLAUDE.md headline). Consider deploying + revisiting the
+  Lab 3 `<!-- TWIN: -->` prelab markers.
+- Two-tier resolution is in App via `measured` (not the channel bus `circuit-out` case, which
+  stays unused). Only CH1/1+ (`out`) is routed; 2+ (`scope2`) for CH2 is a later refinement.
+- NOTE: mount truncated `netlist.ts`, `spice.ts`, `App.tsx`, `spice.test.ts` on Edit-tool writes
+  again; all rebuilt via bash/Python and verified by full build + test run.
+
+**Open questions / flags for andre:**
+- Steady-state capture grabs the 2nd generator span; a very slow circuit (τ ≳ one span) would
+  still show some settling. Fine for EEC1 RC/op-amp circuits; revisit if a slow integrator appears.
+- Next obvious steps: OSC-3 (triggers), LOOP-2 (live tuning + −3 dB cursor), or EDIT-1 (rubber-band).
+
 ### 2026-06-26 — Instrumentation amplifier component (INA + INA3) + symbol cleanup — DONE
 
 **By:** Claude Code session (in Cowork)

@@ -35,7 +35,7 @@ Spec: `docs/specs/schematic-ngspice.md`
 | SCH-2 | Bind editor → circuit graph → netlist | SCH-1, SPICE-2 | DONE |
 | SCH-3 | Save/Load circuit (download/open `.json` + localStorage autosave) | SCH-1 | DONE |
 | NET-1 | Network Analyzer instrument (Bode mag+phase, sine-sweep via ngspice `.ac`) | SPICE-2 | DONE |
-| LOOP-1 | Close the loop: generator → circuit → Network Analyzer (AC Bode) + Scope CH2 (transient) | SCH-2, OSC-2, NET-1 | IN PROGRESS |
+| LOOP-1 | Close the loop: generator → circuit → Network Analyzer (AC Bode) + Scope CH2 (transient) | SCH-2, OSC-2, NET-1 | DONE |
 | LOOP-2 | Live value tuning + transient/AC toggle + −3 dB cursor | LOOP-1 | TODO |
 | KICAD-1 | (Stretch) KiCad netlist import | LOOP-1 | TODO |
 
@@ -76,7 +76,7 @@ ADC noise); wired through a circuit it reads a SPICE `.tran` of that node.
 |-------|-------|-----------|--------|
 | WIRE-1 | Breadboard ports in the schematic (W1/W2, Scope1/2) + toCircuit net mapping | SCH-1 | DONE |
 | WIRE-2 | Instruments read from their wired node (direct fast path + `.tran`) | WIRE-1, OSC-2 | DONE |
-| WIRE-3 | Scope/Spectrum read their wired node via `.tran`; non-sine PULSE drive | WIRE-2 | TODO |
+| WIRE-3 | Scope/Spectrum read their wired node via `.tran`; non-sine PULSE drive | WIRE-2 | DONE |
 | EDIT-1 | Rubber-band wires: endpoints follow a component when it is moved/rotated | SCH-1 | TODO |
 
 Notes:

@@ -116,6 +116,14 @@ prefer them in core), `docs/PROGRESS.md`, `docs/ROADMAP.md`.
   - The display is aligned so the trigger crossing sits at a fixed horizontal position
     (default: center, i.e. 50% pre-trigger). Support a **trigger position** control later;
     center is fine for this phase.
+- **Free-running capture phase (the reason triggering is observable here):** the generator
+  trace is deterministic, so it would never jitter and a trigger would be a visual no-op.
+  Introduce a per-frame **capture-phase offset** that advances the capture window's start each
+  tick (mimicking a real scope's asynchronous acquisition), so that *without* a trigger the
+  trace visibly scrolls. The trigger then cancels this offset by re-aligning to the chosen
+  edge. Keep the offset a **pure, reproducible input** — derive it from the tick counter (e.g.
+  `phase = tick % period`), never `Math.random()` — so the same property holds in tests and on
+  screen. This is also the teachable concept: "why an untriggered trace runs."
 - Trigger controls in the settings panel:
   - **Source**: CH1 or CH2.
   - **Level**: volts (slider + numeric), drawn as a horizontal marker line in
@@ -128,13 +136,28 @@ prefer them in core), `docs/PROGRESS.md`, `docs/ROADMAP.md`.
 - A small trigger-state readout (e.g. "Trig'd" / "Auto" / "Ready").
 
 **Acceptance criteria:**
-- A sine/square on CH1 is rock-steady when triggered (no horizontal jitter frame to frame).
+- A sine/square on CH1 is rock-steady when triggered (no horizontal jitter frame to frame),
+  and visibly scrolls when the trigger is off / in free-run — proving the capture-phase offset
+  is real and the trigger cancels it.
 - Changing level/slope visibly changes the alignment; level marker tracks the value.
 - Auto vs Normal vs Single behave per the definitions above (verify each in a PROGRESS note).
 - Build clean; regression canary holds.
 
-**Files allowed:** `Oscilloscope.tsx`, `core/trigger.ts` (new), `core/scope.ts`,
-`index.css` (add `--trigger-color`), docs.
+**Tests (`core/trigger.test.ts`) — stability is a property, not an eyeball:**
+- **Phase-invariance (the headline):** for a generated waveform captured at N different
+  capture-phase offsets, `findEdgeTrigger` + alignment yields windows whose first sample is the
+  same phase every time — `v[trig] ≈ level` and the slope sign matches for all offsets. This is
+  the machine-checkable form of "rock-steady regardless of capture phase."
+- **Edge search:** rising/falling interpolated index on hand-built arrays (e.g. `[-2,-1,0,1,2]`,
+  level 0.5, rising → ≈ 2.5); level beyond signal range → `null`; `startIndex` is honored.
+- **Analytic crossings:** on a generated sine, level-0 rising crossings land at `t = 0, T, 2T…`
+  (spacing `1/f`) within interpolation tolerance.
+- **Mode reducer:** a pure `nextTriggerState(prev, triggerFound, mode)` with cases — Auto →
+  free-run frame when no trigger; Normal → hold previous frame; Single → emit one frame then
+  Stop, and ignore further triggers until re-armed.
+
+**Files allowed:** `Oscilloscope.tsx`, `core/trigger.ts` (new), `core/trigger.test.ts` (new),
+`core/scope.ts`, `index.css` (add `--trigger-color`), docs.
 
 **Note — scope is shippable here.** After OSC-3, consider deploying the scope MVP (see
 ROADMAP milestones) before continuing.

@@ -5,7 +5,7 @@
 // This module is the only place that knows ngspice netlist syntax; the editor and
 // instruments work in terms of the typed Circuit graph.
 
-import type { SignalParams } from './signal'
+import type { SignalParams, WaveType } from './signal'
 
 // A net is a named node. '0' (and 'gnd'/'GND') are ground and are normalised to '0'.
 export type Net = string
@@ -29,9 +29,21 @@ export interface Inductor {
   henries: number
 }
 
+// Full waveform drive for transient analysis (WIRE-3). Carries the Signal Generator's
+// shape so the .tran source matches what the student set: sine → SIN(...), square/triangle/
+// sawtooth → PULSE(...).
+export interface WaveDrive {
+  type: WaveType
+  offset: number
+  amplitude: number
+  freq: number
+  duty: number // % high, square only
+}
+
 // Independent voltage source — typically the Signal Generator input.
 // `dc` is the operating-point value; `acMag` is emitted for .ac sweeps (default 1);
-// `sine` (offset, amplitude, freq) is emitted as SIN(...) for .tran.
+// `sine`/`wave` describe the .tran drive. `wave` (WIRE-3) supersedes `sine` and supports
+// non-sine shapes; `sine` is kept for back-compat.
 export interface VSource {
   kind: 'vsource'
   id: string
@@ -39,6 +51,7 @@ export interface VSource {
   dc?: number
   acMag?: number
   sine?: { offset: number; amplitude: number; freq: number }
+  wave?: WaveDrive
 }
 
 // DC supply rail set by the Power Supply instrument (PSU-1). Referenced to ground.
@@ -115,11 +128,35 @@ function collectGroundNets(circuit: Circuit): Set<string> {
   return s
 }
 
+// Transient drive string for a waveform. SIN for sine; PULSE for square/triangle/sawtooth.
+// Conventions match generateSignal (signal.ts): square swings offset±amplitude, high for
+// duty fraction, starting high; triangle/sawtooth swing offset±amplitude over one period.
+function tranDriveSpec(w: WaveDrive): string {
+  const T = w.freq > 0 ? 1 / w.freq : 1
+  const hi = w.offset + w.amplitude
+  const lo = w.offset - w.amplitude
+  const edge = T * 1e-3 // fast but finite edges keep ngspice converging
+  switch (w.type) {
+    case 'sine':
+      return `SIN(${fmt(w.offset)} ${fmt(w.amplitude)} ${fmt(w.freq)})`
+    case 'square': {
+      const d = Math.min(0.999, Math.max(0.001, w.duty / 100))
+      // rest high (V1), pulse low (V2) for the (1−duty) fraction → high for `duty` of the period
+      return `PULSE(${fmt(hi)} ${fmt(lo)} 0 ${fmt(edge)} ${fmt(edge)} ${fmt((1 - d) * T)} ${fmt(T)})`
+    }
+    case 'triangle':
+      return `PULSE(${fmt(lo)} ${fmt(hi)} 0 ${fmt(T / 2)} ${fmt(T / 2)} 0 ${fmt(T)})`
+    case 'sawtooth':
+      return `PULSE(${fmt(lo)} ${fmt(hi)} 0 ${fmt(T - edge)} ${fmt(edge)} 0 ${fmt(T)})`
+  }
+}
+
 function vsourceSpec(v: VSource, analysis: Analysis): string {
   const parts: string[] = [`DC ${fmt(v.dc ?? 0)}`]
   if (analysis.kind === 'ac') parts.push(`AC ${fmt(v.acMag ?? 1)}`)
-  if (v.sine && analysis.kind === 'tran') {
-    parts.push(`SIN(${fmt(v.sine.offset)} ${fmt(v.sine.amplitude)} ${fmt(v.sine.freq)})`)
+  if (analysis.kind === 'tran') {
+    if (v.wave) parts.push(tranDriveSpec(v.wave))
+    else if (v.sine) parts.push(`SIN(${fmt(v.sine.offset)} ${fmt(v.sine.amplitude)} ${fmt(v.sine.freq)})`)
   }
   return parts.join(' ')
 }
@@ -222,9 +259,9 @@ export function makeInputSource(id: string, pos: Net, neg: Net, p: SignalParams)
   return { kind: 'vsource', id, nodes: [pos, neg], dc: 0, acMag: 1, sine: sineFromParams(p) }
 }
 
-// WIRE-2: stamp the Signal Generator settings onto the W1/W2 source components so the same
-// circuit drives correctly under any analysis (AC 1 for sweeps, SIN(...) for transient, the
-// DC offset for operating point). See docs/specs/schematic-ngspice.md (analysis-aware sources).
+// WIRE-2/WIRE-3: stamp the Signal Generator settings onto the W1/W2 source components so the
+// same circuit drives correctly under any analysis (AC 1 for sweeps, SIN(...)/PULSE(...) for
+// transient via `wave`, the DC offset for operating point). See docs/specs/schematic-ngspice.md.
 export function applyGeneratorParams(circuit: Circuit, w1?: SignalParams, w2?: SignalParams): Circuit {
   return {
     ...circuit,
@@ -232,7 +269,13 @@ export function applyGeneratorParams(circuit: Circuit, w1?: SignalParams, w2?: S
       if (c.kind !== 'vsource') return c
       const p = c.id === 'W1' ? w1 : c.id === 'W2' ? w2 : undefined
       if (!p) return c
-      return { ...c, dc: p.offset, acMag: 1, sine: { offset: p.offset, amplitude: p.amplitude, freq: p.frequency } }
+      return {
+        ...c,
+        dc: p.offset,
+        acMag: 1,
+        sine: { offset: p.offset, amplitude: p.amplitude, freq: p.frequency },
+        wave: { type: p.waveType, offset: p.offset, amplitude: p.amplitude, freq: p.frequency, duty: p.dutyCycle },
+      }
     }),
   }
 }
