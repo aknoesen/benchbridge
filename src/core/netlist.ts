@@ -187,3 +187,25 @@ export function applyGeneratorParams(circuit: Circuit, w1?: SignalParams, w2?: S
     }),
   }
 }
+
+// PSU-1: the Power Supply instrument owns the rail voltages. V+ ports are positive DC rails,
+// V- ports negative. `applySupplyRails` overrides every DC rail in the circuit from the
+// instrument settings (disabled rail → 0 V), so the same drawn V+/V- pins reflect the supply.
+export interface SupplySettings {
+  plus: number        // 0..+5 V
+  minus: number       // -5..0 V
+  plusEnabled: boolean
+  minusEnabled: boolean
+}
+
+export function applySupplyRails(circuit: Circuit, s: SupplySettings): Circuit {
+  return {
+    ...circuit,
+    components: circuit.components.map((c) => {
+      if (c.kind !== 'dcrail') return c
+      const isPlus = c.volts >= 0
+      const v = isPlus ? (s.plusEnabled ? s.plus : 0) : (s.minusEnabled ? s.minus : 0)
+      return { ...c, volts: v }
+    }),
+  }
+}

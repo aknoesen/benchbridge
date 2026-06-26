@@ -32,7 +32,7 @@ const TOOLS: { tool: Tool; label: string }[] = [
   { tool: 'ground', label: 'GND' },
 ]
 
-const UNIT: Partial<Record<SchKind, string>> = { resistor: 'Ω', capacitor: 'F', inductor: 'H', dcrail: 'V', vplus: 'V', vminus: 'V' }
+const UNIT: Partial<Record<SchKind, string>> = { resistor: 'Ω', capacitor: 'F', inductor: 'H', dcrail: 'V' }
 const DEFAULT_VALUE: Partial<Record<SchKind, number>> = {
   resistor: 1000, capacitor: 1e-9, inductor: 1e-3, dcrail: 5, vplus: 5, vminus: -5,
 }

@@ -4,13 +4,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { SignalParams } from '../core/signal'
 import { createSpiceEngine, SpiceEngine, hasNode, differentialVoltage } from '../core/spice'
-import { buildNetlist, applyGeneratorParams, type Circuit } from '../core/netlist'
+import { buildNetlist, applyGeneratorParams, applySupplyRails, type Circuit, type SupplySettings } from '../core/netlist'
 import './Instrument.css'
 
 interface Props {
   circuit: Circuit
   w1?: SignalParams
   w2?: SignalParams
+  psu?: SupplySettings
   compact?: boolean
 }
 
@@ -22,7 +23,7 @@ const RANGES = [
 const CH1_COLOR = '#f0a030'
 const CH2_COLOR = '#40c0e0'
 
-export default function Voltmeter({ circuit, w1, w2, compact }: Props) {
+export default function Voltmeter({ circuit, w1, w2, psu, compact }: Props) {
   const engineRef = useRef<SpiceEngine | null>(null)
   const [range, setRange] = useState(0)
   const [ch1, setCh1] = useState<number | null>(null)
@@ -38,7 +39,8 @@ export default function Voltmeter({ circuit, w1, w2, compact }: Props) {
     setBusy(true)
     setStatus('measuring…')
     try {
-      const ckt = applyGeneratorParams(circuit, w1, w2)
+      let ckt = applyGeneratorParams(circuit, w1, w2)
+      if (psu) ckt = applySupplyRails(ckt, psu)
       const nl = buildNetlist(ckt, { kind: 'op' })
       const r = await eng.run(nl)
       setCh1(hasNode(r, 'out') ? differentialVoltage(r, 'out', hasNode(r, 'out_n') ? 'out_n' : '0') : null)
@@ -60,7 +62,7 @@ export default function Voltmeter({ circuit, w1, w2, compact }: Props) {
   }, [])
   // Re-measure when the drawn circuit or generator settings change.
   useEffect(() => { void measure() // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [circuit, w1, w2])
+  }, [circuit, w1, w2, psu])
 
   const fmt = (v: number | null) => {
     if (v === null) return '—'

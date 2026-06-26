@@ -53,7 +53,7 @@ Spec: `docs/specs/schematic-ngspice.md` (these instruments couple to the simulat
 
 | Phase | Title | Depends on | Status |
 |-------|-------|-----------|--------|
-| PSU-1 | Power Supply instrument — 2 rails (0..+5 V / 0..-5 V), tracking + independent | SPICE-2 | TODO |
+| PSU-1 | Power Supply instrument — 2 rails (0..+5 V / 0..-5 V), tracking + independent | SPICE-2 | DONE |
 | DMM-1 | Voltmeter instrument — 2-channel AC/DC (±25 V), reads node V via `.op`/RMS | SPICE-2 | DONE |
 
 Notes:

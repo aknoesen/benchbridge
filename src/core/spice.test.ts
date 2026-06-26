@@ -77,3 +77,25 @@ describe('node voltage (.op) for the Voltmeter', () => {
     expect(differentialVoltage(r, 'in', 'out')).toBeCloseTo(2.5, 3)
   }, 30000)
 })
+
+import { applySupplyRails } from './netlist'
+
+describe('power supply rails (PSU-1)', () => {
+  it('overrides a V+ rail and the voltmeter reads it', async () => {
+    const ckt = {
+      title: 'rail',
+      components: [
+        { kind: 'dcrail' as const, id: 'S1', node: 'out', volts: 5 },
+        { kind: 'resistor' as const, id: '1', nodes: ['out', '0'] as [string, string], ohms: 1000 },
+        { kind: 'ground' as const, id: '0', node: '0' },
+      ],
+    }
+    const withRails = applySupplyRails(ckt, { plus: 3, minus: -5, plusEnabled: true, minusEnabled: true })
+    const nl = buildNl(withRails, { kind: 'op' })
+    const sim = new Simulation()
+    await sim.start()
+    sim.setNetList(nl)
+    const r = normalizeResult(await sim.runSim())
+    expect(nodeVoltage(r, 'out')).toBeCloseTo(3, 3)
+  }, 30000)
+})

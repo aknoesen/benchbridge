@@ -36,6 +36,36 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-26 — PSU-1 Power Supply instrument — DONE
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**What I did:**
+- `core/netlist.ts`: `SupplySettings` + `applySupplyRails(circuit, psu)` — overrides every DC rail
+  from the instrument (V+ pins = positive rails, V- = negative; disabled → 0 V). The V+/V- pins
+  drawn on the breadboard now take their voltage from the Power Supply, like the real M2K.
+- `components/PowerSupply.tsx` + App "Supply" nav: two rails — V+ (0..+5 V), V- (-5..0 V) — each
+  with an enable, big readout, slider + numeric, and a **tracking** mode (V- = -V+).
+- `Voltmeter.tsx`: takes the `psu` prop and applies the rails before `.op`, so it reads the live
+  supply. Removed per-symbol voltage editing on V+/V- (the PSU owns it).
+- App nav refactored to a small `navBtn` helper.
+
+**Verification (Definition of Done):**
+- build clean: `tsc && vite build` green.
+- **Tests: 14/14 pass.** New: a V+ rail overridden to 3 V reads 3 V at the node via `.op`.
+- 12-bit spectrum canary: signal.ts untouched; unaffected.
+
+**State for the next session:**
+- The full Lab-1 bench is live: Signal Gen, Scope (2ch), Spectrum, Network Analyzer, Voltmeter,
+  **Power Supply**, Circuit editor (save/load). Lab 1 Parts 3–4 (set supplies, read with the
+  voltmeter, single-ended + differential) are fully doable in the twin.
+- Remaining: WIRE-3 (Scope/Spectrum read wired node via `.tran`), OSC-3..5 (triggers + measurements), LOOP-2.
+
+**Open questions / flags for andre:**
+- Runtime check (Lab 1 Part 3-4): Supply tab → set V+ = 3, V- = -1. Circuit tab → V+ → 1+, 1- → GND,
+  add GND. Voltmeter → Ch1 ≈ 3 V. Toggle Supply tracking and watch V- follow -V+.
+
 ### 2026-06-26 — SCH-3 Save/Load circuit — DONE
 
 **By:** Claude Code session (in Cowork)
