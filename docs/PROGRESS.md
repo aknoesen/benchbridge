@@ -36,6 +36,49 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-26 — SPICE-1 ngspice-WASM engine integration — DONE
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**What I did:**
+- Added dependency `eecircuit-engine@^1.7.0` (ngspice-WASM, MIT) to package.json.
+- `src/core/spice.ts`: engine-agnostic `SpiceEngine` interface, `SimResult` shape
+  (`columns` carry real values or complex re/im/mag/phaseDeg), `normalizeResult()` mapping
+  the engine `ResultType` → `SimResult`, and a `WorkerSpiceEngine` that runs everything in
+  a Web Worker. Only TYPES are imported from eecircuit-engine here (erased at compile), so
+  the 20 MB engine never enters the main bundle.
+- `src/core/spice.worker.ts`: hosts the `Simulation`, lazily `start()`s it once, runs
+  netlists, posts back normalized results.
+- `src/components/SpiceDevPanel.tsx`: throwaway dev panel (gated by `SHOW_SPICE_DEV` in
+  App.tsx) that runs a hardcoded RC low-pass AC sweep and reads the -3 dB cutoff.
+- App.tsx: gated "SPICE dev" nav entry.
+
+**Verification (Definition of Done):**
+- build clean: `tsc && vite build` green in the Linux sandbox copy.
+- Engine correctness proven directly in Node: RC low-pass (R=1k, C=159.155n) gives DC gain
+  -0.00 dB and **-3 dB cutoff = 1000.0 Hz** (= 1/2pi.R.C). Same code path the worker uses.
+- Worker isolation confirmed: engine emitted as a SEPARATE `dist/assets/spice.worker-*.js`
+  chunk (20 MB); main `index.js` unchanged at ~4.8 MB.
+- Base path confirmed: worker referenced as `new URL('/m2k-scopy-web/assets/spice.worker-*.js',
+  import.meta.url)`; NO standalone .wasm asset (inlined) — so the GitHub Pages base-path
+  hazard is moot. Worker chunk loads lazily only when the SPICE panel mounts.
+- 12-bit spectrum canary: signal.ts untouched; unaffected.
+
+**Runtime check — CONFIRMED in browser (2026-06-26):** preview build, clicked SPICE dev -> Run RC sweep -> "done in 248 ms", -3 dB cutoff 1000.0 Hz, no console errors. Worker spawns and round-trips in-browser under the base path.
+
+**(original check instructions, for reference):**
+- `npm install` (to pull eecircuit-engine) then `npm run build && npm run preview`, open the
+  served URL, click "SPICE dev" -> "Run RC sweep", confirm it prints cutoff ~1000 Hz with no
+  console errors. This confirms the worker actually spawns in-browser under the base path.
+
+**State for the next session:**
+- A working, swappable SPICE engine exists behind `createSpiceEngine()`. SPICE-2 (netlist
+  generator) and the circuit loop build on `SimResult`.
+- `SHOW_SPICE_DEV`/SpiceDevPanel are throwaway — remove or replace at LOOP-1.
+- Bundle size is large (20 MB worker). Acceptable for now; revisit if needed.
+
+
 ### 2026-06-26 — ARCH-1 Channel bus — DONE
 
 **By:** Claude Code session (in Cowork)
@@ -55,42 +98,4 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 **Verification (Definition of Done):**
 - build clean: `tsc --noEmit` exits 0. NOTE: full `vite build` could not run in the Linux
-  sandbox (Windows-native `rolldown` binary in node_modules) — run `npm run build` on the
-  host to confirm the bundle.
-- 12-bit Hanning noise-floor formula recomputed = −104.29 dBFS (matches CLAUDE.md −104).
-  `signal.ts` was not modified and CH1 samples are produced by the identical code path, so
-  no spectral-leakage regression is possible from this change.
-- math sanity check: noiseFloorDbfs(N=1600, bits=12, noiseBW=1.5) = −104.29 dBFS.
-
-**State for the next session:**
-- The channel bus exists but has no UI yet (intended). `channels.CH2` is disabled; `params2`
-  has no setter yet. OSC-1/OSC-2 will add the Oscilloscope component, setters, and controls.
-- `circuit-out` source resolves to `null` until LOOP-1 wires it.
-- Next phase per ROADMAP sequence: **SPICE-1** (de-risk ngspice WASM) or **OSC-1** (scope
-  scaffold) — both now unblocked.
-
-**Open questions / flags for andre:**
-- Confirm `npm run build` is green on Windows before pushing (sandbox could only run tsc).
-
-### 2026-06-26 — Planning — DONE
-
-**By:** project-director session (planning, no code)
-**Commit:** docs only
-
-**What I did:**
-- Created the `docs/` planning set: `CONVENTIONS.md`, `ROADMAP.md`,
-  `specs/oscilloscope.md`, `specs/schematic-ngspice.md`, this file.
-- Selected the SPICE engine: **eecircuit-engine** (ngspice-WASM, MIT), behind a swappable
-  `SpiceEngine` adapter. Fallbacks noted: tscircuit/ngspice, ngspiceX.
-- Added a `docs/` pointer to `CLAUDE.md`.
-
-**State for the next session:**
-- No production code changed yet. Tracks A (oscilloscope) and B (schematic+SPICE) are fully
-  specced and phased.
-- **First phase to implement: ARCH-1** (channel bus). Recommended second: SPICE-1 (de-risk
-  WASM early). See `ROADMAP.md` → "Recommended session sequence".
-- Each phase lists allowed/forbidden files and acceptance criteria. Honor them.
-
-**Open questions / flags for andre:**
-- None blocking. Confirm whether the Bode plot should be a new mode inside the Spectrum
-  Analyzer (recommended in LOOP-1) or a separate instrument — flagged for the LOOP-1 session.
+  sandbox (Windows-native 

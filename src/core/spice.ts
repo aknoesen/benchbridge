@@ -1,0 +1,129 @@
+// SPICE engine adapter — no UI. See docs/specs/schematic-ngspice.md (phase SPICE-1).
+//
+// eecircuit-engine (ngspice-WASM, MIT) is loaded ONLY inside the Web Worker
+// (src/core/spice.worker.ts) so its ~20 MB inlined-WASM bundle never touches the main
+// thread. This module exposes an engine-agnostic interface + result shape; nothing here
+// imports eecircuit-engine at runtime — only its types, which are erased at compile time —
+// so swapping the engine later means changing only the worker.
+
+import type { ResultType } from 'eecircuit-engine'
+
+export type AnalysisKind = 'tran' | 'ac' | 'dc' | 'op' | 'unknown'
+
+export interface SimVariable {
+  name: string
+  type: 'voltage' | 'current' | 'time' | 'frequency' | 'notype'
+}
+
+export type SimColumn =
+  | { kind: 'real'; values: Float64Array }
+  | {
+      kind: 'complex'
+      re: Float64Array
+      im: Float64Array
+      mag: Float64Array
+      phaseDeg: Float64Array
+    }
+
+export interface SimResult {
+  analysis: AnalysisKind
+  variables: SimVariable[] // parallel to `columns`
+  columns: SimColumn[]
+  numPoints: number
+}
+
+export interface SpiceEngine {
+  // Run a netlist and resolve normalized results. Auto-initialises on first call.
+  run(netlist: string): Promise<SimResult>
+  // Tear down the worker.
+  dispose(): void
+}
+
+// ── Normalisation: engine ResultType → engine-agnostic SimResult ───────────────
+// Pure function, no engine value import. Runs inside the worker.
+export function normalizeResult(raw: ResultType): SimResult {
+  const variables: SimVariable[] = raw.data.map((d) => ({ name: d.name, type: d.type }))
+
+  let columns: SimColumn[]
+  if (raw.dataType === 'real') {
+    columns = raw.data.map((d) => ({
+      kind: 'real' as const,
+      values: Float64Array.from(d.values),
+    }))
+  } else {
+    columns = raw.data.map((d) => {
+      const n = d.values.length
+      const re = new Float64Array(n)
+      const im = new Float64Array(n)
+      const mag = new Float64Array(n)
+      const phaseDeg = new Float64Array(n)
+      for (let i = 0; i < n; i++) {
+        const c = d.values[i]
+        re[i] = c.real
+        im[i] = c.img
+        mag[i] = Math.hypot(c.real, c.img)
+        phaseDeg[i] = Math.atan2(c.img, c.real) * (180 / Math.PI)
+      }
+      return { kind: 'complex' as const, re, im, mag, phaseDeg }
+    })
+  }
+
+  const firstType = variables[0]?.type
+  const analysis: AnalysisKind =
+    firstType === 'time' ? 'tran' : firstType === 'frequency' ? 'ac' : 'unknown'
+
+  return { analysis, variables, columns, numPoints: raw.numPoints }
+}
+
+// ── Worker-backed engine ───────────────────────────────────────────────────────
+
+interface WorkerResponse {
+  id: number
+  ok: boolean
+  result?: SimResult
+  error?: string
+}
+
+class WorkerSpiceEngine implements SpiceEngine {
+  private worker: Worker
+  private nextId = 1
+  private pending = new Map<
+    number,
+    { resolve: (r: SimResult) => void; reject: (e: Error) => void }
+  >()
+
+  constructor() {
+    this.worker = new Worker(new URL('./spice.worker.ts', import.meta.url), {
+      type: 'module',
+    })
+    this.worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
+      const { id, ok, result, error } = e.data
+      const p = this.pending.get(id)
+      if (!p) return
+      this.pending.delete(id)
+      if (ok && result) p.resolve(result)
+      else p.reject(new Error(error ?? 'SPICE worker error'))
+    }
+    this.worker.onerror = (e) => {
+      for (const { reject } of this.pending.values()) reject(new Error(e.message))
+      this.pending.clear()
+    }
+  }
+
+  run(netlist: string): Promise<SimResult> {
+    const id = this.nextId++
+    return new Promise<SimResult>((resolve, reject) => {
+      this.pending.set(id, { resolve, reject })
+      this.worker.postMessage({ id, netlist })
+    })
+  }
+
+  dispose() {
+    this.worker.terminate()
+    this.pending.clear()
+  }
+}
+
+export function createSpiceEngine(): SpiceEngine {
+  return new WorkerSpiceEngine()
+}

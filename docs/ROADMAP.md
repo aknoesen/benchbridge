@@ -29,7 +29,7 @@ Spec: `docs/specs/schematic-ngspice.md`
 
 | Phase | Title | Depends on | Status |
 |-------|-------|-----------|--------|
-| SPICE-1 | Integrate `eecircuit-engine` behind `SpiceEngine` adapter in a Worker | — | TODO |
+| SPICE-1 | Integrate `eecircuit-engine` behind `SpiceEngine` adapter in a Worker | — | DONE |
 | SPICE-2 | Circuit graph model + netlist generator (`core/netlist.ts`) | SPICE-1 | TODO |
 | SCH-1 | Browser schematic editor MVP (place/wire R,C,L,V,opamp,gnd) | — | TODO |
 | SCH-2 | Bind editor → circuit graph → netlist | SCH-1, SPICE-2 | TODO |

@@ -17,6 +17,7 @@
     "vite": "^8.1.0"
   },
   "dependencies": {
+    "eecircuit-engine": "^1.7.0",
     "plotly.js-dist-min": "^3.6.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"

@@ -3,9 +3,14 @@ import { SignalParams, WaveType } from './core/signal'
 import { DEFAULT_CHANNELS, resolveChannelSamples, ChannelInputs } from './core/scope'
 import SignalGenerator from './components/SignalGenerator'
 import SpectrumAnalyzer from './components/SpectrumAnalyzer'
+import SpiceDevPanel from './components/SpiceDevPanel'
 import './App.css'
 
-type ActiveInstrument = 'siggen' | 'spectrum'
+// SPICE-1 throwaway dev affordance. Set false (or remove the nav entry) once LOOP-1
+// builds the real circuit UI. See docs/specs/schematic-ngspice.md.
+const SHOW_SPICE_DEV = true
+
+type ActiveInstrument = 'siggen' | 'spectrum' | 'spice'
 type LayoutMode = 'single' | 'split'
 
 const DEFAULT_PARAMS: SignalParams = {
@@ -113,30 +118,47 @@ export default function App() {
           <span className="nav-icon">&#8863;</span>
           <span className="nav-label">Split<br/>View</span>
         </button>
+
+        {SHOW_SPICE_DEV && (
+          <button
+            className={`nav-btn ${active === 'spice' && layout === 'single' ? 'nav-active' : ''}`}
+            onClick={() => { setActive('spice'); setLayout('single') }}
+            title="SPICE engine check (dev)"
+          >
+            <span className="nav-icon">&#9707;</span>
+            <span className="nav-label">SPICE<br/>dev</span>
+          </button>
+        )}
       </nav>
 
       {/* Main instrument area */}
       <main className={`instrument-area ${layout === 'split' ? 'split' : ''}`}>
-        {(layout === 'split' || active === 'siggen') && (
-          <SignalGenerator
-            params={params}
-            signal={signal}
-            running={running}
-            compact={layout === 'split'}
-            onParamChange={updateParam}
-            onWaveTypeChange={(w: WaveType) => updateParam('waveType', w)}
-            onRunToggle={() => setRunning(r => !r)}
-          />
-        )}
-        {(layout === 'split' || active === 'spectrum') && (
-          <SpectrumAnalyzer
-            params={params}
-            signal={signal}
-            running={running}
-            compact={layout === 'split'}
-            onParamChange={updateParam}
-            onRunToggle={() => setRunning(r => !r)}
-          />
+        {layout === 'single' && active === 'spice' && SHOW_SPICE_DEV ? (
+          <SpiceDevPanel />
+        ) : (
+          <>
+            {(layout === 'split' || active === 'siggen') && (
+              <SignalGenerator
+                params={params}
+                signal={signal}
+                running={running}
+                compact={layout === 'split'}
+                onParamChange={updateParam}
+                onWaveTypeChange={(w: WaveType) => updateParam('waveType', w)}
+                onRunToggle={() => setRunning(r => !r)}
+              />
+            )}
+            {(layout === 'split' || active === 'spectrum') && (
+              <SpectrumAnalyzer
+                params={params}
+                signal={signal}
+                running={running}
+                compact={layout === 'split'}
+                onParamChange={updateParam}
+                onRunToggle={() => setRunning(r => !r)}
+              />
+            )}
+          </>
         )}
       </main>
     </div>
