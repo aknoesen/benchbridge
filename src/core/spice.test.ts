@@ -99,3 +99,38 @@ describe('power supply rails (PSU-1)', () => {
     expect(nodeVoltage(r, 'out')).toBeCloseTo(3, 3)
   }, 30000)
 })
+
+describe('instrumentation amplifier', () => {
+  // inP = diff, inN = 0, ref = 0  → V(out) = gain·diff
+  function inampCircuit(model: 'ideal' | 'threeopamp', diff: number, gain: number): Ckt {
+    return {
+      title: `inamp ${model}`,
+      components: [
+        { kind: 'vsource', id: '1', nodes: ['inp', '0'], dc: diff },
+        { kind: 'vsource', id: '2', nodes: ['inn', '0'], dc: 0 },
+        { kind: 'inamp', id: '1', model, nodes: { inP: 'inp', inN: 'inn', out: 'out', ref: '0' }, gain },
+        { kind: 'ground', id: '0', node: '0' },
+      ],
+    }
+  }
+
+  it('ideal in-amp: out = gain·(inP − inN)', async () => {
+    const nl = buildNl(inampCircuit('ideal', 0.1, 10), { kind: 'op' })
+    const sim = new Simulation()
+    await sim.start()
+    sim.setNetList(nl)
+    const r = normalizeResult(await sim.runSim())
+    expect(nodeVoltage(r, 'out')).toBeCloseTo(1.0, 3)
+  }, 30000)
+
+  it('3-op-amp in-amp: gain follows G = 1 + 2R/Rg', async () => {
+    const nl = buildNl(inampCircuit('threeopamp', 0.05, 10), { kind: 'op' })
+    const sim = new Simulation()
+    await sim.start()
+    sim.setNetList(nl)
+    const r = normalizeResult(await sim.runSim())
+    expect(nodeVoltage(r, 'out')).toBeCloseTo(0.5, 2)
+  }, 30000)
+})
+0000)
+})

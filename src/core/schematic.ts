@@ -10,6 +10,8 @@ export type SchKind =
   | 'inductor'
   | 'vsource' // generator input source; terminal 'a' = +, 'b' = -
   | 'opamp'
+  | 'inamp' // ideal instrumentation amp (single VCVS); pins inP/inN/out/ref
+  | 'inamp3' // 3-op-amp instrumentation amp (teaches the internal topology)
   | 'ground'
   | 'probe' // (legacy) marks the output node ('out') — same as 'scope1'
   | 'dcrail' // DC supply rail (power for active parts); value = volts
@@ -66,6 +68,14 @@ export function baseTerminals(kind: SchKind): SchTerminal[] {
         { name: 'inP', gx: 0, gy: 0 },
         { name: 'inN', gx: 0, gy: 2 },
         { name: 'out', gx: 4, gy: 1 },
+      ]
+    case 'inamp':
+    case 'inamp3':
+      return [
+        { name: 'inP', gx: 0, gy: 0 },
+        { name: 'inN', gx: 0, gy: 2 },
+        { name: 'out', gx: 6, gy: 1 },
+        { name: 'ref', gx: 2, gy: 3 },
       ]
     case 'ground':
     case 'probe':
@@ -195,7 +205,7 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
       : net
 
   const comps: SpiceComponent[] = []
-  let rc = 1, cc = 1, lc = 1, vc = 1, ec = 1, sc = 1, aw = 1
+  let rc = 1, cc = 1, lc = 1, vc = 1, ec = 1, sc = 1, aw = 1, ic = 1
   for (const c of s.components) {
     const ts = terminalsOf(c)
     if (c.kind === 'resistor' || c.kind === 'capacitor' || c.kind === 'inductor' || c.kind === 'vsource') {
@@ -217,6 +227,23 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
           inN: rename(netOf(ts[1].gx, ts[1].gy)),
           out: rename(netOf(ts[2].gx, ts[2].gy)),
         },
+      })
+    } else if (c.kind === 'inamp' || c.kind === 'inamp3') {
+      // Friendly default: if REF is left unwired (only the in-amp touches that net), tie it to
+      // ground so a beginner circuit still solves instead of going singular.
+      const refRaw = netOf(ts[3].gx, ts[3].gy)
+      const refNet = (termCount.get(refRaw) ?? 0) >= 2 ? rename(refRaw) : '0'
+      comps.push({
+        kind: 'inamp',
+        id: String(ic++),
+        model: c.kind === 'inamp3' ? 'threeopamp' : 'ideal',
+        nodes: {
+          inP: rename(netOf(ts[0].gx, ts[0].gy)),
+          inN: rename(netOf(ts[1].gx, ts[1].gy)),
+          out: rename(netOf(ts[2].gx, ts[2].gy)),
+          ref: refNet,
+        },
+        gain: c.value ?? 10,
       })
     } else if (c.kind === 'dcrail' || c.kind === 'vplus' || c.kind === 'vminus') {
       const def = c.kind === 'vminus' ? -5 : 5

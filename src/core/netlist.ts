@@ -58,6 +58,19 @@ export interface OpAmp {
   gain?: number // open-loop gain (default 1e6)
 }
 
+// Instrumentation amplifier. Two models, same 4 pins (inP, inN, out, ref):
+//  - 'ideal': a single VCVS — V(out,ref) = gain·(V(inP)−V(inN)). Infinite input impedance
+//    and CMRR. The right abstraction for a project INA front end.
+//  - 'threeopamp': the textbook 3-op-amp topology built from ideal VCVS op-amps + matched
+//    resistors, so a lab can see the internals and the gain law G = 1 + 2R/Rg.
+export interface InAmp {
+  kind: 'inamp'
+  id: string
+  model: 'ideal' | 'threeopamp'
+  nodes: { inP: Net; inN: Net; out: Net; ref: Net }
+  gain: number
+}
+
 // Ground marker — declares which net is ground. Emits no device line; the net is
 // normalised to '0' everywhere.
 export interface Ground {
@@ -73,6 +86,7 @@ export type Component =
   | VSource
   | DCRail
   | OpAmp
+  | InAmp
   | Ground
 
 export interface Circuit {
@@ -108,6 +122,38 @@ function vsourceSpec(v: VSource, analysis: Analysis): string {
     parts.push(`SIN(${fmt(v.sine.offset)} ${fmt(v.sine.amplitude)} ${fmt(v.sine.freq)})`)
   }
   return parts.join(' ')
+}
+
+// Instrumentation amplifier expansion. 'ideal' is one VCVS. 'threeopamp' is the classic
+// 3-op-amp in-amp from ideal VCVS op-amps and matched resistors R, with the gain resistor Rg
+// sized to hit the requested gain: G = 1 + 2R/Rg  →  Rg = 2R/(G−1). Internal nodes are
+// namespaced per instance ("xi<id>_*") so multiple in-amps never collide.
+function inampLines(c: InAmp, n: (net: Net) => string): string[] {
+  const inP = n(c.nodes.inP), inN = n(c.nodes.inN), out = n(c.nodes.out), ref = n(c.nodes.ref)
+  if (c.model === 'ideal') {
+    return [`E_INA${c.id} ${out} ${ref} ${inP} ${inN} ${fmt(c.gain)}`]
+  }
+  const R = 10000          // matched bridge/feedback resistors
+  const A = 1e6            // internal op-amp open-loop gain
+  const G = Math.max(1, c.gain)
+  const k = c.id
+  const va = `xi${k}_a`, vb = `xi${k}_b`, n1 = `xi${k}_n1`, n2 = `xi${k}_n2`
+  const im = `xi${k}_im`, ip = `xi${k}_ip`
+  const L = [
+    // input gain stage: two non-inverting op-amps coupled by Rg
+    `E_INA${k}a ${va} 0 ${inP} ${n1} ${fmt(A)}`,
+    `E_INA${k}b ${vb} 0 ${inN} ${n2} ${fmt(A)}`,
+    `R_INA${k}f1 ${va} ${n1} ${fmt(R)}`,
+    `R_INA${k}f2 ${vb} ${n2} ${fmt(R)}`,
+    // unity difference amplifier: out = (va − vb) + ref
+    `E_INA${k}c ${out} 0 ${ip} ${im} ${fmt(A)}`,
+    `R_INA${k}i ${vb} ${im} ${fmt(R)}`,
+    `R_INA${k}f ${out} ${im} ${fmt(R)}`,
+    `R_INA${k}j ${va} ${ip} ${fmt(R)}`,
+    `R_INA${k}g2 ${ip} ${ref} ${fmt(R)}`,
+  ]
+  if (G > 1) L.push(`R_INA${k}g ${n1} ${n2} ${fmt((2 * R) / (G - 1))}`)
+  return L
 }
 
 function analysisDirective(a: Analysis): string {
@@ -151,6 +197,9 @@ export function buildNetlist(circuit: Circuit, analysis: Analysis): string {
         lines.push(
           `E${c.id} ${n(c.nodes.out)} 0 ${n(c.nodes.inP)} ${n(c.nodes.inN)} ${fmt(c.gain ?? 1e6)}`,
         )
+        break
+      case 'inamp':
+        lines.push(...inampLines(c, n))
         break
       case 'ground':
         break // net normalisation only

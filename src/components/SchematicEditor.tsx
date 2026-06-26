@@ -21,6 +21,8 @@ const TOOLS: { tool: Tool; label: string }[] = [
   { tool: 'capacitor', label: 'C' },
   { tool: 'inductor', label: 'L' },
   { tool: 'opamp', label: 'Op-amp' },
+  { tool: 'inamp', label: 'INA' },
+  { tool: 'inamp3', label: 'INA3' },
   { tool: 'awg1', label: 'W1' },
   { tool: 'awg2', label: 'W2' },
   { tool: 'scope1', label: '1+' },
@@ -32,9 +34,9 @@ const TOOLS: { tool: Tool; label: string }[] = [
   { tool: 'ground', label: 'GND' },
 ]
 
-const UNIT: Partial<Record<SchKind, string>> = { resistor: 'Ω', capacitor: 'F', inductor: 'H', dcrail: 'V' }
+const UNIT: Partial<Record<SchKind, string>> = { resistor: 'Ω', capacitor: 'F', inductor: 'H', dcrail: 'V', inamp: 'V/V', inamp3: 'V/V' }
 const DEFAULT_VALUE: Partial<Record<SchKind, number>> = {
-  resistor: 1000, capacitor: 1e-9, inductor: 1e-3, dcrail: 5, vplus: 5, vminus: -5,
+  resistor: 1000, capacitor: 1e-9, inductor: 1e-3, dcrail: 5, vplus: 5, vminus: -5, inamp: 10, inamp3: 10,
 }
 
 // Parse engineering notation like "1k", "159n", "4.7u" → number.
@@ -465,6 +467,23 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
         <path d={coil} fill="none" stroke={stroke} strokeWidth={sw} />
         {upright(cx, y - 13, <text x={cx} y={y - 13} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
         {upright(cx, y + 18, <text x={cx} y={y + 18} fill="var(--text-primary)" fontSize={10} textAnchor="middle">L</text>)}
+      </g>
+    )
+  } else if (c.kind === 'inamp' || c.kind === 'inamp3') {
+    const xL = ax + G(1), xR = ax + G(5), yT = ay, yB = ay + G(2), yM = ay + G(1)
+    const tag = c.kind === 'inamp3' ? '3-op' : 'INA'
+    inner = (
+      <g>
+        <line x1={ax} y1={yT} x2={xL} y2={yT} stroke={stroke} strokeWidth={sw} />
+        <line x1={ax} y1={yB} x2={xL} y2={yB} stroke={stroke} strokeWidth={sw} />
+        <line x1={xR} y1={yM} x2={ax + G(6)} y2={yM} stroke={stroke} strokeWidth={sw} />
+        <line x1={ax + G(2)} y1={yB + 2} x2={ax + G(2)} y2={ay + G(3)} stroke={stroke} strokeWidth={sw} />
+        <polygon points={`${xL},${yT - 12} ${xL},${yB + 12} ${xR},${yM}`} fill="var(--bg-panel)" stroke={stroke} strokeWidth={sw} />
+        {upright(xL + 12, yT + 4, <text x={xL + 12} y={yT + 4} fill="var(--text-primary)" fontSize={11} textAnchor="middle">+</text>)}
+        {upright(xL + 12, yB + 1, <text x={xL + 12} y={yB + 1} fill="var(--text-primary)" fontSize={13} textAnchor="middle">−</text>)}
+        {upright(ax + G(2.6), yM + 4, <text x={ax + G(2.6)} y={yM + 4} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{tag}</text>)}
+        {upright(ax + G(2), ay + G(3) + 10, <text x={ax + G(2)} y={ay + G(3) + 10} fill="var(--text-secondary)" fontSize={8} textAnchor="middle">REF</text>)}
+        {upright(ax + G(2.6), yT - 14, <text x={ax + G(2.6)} y={yT - 14} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
       </g>
     )
   } else if (c.kind === 'opamp') {

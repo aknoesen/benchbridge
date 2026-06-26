@@ -36,6 +36,42 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-26 — Instrumentation amplifier component (INA + INA3) + symbol cleanup — DONE
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**What I did:**
+- `core/netlist.ts`: new `InAmp` component (pins inP/inN/out/ref, `gain`). Two models — `ideal`
+  (one VCVS: `E out ref inP inN gain`) and `threeopamp` (classic 3-op-amp built from ideal VCVS
+  op-amps + matched 10k resistors, Rg sized to `G = 1 + 2R/Rg`). `inampLines()` namespaces
+  internal nodes per instance.
+- `core/schematic.ts`: SchKinds `inamp` / `inamp3`, 4 terminals, `toCircuit` mapping. Friendly
+  default: an unwired REF is tied to ground so beginner circuits still solve.
+- `SchematicEditor.tsx`: INA / INA3 palette tools, `V/V` gain unit, default gain 10, triangle
+  symbol with +/−/out/REF pins.
+- Earlier in the session (same file): inductor now draws a coil; resistor a zigzag; capacitor
+  parallel plates (were all identical boxes). Save button now offers a real filename (native
+  Save dialog + prompt fallback).
+- Tests: ideal in-amp reads V(out)=1.0 for 0.1 V diff × gain 10; 3-op-amp reads 0.5 for 0.05 ×
+  gain 10 — both via `.op` through ngspice.
+
+**Verification (Definition of Done):**
+- build clean: `tsc && vite build` green.
+- **Tests: 16/16 pass** (was 14; +2 in-amp).
+- 12-bit spectrum canary: `signal.ts` untouched; unaffected.
+
+**State for the next session:**
+- Active analog parts available now: ideal op-amp, ideal in-amp (project INA front end), and
+  3-op-amp in-amp (lab on in-amp internals). All emit via VCVS, ignore power rails (ideal).
+- NOTE: the mount truncated `netlist.ts`, `schematic.ts`, `SchematicEditor.tsx`, and
+  `spice.test.ts` on Edit-tool writes again; all were rebuilt via bash/Python and verified by
+  line count + full test run. Continue editing these large files via bash/Python, not the Edit tool.
+
+**Open questions / flags for andre:**
+- In-amp REF defaults to ground if unwired; if you want a mid-supply ref (Vref pin to a divider)
+  that already works by wiring REF to the node.
+
 ### 2026-06-26 — Planning: Track E (docking/workspace) + EDIT-1 (rubber-band) — DONE (docs only)
 
 **By:** Claude Code session (in Cowork) — project-director planning, no code
