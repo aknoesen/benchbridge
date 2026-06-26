@@ -36,6 +36,44 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-26 — SPICE-2 circuit graph + netlist generator — DONE
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**What I did:**
+- `src/core/netlist.ts`: typed `Circuit` graph (`Resistor`, `Capacitor`, `Inductor`,
+  `VSource`, `DCRail`, `OpAmp`, `Ground`), `Analysis` union (`tran`/`ac`/`op`/`dc`), and
+  `buildNetlist(circuit, analysis)` → ngspice string. Ground aliases (`0`/`gnd`/declared
+  ground net) normalise to `0`. Op-amp emits an ideal high-gain VCVS (E device).
+- Groundwork for Track C (per spec): `DCRail` represents Power Supply rails; op-amp carries
+  `vpos`/`vneg` rail nets; `buildNetlist` supports `.op`/`.dc` for the Voltmeter.
+- SignalParams→source mapping: `makeInputSource()` / `sineFromParams()` (sine→`SIN(...)`,
+  AC sweeps use `AC 1`). Non-sine transient drive (PULSE/PWL) deferred.
+- Added Vitest (`vitest@^4.1.9` devDep, `npm test` = `vitest run`); `src/core/netlist.test.ts`.
+- tsconfig: excluded `*.test.ts(x)` from the production `tsc` (vitest typechecks/runs tests).
+- Docs in this commit also add NET-1 (Network Analyzer) and Track C (PSU-1/DMM-1) and the
+  SPICE-2 accommodation notes.
+
+**Verification (Definition of Done):**
+- build clean: `tsc && vite build` green in sandbox. netlist.ts is library-only (not imported
+  by the app entry yet) so the bundle is unchanged.
+- **Tests: 3/3 pass** (`vitest run`). Includes an engine integration test: the GENERATED RC
+  netlist simulates to a -3 dB cutoff in (900, 1100) Hz and flat passband (310 ms).
+- Netlist-string test asserts `V1 in 0 DC 0 AC 1`, `R1 in out 1000`, `C1 out 0 1.59155e-7`,
+  `.ac dec 20 10 1000000`; ground-alias + `.op`/`.tran` directive tests pass.
+- 12-bit spectrum canary: signal.ts untouched; unaffected.
+
+**State for the next session:**
+- `buildNetlist` + `Circuit` are ready for SCH-2 (editor → graph) and NET-1/LOOP-1.
+- A test harness now exists; later phases should add tests in the same style.
+- Per ROADMAP sequence, next is OSC-1 (scope) or SCH-1 (editor) or NET-1.
+
+**Open questions / flags for andre:**
+- Op-amp is an ideal VCVS (no rail clipping yet). Fine for EEC1 filters; revisit if a lab
+  needs saturation behaviour.
+
+
 ### 2026-06-26 — SPICE-1 ngspice-WASM engine integration — DONE
 
 **By:** Claude Code session (in Cowork)
