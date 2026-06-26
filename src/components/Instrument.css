@@ -7,6 +7,18 @@
   overflow: hidden;
 }
 
+/* Stacked panes (Board tab: schematic above, breadboard below) share the viewport height
+   instead of each taking 100vh. */
+.stacked-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+.stacked-pane .instrument-panel {
+  height: 100%;
+}
+
 /* ── Display area (left, fills remaining space) ── */
 .display-area {
   flex: 1;

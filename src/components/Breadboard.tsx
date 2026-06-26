@@ -1,0 +1,209 @@
+// Breadboard layout (Track F, phase F-2) — transfer a schematic to a solderless board and verify
+// it. Place the schematic's R/C/L parts and M2K ports by clicking holes, run jumpers, then Check
+// that the board is electrically the drawn circuit. Practice colours each node live; Bench hides
+// the nodes until Check. See docs/specs/breadboard.md.
+import { useMemo, useState, type Dispatch, type SetStateAction, type CSSProperties } from 'react'
+import {
+  buildHoles, boardNets, boardWidth, boardHeight, PAD, PITCH, CHANNEL_SLOT,
+  schematicExpectation, checkEquivalence, type BoardLayout, type CheckResult,
+} from '../core/breadboard'
+import { type Schematic, type SchKind } from '../core/schematic'
+import './Instrument.css'
+
+type Mode = 'practice' | 'bench'
+type Tool =
+  | { kind: 'select' }
+  | { kind: 'jumper' }
+  | { kind: 'placePart'; id: string; partKind: SchKind }
+  | { kind: 'placePort'; port: string }
+
+const NET_COLORS = ['#f0a030', '#40c0e0', '#44dd88', '#e06fd0', '#d0d040', '#7a8cff', '#ff8855', '#55ddcc']
+
+interface Props {
+  schematic: Schematic
+  board: BoardLayout
+  setBoard: Dispatch<SetStateAction<BoardLayout>>
+}
+
+export default function Breadboard({ schematic, board, setBoard }: Props) {
+  const holes = useMemo(() => buildHoles(), [])
+  const holeByKey = useMemo(() => new Map(holes.map((h) => [h.key, h])), [holes])
+  const exp = useMemo(() => schematicExpectation(schematic), [schematic])
+  const nets = useMemo(() => boardNets(holes, board.jumpers), [holes, board.jumpers])
+
+  const [mode, setMode] = useState<Mode>('practice')
+  const [tool, setTool] = useState<Tool>({ kind: 'select' })
+  const [pending, setPending] = useState<string | null>(null)
+  const [hoverNet, setHoverNet] = useState<string | null>(null)
+  const [check, setCheck] = useState<CheckResult | null>(null)
+  const [revealed, setRevealed] = useState(false)
+
+  const W = boardWidth(), H = boardHeight()
+  const railY = (slot: number) => PAD + slot * PITCH
+  const pos = (key: string) => holeByKey.get(key)!
+
+  // Colour the nodes the student has actually wired (any net with a leg / port / jumper).
+  const activeColor = useMemo(() => {
+    const used = new Set<string>()
+    for (const p of board.parts) { used.add(nets.get(p.aHole)!); used.add(nets.get(p.bHole)!) }
+    for (const p of board.ports) used.add(nets.get(p.hole)!)
+    for (const j of board.jumpers) { used.add(nets.get(j.a)!); used.add(nets.get(j.b)!) }
+    const m = new Map<string, string>()
+    let i = 0
+    for (const n of used) { if (n) { m.set(n, NET_COLORS[i % NET_COLORS.length]); i++ } }
+    return m
+  }, [board, nets])
+
+  const showNets = mode === 'practice' || revealed
+  const placedPart = new Map(board.parts.map((p) => [p.id, p]))
+  const placedPort = new Map(board.ports.map((p) => [p.port, p]))
+
+  function onHole(key: string) {
+    setCheck(null)
+    if (tool.kind === 'jumper') {
+      if (!pending) setPending(key)
+      else { if (pending !== key) setBoard((b) => ({ ...b, jumpers: [...b.jumpers, { a: pending, b: key }] })); setPending(null) }
+      return
+    }
+    if (tool.kind === 'placePart') {
+      if (!pending) { setPending(key); return }
+      if (pending === key) { setPending(null); return }
+      const part = { id: tool.id, kind: tool.partKind, aHole: pending, bHole: key }
+      setBoard((b) => ({ ...b, parts: [...b.parts.filter((p) => p.id !== tool.id), part] }))
+      setPending(null); setTool({ kind: 'select' })
+      return
+    }
+    if (tool.kind === 'placePort') {
+      const port = tool.port
+      setBoard((b) => ({ ...b, ports: [...b.ports.filter((p) => p.port !== port), { port, hole: key }] }))
+      setTool({ kind: 'select' })
+    }
+  }
+
+  function runCheck() { setCheck(checkEquivalence(schematic, board, holes)); if (mode === 'bench') setRevealed(true) }
+
+  return (
+    <div className="instrument-panel">
+      <div className="display-area">
+        <div className="display-header">
+          <span className="display-title">Breadboard</span>
+          <div className="display-controls">
+            <button className={`run-btn ${mode === 'practice' ? 'active' : ''}`} onClick={() => { setMode('practice'); setRevealed(false) }}>Practice</button>
+            <button className={`run-btn ${mode === 'bench' ? 'active' : ''}`} onClick={() => { setMode('bench'); setRevealed(false); setHoverNet(null) }}>Bench</button>
+            <button className="run-btn active" onClick={runCheck}>✓ Check</button>
+          </div>
+        </div>
+        <div className="plotly-display" style={{ overflow: 'auto', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 8 }}>
+          <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} style={{ maxWidth: '100%', height: 'auto' }}>
+            <rect x={2} y={2} width={W - 4} height={H - 4} rx={8} fill="#15171a" stroke="#333" />
+            {[0, 1, 15, 16].map((s) => (
+              <line key={s} x1={PAD - 10} y1={railY(s)} x2={W - PAD + 10} y2={railY(s)}
+                stroke={s === 0 || s === 15 ? '#e04040' : '#4a9eff'} strokeOpacity={0.3} strokeWidth={2} />
+            ))}
+            <rect x={2} y={railY(CHANNEL_SLOT) - PITCH / 2} width={W - 4} height={PITCH} fill="#0d0d0d" />
+            {holes.map((h) => {
+              const net = nets.get(h.key)!
+              const aCol = showNets ? activeColor.get(net) : undefined
+              const hover = mode === 'practice' && hoverNet === net
+              const base = h.kind === 'railP' ? '#5a2a2a' : h.kind === 'railN' ? '#23304a' : '#2b2b2b'
+              const fill = hover ? '#ffffff' : (aCol ?? base)
+              const r = (hover || pending === h.key) ? 4.4 : (aCol ? 3.6 : 3)
+              return (
+                <circle key={h.key} cx={h.x} cy={h.y} r={r} fill={fill}
+                  stroke={pending === h.key ? '#fff' : '#000'} strokeWidth={pending === h.key ? 1.5 : 0.5}
+                  style={{ cursor: 'pointer' }}
+                  onMouseEnter={() => { if (mode === 'practice') setHoverNet(net) }}
+                  onMouseLeave={() => setHoverNet(null)}
+                  onClick={() => onHole(h.key)} />
+              )
+            })}
+            {board.jumpers.map((j, i) => {
+              const a = pos(j.a), b = pos(j.b)
+              return <line key={'j' + i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#9aa0a6" strokeWidth={2.5}
+                style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default' }}
+                onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, jumpers: bb.jumpers.filter((_, k) => k !== i) })); setCheck(null) } }} />
+            })}
+            {board.parts.map((p) => {
+              const a = pos(p.aHole), b = pos(p.bHole)
+              const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2
+              return (
+                <g key={p.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default' }}
+                  onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, parts: bb.parts.filter((x) => x.id !== p.id) })); setCheck(null) } }}>
+                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--ch1-color)" strokeWidth={2} />
+                  <rect x={mx - 11} y={my - 7} width={22} height={14} rx={2} fill="var(--bg-panel)" stroke="var(--ch1-color)" />
+                  <text x={mx} y={my + 4} fontSize={9} fill="var(--text-primary)" textAnchor="middle">{p.id}</text>
+                </g>
+              )
+            })}
+            {board.ports.map((p) => {
+              const h = pos(p.hole)
+              return (
+                <g key={p.port} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default' }}
+                  onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, ports: bb.ports.filter((x) => x.port !== p.port) })); setCheck(null) } }}>
+                  <circle cx={h.x} cy={h.y} r={5} fill="none" stroke="#e0c020" strokeWidth={1.5} />
+                  <text x={h.x} y={h.y - 8} fontSize={8} fill="#e0c020" textAnchor="middle">{p.port}</text>
+                </g>
+              )
+            })}
+          </svg>
+        </div>
+        {check && (
+          <div className="marker-table">
+            <div className="marker-row">
+              <span style={{ fontSize: 12, color: check.ok ? 'var(--theory-color)' : '#ffaa55' }}>{check.message}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="settings-panel">
+        <div className="section-title">Place from schematic</div>
+        {exp.parts.length === 0 && exp.ports.length === 0 ? (
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Draw a circuit in the Circuit tab above.</div>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {exp.parts.map((p) => (
+              <button key={p.id} style={chip(placedPart.has(p.id), tool.kind === 'placePart' && tool.id === p.id)}
+                onClick={() => { setTool({ kind: 'placePart', id: p.id, partKind: p.kind }); setPending(null); setCheck(null) }}>
+                {placedPart.has(p.id) ? '✓ ' : ''}{p.id}
+              </button>
+            ))}
+            {exp.ports.map((p) => (
+              <button key={p.name} style={chip(placedPort.has(p.name), tool.kind === 'placePort' && tool.port === p.name)}
+                onClick={() => { setTool({ kind: 'placePort', port: p.name }); setPending(null); setCheck(null) }}>
+                {placedPort.has(p.name) ? '✓ ' : ''}{p.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="section-title">Tools</div>
+        <div className="wave-selector">
+          <button className={tool.kind === 'select' ? 'active' : ''} onClick={() => { setTool({ kind: 'select' }); setPending(null) }}>Select</button>
+          <button className={tool.kind === 'jumper' ? 'active' : ''} onClick={() => { setTool({ kind: 'jumper' }); setPending(null) }}>Jumper</button>
+          <button onClick={() => { setBoard({ parts: [], jumpers: [], ports: [] }); setCheck(null); setPending(null) }}>Clear</button>
+        </div>
+
+        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.6 }}>
+          {tool.kind === 'placePart' ? `Placing ${tool.id}: click two holes for its legs.`
+            : tool.kind === 'placePort' ? `Placing ${tool.port}: click a hole (a rail, for power/ground).`
+            : tool.kind === 'jumper' ? 'Jumper: click two holes to wire them together.'
+            : 'Select: click a placed part, port, or jumper to remove it.'}
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 6 }}>
+          {mode === 'practice' ? 'Practice: each node is coloured as you wire; hover a hole to highlight its node.'
+            : 'Bench: nodes stay hidden until you press Check.'}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function chip(placed: boolean, active: boolean): CSSProperties {
+  return {
+    fontSize: 11, padding: '3px 8px', borderRadius: 4, cursor: 'pointer',
+    border: `1px solid ${active ? 'var(--accent-blue)' : placed ? 'var(--theory-color)' : 'var(--border)'}`,
+    color: placed ? 'var(--theory-color)' : 'var(--text-primary)',
+    background: active ? 'rgba(74,158,255,0.15)' : 'transparent',
+  }
+}

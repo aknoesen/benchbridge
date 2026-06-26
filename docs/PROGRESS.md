@@ -36,6 +36,64 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-26 — F-2: transfer schematic → breadboard + verification loop — DONE
+
+**By:** Claude Code session (in Cowork) — on branch `track-f-breadboard`
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**What I did:**
+- `core/breadboard.ts`: `BoardLayout` (parts/jumpers/ports), `PORT_NAME`/`PLACEABLE_KINDS`,
+  `schematicExpectation(s)` (the R/C/L parts + ports the schematic expects, each with its net),
+  and **`checkEquivalence(schematic, board, holes)`** — the centerpiece: compares the board's node
+  partition to the schematic's (ports anchor the mapping) and returns the first problem with a
+  student-friendly message ("place C1", "R1 pin B and C1 pin A should be the same node", "… are
+  different nodes but your board connects them").
+- `components/Breadboard.tsx` (F-2): place the schematic's parts/ports by picking them from a
+  checklist then clicking holes; jumper tool; Select-to-delete; **Check** button; Practice colours
+  each wired node live (+ hover highlight), Bench hides nodes until Check.
+- `App.tsx`: `board` state + localStorage autosave (`m2k-board-v1`); the Board tab now renders the
+  **stacked** schematic-over-board view.
+- Tests (5 new): correct RC transfer matches; missing part flagged; split output node flagged;
+  accidental short flagged; a jumper re-joins a split → matches.
+
+**Verification (Definition of Done):**
+- build clean; **30/30 tests** (+5). canary: `signal.ts` untouched.
+- Note: the Write tool truncated the large `Breadboard.tsx` on the outputs mount; rewrote it via a
+  quoted bash heredoc straight to the mount (reliable for big files with backticks/${}).
+
+**State for the next session:**
+- The transfer-and-verify loop works: draw a circuit, drop its parts/ports on the board, jumper,
+  Check. Practice/Bench modes both wired. F-3 (stretch): DIP/IC footprints (op-amp, INA) + an
+  optional "show one valid layout" hint. Also still open: OSC-3, LOOP-2, Track E, KICAD-1.
+
+### 2026-06-26 — F-1: breadboard model + SVG render + Practice net highlight — DONE
+
+**By:** Claude Code session (in Cowork) — on branch `track-f-breadboard`
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**What I did:**
+- `core/breadboard.ts`: parametric board geometry (30 cols, two 5-row terminal banks split by the
+  center channel, four power rails), internal-connection groups (`T<col>`/`B<col>`/`RAIL_*`), and
+  `boardNets(holes, jumpers)` — union-find over hole keys (same engine idea as schematic
+  `computeNets`). `buildHoles`, `holeKey`, `boardWidth/Height` exported for rendering.
+- `core/breadboard.test.ts` (4 tests): a 5-hole column is common; the channel separates banks;
+  a rail runs full length and +/- rails are distinct; a jumper unions two columns.
+- `components/Breadboard.tsx`: parametric SVG board (holes, rail stripes, channel, row labels) with
+  a **Practice/Bench** toggle. Practice lights up every hole on the node you hover (teaches "these
+  5 are common / the rail is one net"); Bench hides the hint.
+- `App.tsx`: "Board" nav tab → standalone Breadboard panel.
+
+**Verification (Definition of Done):**
+- build clean (`tsc && vite build`); **25/25 tests** (+4).
+- canary: `signal.ts` untouched; breadboard is independent.
+
+**State for the next session (F-2):**
+- Standalone Board tab for now; the **stacked-under-schematic** view + **drag-from-schematic**
+  parts, **jumper tool**, and the **equivalence Check** (board nets vs schematic nets, reusing
+  `boardNets` + `toCircuit`) are F-2. `boardNets` already accepts jumpers (tested), so F-2 wires
+  the UI for jumpers + placed legs and diffs the two net partitions.
+- Geometry knobs: `COLS`, `PITCH`, `PAD`, `ROWS` in `core/breadboard.ts`.
+
 ### 2026-06-26 — Planning: Track F (breadboard layout) specced + prioritised NEXT — DONE (docs only)
 
 **By:** Claude Code session (in Cowork) — project-director planning, no code

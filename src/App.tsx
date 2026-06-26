@@ -9,11 +9,13 @@ import SpectrumAnalyzer from './components/SpectrumAnalyzer'
 import Oscilloscope from './components/Oscilloscope'
 import NetworkAnalyzer from './components/NetworkAnalyzer'
 import SchematicEditor from './components/SchematicEditor'
+import Breadboard from './components/Breadboard'
+import { type BoardLayout } from './core/breadboard'
 import Voltmeter from './components/Voltmeter'
 import PowerSupply from './components/PowerSupply'
 import './App.css'
 
-type ActiveInstrument = 'siggen' | 'spectrum' | 'scope' | 'network' | 'schematic' | 'voltmeter' | 'psu'
+type ActiveInstrument = 'siggen' | 'spectrum' | 'scope' | 'network' | 'schematic' | 'voltmeter' | 'psu' | 'breadboard'
 type LayoutMode = 'single' | 'split'
 
 const DEFAULT_PARAMS: SignalParams = {
@@ -51,6 +53,19 @@ function loadStoredSchematic(): Schematic {
   return { components: [], wires: [] }
 }
 
+const BOARD_KEY = 'm2k-board-v1'
+
+function loadStoredBoard(): BoardLayout {
+  try {
+    const raw = localStorage.getItem(BOARD_KEY)
+    if (raw) {
+      const d = JSON.parse(raw)
+      if (Array.isArray(d.parts) && Array.isArray(d.jumpers) && Array.isArray(d.ports)) return d
+    }
+  } catch { /* ignore corrupt storage */ }
+  return { parts: [], jumpers: [], ports: [] }
+}
+
 export default function App() {
   const [active, setActive] = useState<ActiveInstrument>('siggen')
   const [layout, setLayout] = useState<LayoutMode>('single')
@@ -60,6 +75,7 @@ export default function App() {
   const [channels] = useState(DEFAULT_CHANNELS)
   const [running, setRunning] = useState(true)
   const [schematic, setSchematic] = useState<Schematic>(loadStoredSchematic)
+  const [board, setBoard] = useState<BoardLayout>(loadStoredBoard)
   const [tick, setTick] = useState(0)
   const rafRef = useRef<number | null>(null)
 
@@ -78,6 +94,10 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem(CIRCUIT_KEY, JSON.stringify(schematic)) } catch { /* quota */ }
   }, [schematic])
+
+  useEffect(() => {
+    try { localStorage.setItem(BOARD_KEY, JSON.stringify(board)) } catch { /* quota */ }
+  }, [board])
 
   const channelInputs = useMemo<ChannelInputs>(() => ({
     generatorParams: params,
@@ -168,6 +188,7 @@ export default function App() {
         {navBtn('voltmeter', 'Ω', 'Voltmeter', 'Voltmeter (DC)')}
         {navBtn('psu', '∓', 'Supply', 'Power Supply')}
         {navBtn('schematic', '▤', 'Circuit', 'Schematic Editor')}
+        {navBtn('breadboard', '∷', 'Board', 'Breadboard layout')}
 
         <button className={`nav-btn ${layout === 'split' ? 'nav-active' : ''}`}
           onClick={() => setLayout(l => l === 'split' ? 'single' : 'split')} title="Split view: Signal Gen + Spectrum">
@@ -188,6 +209,15 @@ export default function App() {
           />
         ) : layout === 'single' && active === 'schematic' ? (
           <SchematicEditor schematic={schematic} setSchematic={setSchematic} />
+        ) : layout === 'single' && active === 'breadboard' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', minHeight: 0 }}>
+            <div className="stacked-pane">
+              <SchematicEditor schematic={schematic} setSchematic={setSchematic} />
+            </div>
+            <div className="stacked-pane">
+              <Breadboard schematic={schematic} board={board} setBoard={setBoard} />
+            </div>
+          </div>
         ) : layout === 'single' && active === 'network' ? (
           <NetworkAnalyzer
             circuit={drawnValid ? drawn.circuit : undefined}

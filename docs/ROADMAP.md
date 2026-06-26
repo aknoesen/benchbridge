@@ -127,8 +127,8 @@ Spec: `docs/specs/breadboard.md`
 
 | Phase | Title | Depends on | Status |
 |-------|-------|-----------|--------|
-| F-1 | Breadboard model + parametric SVG render + Practice-mode net colouring | SCH-1 | TODO |
-| F-2 | Drag 2-pin parts from schematic + jumpers + verification loop (board ≟ schematic) | F-1 | TODO |
+| F-1 | Breadboard model + parametric SVG render + Practice-mode net colouring | SCH-1 | DONE |
+| F-2 | Drag 2-pin parts from schematic + jumpers + verification loop (board ≟ schematic) | F-1 | DONE |
 | F-3 | (Stretch) DIP/IC footprints (op-amp, INA) + optional "show one valid layout" hint | F-2 | TODO |
 
 Decisions (locked with andre, 2026-06-26):
