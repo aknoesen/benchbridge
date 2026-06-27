@@ -50,10 +50,13 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
   exposes only inP/inN/out, the LMC662 model adds vpos/vneg. `terminalsOf` passes `c.opModel`.
   `toCircuit` op-amp emission guards the now-optional rail pins. New `ampCategory(c)` helper is
   the single source of truth for sim vs build.
-- `SchematicEditor.tsx`: toolbar collapsed to **Op-amp / In-amp / LMC662 DIP**. The Selected
-  panel now has a **Type** dropdown — op-amp: Ideal (simulation) / LMC662 (sim + build);
-  in-amp: Ideal / 3-op-amp. A sim/build badge shows under it, plus a warning when a build
-  part's V+/V- is left unwired. The op-amp symbol draws rail stubs only for the LMC662 model.
+- `SchematicEditor.tsx`: toolbar collapsed to **Op-amp / In-amp**. Selecting either reveals a
+  **place-time type sub-selector** below the toolbar — Op-amp: Ideal / LMC662 / LMC662 DIP
+  (the dual 8-pin chip is folded in here, no separate button); In-amp: Ideal / 3-op-amp. The
+  chosen type is dropped on placement and a sim/build hint shows under the sub-selector. The
+  Selected panel keeps a **Type** dropdown so an already-placed part can be converted, with a
+  sim/build badge and a warning when a build part's V+/V- is left unwired. The op-amp symbol
+  draws rail stubs only for the LMC662 model.
 - Wires are coordinate-based (not pin-bound), so switching model/type never deletes wires;
   rails that disappear just leave their wire segments in place. No schema migration needed —
   old saved files (kind 'lmc662' DIP, 'inamp3') still load unchanged.

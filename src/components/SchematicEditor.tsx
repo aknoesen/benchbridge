@@ -24,7 +24,6 @@ const TOOLS: { tool: Tool; label: string }[] = [
   { tool: 'inductor', label: 'L' },
   { tool: 'opamp', label: 'Op-amp' },
   { tool: 'inamp', label: 'In-amp' },
-  { tool: 'lmc662', label: 'LMC662 DIP' },
   { tool: 'awg1', label: 'W1' },
   { tool: 'awg2', label: 'W2' },
   { tool: 'scope1', label: '1+' },
@@ -86,6 +85,10 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
     | null
   >(null)
   const [placeRotation, setPlaceRotation] = useState(0)
+  // Place-time type selectors: when the Op-amp / In-amp tool is active a sub-selector below the
+  // toolbar picks the exact part to drop. These map to (kind, opModel) at placement time.
+  const [opampType, setOpampType] = useState<'ideal' | 'lmc662' | 'dip'>('ideal')
+  const [inampType, setInampType] = useState<'inamp' | 'inamp3'>('inamp')
   const [simStatus, setSimStatus] = useState('')
   const [simBusy, setSimBusy] = useState(false)
   const engineRef = useRef<SpiceEngine | null>(null)
@@ -236,9 +239,17 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
       }
       return
     }
-    // place a component
-    const kind = tool as SchKind
-    const c: SchComponent = { id: newId(kind, sch.components), kind, gx, gy, rotation: placeRotation, value: DEFAULT_VALUE[kind] }
+    // place a component. The Op-amp / In-amp tools resolve to a specific kind+model via the
+    // place-time sub-selector; everything else places its own kind directly.
+    let kind = tool as SchKind
+    let opModel: SchComponent['opModel']
+    if (tool === 'opamp') {
+      if (opampType === 'dip') kind = 'lmc662'
+      else { kind = 'opamp'; opModel = opampType === 'lmc662' ? 'lmc662' : 'ideal' }
+    } else if (tool === 'inamp') {
+      kind = inampType // 'inamp' (ideal) or 'inamp3' (3-op-amp)
+    }
+    const c: SchComponent = { id: newId(kind, sch.components), kind, gx, gy, rotation: placeRotation, value: DEFAULT_VALUE[kind], ...(opModel ? { opModel } : {}) }
     setSch((s) => ({ ...s, components: [...s.components, c] }))
     setSelected(c.id)
     setSelSet(new Set([c.id]))
@@ -515,6 +526,35 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
               onClick={() => { setTool(t.tool); setWireStart(null) }}>{t.label}</button>
           ))}
         </div>
+        {tool === 'opamp' && (
+          <div style={{ marginTop: 6 }}>
+            <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 3 }}>Op-amp type to place:</div>
+            <div className="wave-selector">
+              {([
+                ['ideal', 'Ideal', 'sim'],
+                ['lmc662', 'LMC662', 'build'],
+                ['dip', 'LMC662 DIP', 'build'],
+              ] as const).map(([v, lbl, cat]) => (
+                <button key={v} className={opampType === v ? 'active' : ''} onClick={() => setOpampType(v)}
+                  title={cat === 'build' ? 'Real part — needs V+/V- power' : 'Ideal model — no supply needed'}>{lbl}</button>
+              ))}
+            </div>
+            <div style={{ fontSize: 10, marginTop: 3, color: opampType === 'ideal' ? 'var(--theory-color)' : 'var(--accent-orange)' }}>
+              {opampType === 'ideal' ? 'Simulation only — no supply needed' : 'Simulation + build — wire V+/V- to power it'}
+            </div>
+          </div>
+        )}
+        {tool === 'inamp' && (
+          <div style={{ marginTop: 6 }}>
+            <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 3 }}>In-amp type to place:</div>
+            <div className="wave-selector">
+              {([['inamp', 'Ideal'], ['inamp3', '3-op-amp']] as const).map(([v, lbl]) => (
+                <button key={v} className={inampType === v ? 'active' : ''} onClick={() => setInampType(v)}>{lbl}</button>
+              ))}
+            </div>
+            <div style={{ fontSize: 10, marginTop: 3, color: 'var(--theory-color)' }}>Simulation only — no supply needed</div>
+          </div>
+        )}
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.6 }}>
           M2K pins — <b style={{ color: '#e0c020' }}>W1/W2</b> outputs, <b style={{ color: 'var(--ch1-color)' }}>1+/1-</b> Ch1 in,
           <b style={{ color: 'var(--ch2-color)' }}> 2+/2-</b> Ch2 in, <b style={{ color: '#e04040' }}>V+</b> /
