@@ -37,6 +37,7 @@ Spec: `docs/specs/schematic-ngspice.md`
 | NET-1 | Network Analyzer instrument (Bode mag+phase, sine-sweep via ngspice `.ac`) | SPICE-2 | DONE |
 | LOOP-1 | Close the loop: generator → circuit → Network Analyzer (AC Bode) + Scope CH2 (transient) | SCH-2, OSC-2, NET-1 | DONE |
 | LOOP-2 | Live value tuning + transient/AC toggle + −3 dB cursor | LOOP-1 | DONE |
+| SCH-5 | Amplifier model picker: sim-only (ideal, no rails) vs sim+build (LMC662, rails) via Selected-panel Type dropdown | SCH-1 | DONE |
 | KICAD-1 | (Stretch) KiCad netlist import | LOOP-1 | TODO |
 
 Notes:

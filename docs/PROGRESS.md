@@ -36,6 +36,53 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-26 — SCH-5: amplifier model picker (sim-only vs sim+build) — DONE
+
+**By:** Claude Code session
+**Commit:** uncommitted
+
+**What I did:**
+- Distinguished two part categories: *simulation-only* (ideal, no supplies needed) and
+  *simulation+build* (real parts that need explicit V+/V- rails, e.g. LMC662). The netlist
+  layer already supported this (ideal = bare VCVS, optional vpos/vneg); this phase surfaces it
+  in the editor.
+- `core/schematic.ts`: `baseTerminals(kind, opModel)` is now model-aware — an ideal op-amp
+  exposes only inP/inN/out, the LMC662 model adds vpos/vneg. `terminalsOf` passes `c.opModel`.
+  `toCircuit` op-amp emission guards the now-optional rail pins. New `ampCategory(c)` helper is
+  the single source of truth for sim vs build.
+- `SchematicEditor.tsx`: toolbar collapsed to **Op-amp / In-amp / LMC662 DIP**. The Selected
+  panel now has a **Type** dropdown — op-amp: Ideal (simulation) / LMC662 (sim + build);
+  in-amp: Ideal / 3-op-amp. A sim/build badge shows under it, plus a warning when a build
+  part's V+/V- is left unwired. The op-amp symbol draws rail stubs only for the LMC662 model.
+- Wires are coordinate-based (not pin-bound), so switching model/type never deletes wires;
+  rails that disappear just leave their wire segments in place. No schema migration needed —
+  old saved files (kind 'lmc662' DIP, 'inamp3') still load unchanged.
+- Added 4 unit tests in `schematic.test.ts` (ideal pin set, LMC662 pin set, ideal netlist has
+  no rails, `ampCategory` mapping).
+
+**Verification (Definition of Done):**
+- build clean: yes — `tsc --noEmit` reports zero errors.
+- 12-bit spectrum floor at −104 dBFS confirmed: unaffected — no change to `signal.ts` or the
+  FFT/noise pipeline; only the schematic editor and op-amp netlist emission were touched.
+- math sanity check: standalone tsx run of the new logic, 10/10 assertions pass — ideal op-amp
+  terminals = {inP,inN,out}; LMC662 = {inP,inN,out,vpos,vneg}; ideal netlist nodes.vpos/vneg
+  undefined, model 'ideal'; ampCategory: opamp→sim, opamp+lmc662→build, lmc662→build,
+  inamp/inamp3→sim, resistor→null. (Full vitest could not run in the sandbox: node_modules
+  holds Windows-native rolldown bindings; the Linux binary is absent. Run `npm test` on Windows
+  to confirm the suite.)
+
+**State for the next session:**
+- The amplifier "type" is driven by existing fields (`opModel` for op-amps, `kind` for
+  in-amps); no new persisted field was added. `ampCategory()` is available for any future
+  validation (e.g. blocking a sim if a build part is unpowered).
+- INA125 (a real sim+build in-amp with supply pins) is not yet modeled — when added, give it
+  rail terminals and return 'build' from `ampCategory`; the dropdown + badge will pick it up.
+
+**Open questions / flags for andre:**
+- Should an unpowered build part be a hard error (block simulation) rather than just a warning?
+
+---
+
 ### 2026-06-26 — EDIT-2b: box-select (marquee) + move everything inside it — DONE
 
 **By:** Claude Code session (in Cowork) · **Commit:** uncommitted (run `.\push.ps1`)

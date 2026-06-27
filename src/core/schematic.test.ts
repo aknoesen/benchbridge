@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { Simulation } from 'eecircuit-engine'
-import { Schematic, toCircuit } from './schematic'
+import { Schematic, toCircuit, terminalsOf, ampCategory } from './schematic'
 import { buildNetlist } from './netlist'
 import { normalizeResult, transferFunction } from './spice'
 
@@ -204,6 +204,36 @@ describe('multi-ground + op-amp power pins (toCircuit)', () => {
     expect(op.nodes.vpos).toBeTruthy()
     expect(op.nodes.vneg).toBeTruthy()
     expect(op.nodes.vpos).not.toBe(op.nodes.vneg)
+  })
+})
+
+describe('amplifier model picker (SCH-5)', () => {
+  it('ideal op-amp exposes only inP/inN/out (no rail pins)', () => {
+    const ideal = terminalsOf({ id: 'U1', kind: 'opamp', gx: 0, gy: 0 }) // opModel undefined → ideal
+    expect(ideal.map((t) => t.name).sort()).toEqual(['inN', 'inP', 'out'])
+  })
+
+  it('LMC662 op-amp adds the V+/V- rail pins', () => {
+    const real = terminalsOf({ id: 'U1', kind: 'opamp', gx: 0, gy: 0, opModel: 'lmc662' })
+    expect(real.map((t) => t.name).sort()).toEqual(['inN', 'inP', 'out', 'vneg', 'vpos'])
+  })
+
+  it('ideal op-amp netlist has no vpos/vneg nodes', () => {
+    const sch: Schematic = { components: [{ id: 'U1', kind: 'opamp', gx: 6, gy: 2 }], wires: [] }
+    const op = toCircuit(sch, 't').circuit.components.find((c) => c.kind === 'opamp') as
+      { model?: string; nodes: { vpos?: string; vneg?: string } }
+    expect(op.model).toBe('ideal')
+    expect(op.nodes.vpos).toBeUndefined()
+    expect(op.nodes.vneg).toBeUndefined()
+  })
+
+  it('categorises sim-only vs sim+build parts', () => {
+    expect(ampCategory({ id: 'a', kind: 'opamp', gx: 0, gy: 0 })).toBe('sim')
+    expect(ampCategory({ id: 'a', kind: 'opamp', gx: 0, gy: 0, opModel: 'lmc662' })).toBe('build')
+    expect(ampCategory({ id: 'a', kind: 'lmc662', gx: 0, gy: 0 })).toBe('build')
+    expect(ampCategory({ id: 'a', kind: 'inamp', gx: 0, gy: 0 })).toBe('sim')
+    expect(ampCategory({ id: 'a', kind: 'inamp3', gx: 0, gy: 0 })).toBe('sim')
+    expect(ampCategory({ id: 'a', kind: 'resistor', gx: 0, gy: 0 })).toBeNull()
   })
 })
 

@@ -3,7 +3,7 @@
 // toCircuit(). See docs/specs/schematic-ngspice.md (SCH-1).
 import { useMemo, useRef, useState, useEffect, type ReactElement, type Dispatch, type SetStateAction } from 'react'
 import {
-  Schematic, SchComponent, SchKind, terminalsOf, toCircuit,
+  Schematic, SchComponent, SchKind, terminalsOf, toCircuit, ampCategory,
   attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentWithWires, type WireEndRef,
 } from '../core/schematic'
 import { buildNetlist } from '../core/netlist'
@@ -23,9 +23,8 @@ const TOOLS: { tool: Tool; label: string }[] = [
   { tool: 'capacitor', label: 'C' },
   { tool: 'inductor', label: 'L' },
   { tool: 'opamp', label: 'Op-amp' },
-  { tool: 'lmc662', label: 'LMC662' },
-  { tool: 'inamp', label: 'INA' },
-  { tool: 'inamp3', label: 'INA3' },
+  { tool: 'inamp', label: 'In-amp' },
+  { tool: 'lmc662', label: 'LMC662 DIP' },
   { tool: 'awg1', label: 'W1' },
   { tool: 'awg2', label: 'W2' },
   { tool: 'scope1', label: '1+' },
@@ -377,10 +376,32 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
     setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, value: v } : c) }))
   }
 
-  // Op-amp model selector (ideal VCVS vs the LMC662 behavioural model).
+  // Op-amp model selector (ideal VCVS vs the LMC662 behavioural model). Switching to ideal
+  // drops the V+/V- pins; any wires that were on them stay put as free segments.
   function setSelModel(m: 'ideal' | 'lmc662') {
     if (!sel) return
     setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, opModel: m } : c) }))
+  }
+
+  // In-amp type selector: ideal single-VCVS vs the textbook 3-op-amp topology. Same pinout,
+  // so this is a clean swap of the underlying kind.
+  function setSelInampType(k: 'inamp' | 'inamp3') {
+    if (!sel) return
+    setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, kind: k } : c) }))
+  }
+
+  // A pin is powered if a wire reaches it or another part's terminal sits on it.
+  function pinConnected(gx: number, gy: number, selfId: string): boolean {
+    if (sch.wires.some((w) => (w.x1 === gx && w.y1 === gy) || (w.x2 === gx && w.y2 === gy))) return true
+    return sch.components.some((c) => c.id !== selfId && terminalsOf(c).some((t) => t.gx === gx && t.gy === gy))
+  }
+
+  // Build parts (LMC662 op-amp / DIP) need their rails wired; warn if V+/V- is floating.
+  function unwiredRails(c: SchComponent): string[] {
+    if (ampCategory(c) !== 'build') return []
+    return terminalsOf(c)
+      .filter((t) => (t.name === 'vpos' || t.name === 'vneg') && !pinConnected(t.gx, t.gy, c.id))
+      .map((t) => (t.name === 'vpos' ? 'V+' : 'V−'))
   }
 
   const px = (g: number) => g * GRID + PAD
@@ -544,10 +565,10 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
             {sel.kind === 'opamp' && (
               <>
                 <div className="control-row-inline">
-                  <label>Model</label>
-                  <select value={sel.opModel ?? 'ideal'} onChange={(e) => setSelModel(e.target.value as 'ideal' | 'lmc662')} style={{ width: 110 }}>
-                    <option value="ideal">Ideal</option>
-                    <option value="lmc662">LMC662</option>
+                  <label>Type</label>
+                  <select value={sel.opModel ?? 'ideal'} onChange={(e) => setSelModel(e.target.value as 'ideal' | 'lmc662')} style={{ width: 150 }}>
+                    <option value="ideal">Ideal (simulation)</option>
+                    <option value="lmc662">LMC662 (sim + build)</option>
                   </select>
                 </div>
                 {sel.opModel === 'lmc662' && (
@@ -557,6 +578,40 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
                 )}
               </>
             )}
+            {(sel.kind === 'inamp' || sel.kind === 'inamp3') && (
+              <div className="control-row-inline">
+                <label>Type</label>
+                <select value={sel.kind} onChange={(e) => setSelInampType(e.target.value as 'inamp' | 'inamp3')} style={{ width: 150 }}>
+                  <option value="inamp">Ideal (simulation)</option>
+                  <option value="inamp3">3-op-amp (simulation)</option>
+                </select>
+              </div>
+            )}
+            {ampCategory(sel) && (() => {
+              const cat = ampCategory(sel)
+              const rails = unwiredRails(sel)
+              return (
+                <div style={{ marginTop: 4 }}>
+                  <span style={{
+                    fontSize: 10, padding: '1px 6px', borderRadius: 3,
+                    color: cat === 'build' ? 'var(--accent-orange)' : 'var(--theory-color)',
+                    border: `1px solid ${cat === 'build' ? 'var(--accent-orange)' : 'var(--theory-color)'}`,
+                  }}>
+                    {cat === 'build' ? 'Simulation + build' : 'Simulation only'}
+                  </span>
+                  {cat === 'sim' && (
+                    <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 3, lineHeight: 1.4 }}>
+                      Ideal model — no power supply needed to simulate.
+                    </div>
+                  )}
+                  {rails.length > 0 && (
+                    <div style={{ fontSize: 10, color: '#ffaa55', marginTop: 3, lineHeight: 1.4 }}>
+                      ⚠ {rails.join(' and ')} not connected — a real part needs power to work.
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         ) : selectedWire !== null ? (
           <div style={{ fontSize: 11, color: 'var(--accent-blue)' }}>Wire selected — press Delete to remove</div>
@@ -673,11 +728,15 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
         <line x1={xL} y1={yB} x2={xL + 10} y2={yB} stroke={stroke} strokeWidth={sw} />
         <line x1={xR - 6} y1={yM} x2={xR} y2={yM} stroke={stroke} strokeWidth={sw} />
         <polygon points={`${xL + 10},${yT - 8} ${xL + 10},${yB + 8} ${xR - 6},${yM}`} fill="var(--bg-panel)" stroke={stroke} strokeWidth={sw} />
-        {/* V+ / V- power stubs (top/bottom) */}
-        <line x1={xMid} y1={ay - G(1)} x2={xMid} y2={ay + 2} stroke="#e04040" strokeWidth={sw} />
-        <line x1={xMid} y1={ay + G(3)} x2={xMid} y2={ay + G(2) - 2} stroke="#4a9eff" strokeWidth={sw} />
-        {upright(xMid + 9, ay - G(1) + 4, <text x={xMid + 9} y={ay - G(1) + 4} fill="#e04040" fontSize={9} textAnchor="middle">V+</text>)}
-        {upright(xMid + 9, ay + G(3), <text x={xMid + 9} y={ay + G(3)} fill="#4a9eff" fontSize={9} textAnchor="middle">V−</text>)}
+        {/* V+ / V- power stubs (top/bottom) — only the LMC662 (sim+build) model has rails */}
+        {c.opModel === 'lmc662' && (
+          <>
+            <line x1={xMid} y1={ay - G(1)} x2={xMid} y2={ay + 2} stroke="#e04040" strokeWidth={sw} />
+            <line x1={xMid} y1={ay + G(3)} x2={xMid} y2={ay + G(2) - 2} stroke="#4a9eff" strokeWidth={sw} />
+            {upright(xMid + 9, ay - G(1) + 4, <text x={xMid + 9} y={ay - G(1) + 4} fill="#e04040" fontSize={9} textAnchor="middle">V+</text>)}
+            {upright(xMid + 9, ay + G(3), <text x={xMid + 9} y={ay + G(3)} fill="#4a9eff" fontSize={9} textAnchor="middle">V−</text>)}
+          </>
+        )}
         {upright(xL + 17, yT + 4, <text x={xL + 17} y={yT + 4} fill="var(--text-primary)" fontSize={11} textAnchor="middle">+</text>)}
         {upright(xL + 17, yB + 1, <text x={xL + 17} y={yB + 1} fill="var(--text-primary)" fontSize={13} textAnchor="middle">−</text>)}
         {upright(xL + 30, yM + 4, <text x={xL + 30} y={yM + 4} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}

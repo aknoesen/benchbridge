@@ -55,7 +55,10 @@ export interface SchTerminal {
 }
 
 // Base terminal offsets per kind (grid units), unrotated (horizontal) orientation.
-export function baseTerminals(kind: SchKind): SchTerminal[] {
+// `opModel` matters only for kind 'opamp': the ideal (simulation-only) op-amp is a bare
+// VCVS with no supply pins, so it exposes inP/inN/out only. The LMC662 (simulation+build)
+// model is a real part that needs power, so it also exposes the V+/V- rail pins.
+export function baseTerminals(kind: SchKind, opModel?: 'ideal' | 'lmc662'): SchTerminal[] {
   switch (kind) {
     case 'resistor':
     case 'capacitor':
@@ -65,14 +68,18 @@ export function baseTerminals(kind: SchKind): SchTerminal[] {
         { name: 'a', gx: 0, gy: 0 },
         { name: 'b', gx: 2, gy: 0 },
       ]
-    case 'opamp':
-      return [
+    case 'opamp': {
+      const pins: SchTerminal[] = [
         { name: 'inP', gx: 0, gy: 0 },
         { name: 'inN', gx: 0, gy: 2 },
         { name: 'out', gx: 4, gy: 1 },
-        { name: 'vpos', gx: 2, gy: -1 }, // V+ power pin (top)
-        { name: 'vneg', gx: 2, gy: 3 },  // V- power pin (bottom)
       ]
+      if (opModel === 'lmc662') {
+        pins.push({ name: 'vpos', gx: 2, gy: -1 }) // V+ power pin (top)
+        pins.push({ name: 'vneg', gx: 2, gy: 3 })  // V- power pin (bottom)
+      }
+      return pins
+    }
     case 'lmc662':
       // 8-pin DIP, real pinout. Left side pins 1-4 top→bottom, right side pins 5-8 bottom→top.
       return [
@@ -121,10 +128,23 @@ export function rotateOffset(dx: number, dy: number, r: number): [number, number
 // Absolute (rotated) terminal grid positions for net computation and rendering.
 export function terminalsOf(c: SchComponent): SchTerminal[] {
   const r = c.rotation ?? 0
-  return baseTerminals(c.kind).map((t) => {
+  return baseTerminals(c.kind, c.opModel).map((t) => {
     const [dx, dy] = rotateOffset(t.gx, t.gy, r)
     return { name: t.name, gx: c.gx + dx, gy: c.gy + dy }
   })
+}
+
+// Whether a part is a simulation-only model (ideal, no supplies needed) or a
+// simulation+build part (a real device that needs explicit V+/V- rails, like the LMC662).
+// Returns null for parts that are not amplifiers. Single source of truth for the editor badge.
+export function ampCategory(c: SchComponent): 'sim' | 'build' | null {
+  switch (c.kind) {
+    case 'opamp': return c.opModel === 'lmc662' ? 'build' : 'sim'
+    case 'lmc662': return 'build'
+    case 'inamp':
+    case 'inamp3': return 'sim'
+    default: return null
+  }
 }
 
 const key = (x: number, y: number) => `${x},${y}`
@@ -358,6 +378,8 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
       comps.push({ kind: 'resistor', id: `aout${aw}`, nodes: [srcNet, outNet], ohms: 49.9 })
       aw++
     } else if (c.kind === 'opamp') {
+      // Ideal op-amp has only inP/inN/out (ts[3]/ts[4] absent). LMC662 adds the rail pins.
+      const tvpos = ts[3], tvneg = ts[4]
       comps.push({
         kind: 'opamp',
         id: String(ec++),
@@ -366,8 +388,8 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
           inP: rename(netOf(ts[0].gx, ts[0].gy)),
           inN: rename(netOf(ts[1].gx, ts[1].gy)),
           out: rename(netOf(ts[2].gx, ts[2].gy)),
-          vpos: rename(netOf(ts[3].gx, ts[3].gy)),
-          vneg: rename(netOf(ts[4].gx, ts[4].gy)),
+          ...(tvpos ? { vpos: rename(netOf(tvpos.gx, tvpos.gy)) } : {}),
+          ...(tvneg ? { vneg: rename(netOf(tvneg.gx, tvneg.gy)) } : {}),
         },
       })
     } else if (c.kind === 'lmc662') {
