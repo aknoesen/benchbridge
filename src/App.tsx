@@ -251,9 +251,11 @@ export default function App() {
   // Two-tier: a scope/spectrum input wired through a circuit reads the .tran; otherwise the
   // exact generator output (preserving the signal pipeline + the 12-bit canary).
   const measured = drawnValid && circuitOut ? circuitOut : signal
-  const measured2 = drawnValid && circuitOut2 ? circuitOut2 : signal2
-
   const circuitActive = drawnValid && circuitOut !== null
+  // CH2 follows the circuit when one is active: its 2+ probe (circuitOut2), or nothing if no 2+
+  // probe is placed — an unconnected scope input reads nothing, not the W2 generator. Only the
+  // standalone (no-circuit) view shows W2 on CH2.
+  const measured2 = circuitActive ? circuitOut2 : signal2
 
   // Clip detection: warn when the simulated output rides into the supply rails. The op-amp model
   // clamps to its V+/V- pins, so a too-big input (e.g. 1 V into a gain-10 amp) flat-tops at ±5 V.
