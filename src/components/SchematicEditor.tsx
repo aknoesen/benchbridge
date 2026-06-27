@@ -200,10 +200,25 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
 
   // Background mouse-down: in the Select tool, start a marquee (drag a box to select). Components
   // stop propagation on their own mouse-down, so this only fires on empty canvas.
+  // Bounding box (grid units) of the current multi-selection, or null if nothing is boxed.
+  function selectionBounds(): { minx: number; miny: number; maxx: number; maxy: number } | null {
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity, any = false
+    const ext = (x: number, y: number) => { any = true; minx = Math.min(minx, x); miny = Math.min(miny, y); maxx = Math.max(maxx, x); maxy = Math.max(maxy, y) }
+    for (const c of sch.components) if (selSet.has(c.id)) for (const t of terminalsOf(c)) ext(t.gx, t.gy)
+    sch.wires.forEach((w, i) => { if (selWires.has(`${i}:1`)) ext(w.x1, w.y1); if (selWires.has(`${i}:2`)) ext(w.x2, w.y2) })
+    return any ? { minx, miny, maxx, maxy } : null
+  }
+
   function onSvgDown(e: React.MouseEvent) {
     if (tool !== 'select') return
     const { gx, gy } = gridAt(e)
     marqueeMoved.current = false
+    // Press inside an existing selection → drag the whole group; press outside → start a new box.
+    const b = selectionBounds()
+    if (b && gx >= b.minx - 1 && gx <= b.maxx + 1 && gy >= b.miny - 1 && gy <= b.maxy + 1) {
+      setDrag({ ids: [...selSet], wireEnds: [...selWires], lastGx: gx, lastGy: gy })
+      return
+    }
     setMarquee({ x0: gx, y0: gy, x1: gx, y1: gy })
   }
 
@@ -274,7 +289,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
       const minGx = Math.min(...drag.ids.map((id) => sch.components.find((c) => c.id === id)?.gx ?? 0))
       const minGy = Math.min(...drag.ids.map((id) => sch.components.find((c) => c.id === id)?.gy ?? 0))
       ddx = Math.max(ddx, -minGx); ddy = Math.max(ddy, -minGy)
-      if (ddx !== 0 || ddy !== 0) setSch((s) => moveSelectionBy(s, new Set(drag.ids), new Set(drag.wireEnds), ddx, ddy))
+      if (ddx !== 0 || ddy !== 0) { marqueeMoved.current = true; setSch((s) => moveSelectionBy(s, new Set(drag.ids), new Set(drag.wireEnds), ddx, ddy)) }
       setDrag({ ids: drag.ids, wireEnds: drag.wireEnds, lastGx: drag.lastGx + ddx, lastGy: drag.lastGy + ddy })
       return
     }
@@ -370,6 +385,14 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
 
   const px = (g: number) => g * GRID + PAD
 
+  // True when the cursor is over a committed multi-selection → show the "move" cursor so the
+  // grab-to-move step is discoverable (matches the +/-1 grab pad in onSvgDown).
+  const overSelection = (() => {
+    if (tool !== 'select' || drag || marquee || !hoverGrid || (selSet.size + selWires.size) < 2) return false
+    const b = selectionBounds()
+    return !!b && hoverGrid.gx >= b.minx - 1 && hoverGrid.gx <= b.maxx + 1 && hoverGrid.gy >= b.miny - 1 && hoverGrid.gy <= b.maxy + 1
+  })()
+
   return (
     <div className="instrument-panel">
       <div className="display-area">
@@ -388,7 +411,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
         <svg
           ref={svgRef}
           className="plotly-display"
-          style={{ background: 'var(--bg-display)', cursor: tool === 'select' ? 'default' : 'crosshair' }}
+          style={{ background: 'var(--bg-display)', cursor: tool !== 'select' ? 'crosshair' : (overSelection ? 'move' : 'default') }}
           onClick={onBackgroundClick}
           onMouseDown={onSvgDown}
           onMouseMove={onMouseMove}
@@ -436,6 +459,19 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
               fill="var(--accent-blue)" fillOpacity={0.12} stroke="var(--accent-blue)" strokeWidth={1}
               strokeDasharray="4 3" pointerEvents="none" />
           )}
+
+          {/* committed multi-selection: a visible grab-box so it's clear you can press inside and
+              drag to move. The +/-1 pad matches the hit area in onSvgDown. Hidden while marquee-ing. */}
+          {!marquee && (selSet.size + selWires.size) >= 2 && (() => {
+            const b = selectionBounds()
+            if (!b) return null
+            return (
+              <rect x={px(b.minx - 1)} y={px(b.miny - 1)}
+                width={(b.maxx - b.minx + 2) * GRID} height={(b.maxy - b.miny + 2) * GRID}
+                fill="var(--accent-blue)" fillOpacity={0.06} stroke="var(--accent-blue)" strokeWidth={1}
+                strokeDasharray="2 4" pointerEvents="none" />
+            )
+          })()}
 
           {/* components */}
           {sch.components.map((c) => (
