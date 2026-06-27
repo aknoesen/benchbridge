@@ -165,7 +165,7 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
                 <b>Set the supply.</b> Open the Power Supply — V+ is the applied voltage (it defaults to
                 +5 V, the M2K's DAC-driven rail). On the real bench this is the red V+ wire.
                 <div style={{ marginTop: 8 }}>
-                  <button style={openBtn} onClick={() => onGoTo('psu')}>Open Power Supply →</button>
+                  <button style={goBtn} onClick={() => onGoTo('psu')}>Open Power Supply →</button>
                 </div>
               </div>
             </div>
@@ -204,7 +204,7 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
               <div style={{ flex: 1 }}>
                 <b>Set a signal.</b> Open the Signal Generator, pick a wave / frequency / amplitude on W1
                 (W2 is the second source), and press Run.
-                <div style={{ marginTop: 8 }}><button style={openBtn} onClick={() => onGoTo('siggen')}>Open Signal Generator →</button></div>
+                <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('siggen')}>Open Signal Generator →</button></div>
               </div>
             </div>
           </div>
@@ -214,7 +214,7 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
               <div style={{ flex: 1 }}>
                 <b>See it in time.</b> Open the Oscilloscope — voltage vs time (YT). Time/div zooms the
                 window; the trigger holds the wave steady.
-                <div style={{ marginTop: 8 }}><button style={openBtn} onClick={() => onGoTo('scope')}>Open Oscilloscope →</button></div>
+                <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('scope')}>Open Oscilloscope →</button></div>
               </div>
             </div>
           </div>
@@ -289,7 +289,7 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
             The gap between your tone and the floor is the dynamic range you actually have. The Spectrum
             Analyzer's <b>Learning Mode</b> lets you drop the bit depth to 8 or 4 and watch the floor rise —
             the clearest way to feel what "12-bit" buys you.
-            <span style={{ display: 'block', marginTop: 8 }}><button style={openBtn} onClick={() => onGoTo('spectrum')}>Open Spectrum Analyzer →</button></span>
+            <span style={{ display: 'block', marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('spectrum')}>Open Spectrum Analyzer →</button></span>
           </p>
 
           <h3 style={h3}>Next: from circuit &amp; simulation to the breadboard</h3>
@@ -306,7 +306,7 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
               <div style={{ flex: 1 }}>
                 <b>Draw &amp; simulate.</b> Open the Circuit editor, build (or load an example), and the
                 instruments read it live.
-                <div style={{ marginTop: 8 }}><button style={openBtn} onClick={() => onGoTo('schematic')}>Open Circuit editor →</button></div>
+                <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('schematic')}>Open Circuit editor →</button></div>
               </div>
             </div>
           </div>
@@ -316,7 +316,7 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
               <div style={{ flex: 1 }}>
                 <b>Transfer &amp; check.</b> Open the Breadboard, place the same parts, and press Check to
                 confirm your layout matches the schematic before you build it for real.
-                <div style={{ marginTop: 8 }}><button style={openBtn} onClick={() => onGoTo('breadboard')}>Open Breadboard →</button></div>
+                <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('breadboard')}>Open Breadboard →</button></div>
               </div>
             </div>
           </div>
