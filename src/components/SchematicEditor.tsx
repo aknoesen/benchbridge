@@ -24,6 +24,8 @@ const TOOLS: { tool: Tool; label: string }[] = [
   { tool: 'capacitor', label: 'C' },
   { tool: 'inductor', label: 'L' },
   { tool: 'diode', label: 'Diode' },
+  { tool: 'led', label: 'LED' },
+  { tool: 'zener', label: 'Zener' },
   { tool: 'opamp', label: 'Op-amp' },
   { tool: 'inamp', label: 'In-amp' },
   { tool: 'awg1', label: 'W1' },
@@ -41,6 +43,7 @@ const TOOLS: { tool: Tool; label: string }[] = [
 // with the Network Analyzer tune knobs). DEFAULT_VALUE stays here — it is editor-only.
 const DEFAULT_VALUE: Partial<Record<SchKind, number>> = {
   resistor: 1000, capacitor: 100e-9, inductor: 1e-3, dcrail: 5, vplus: 5, vminus: -5, inamp: 10, inamp3: 10,
+  led: 2.0, zener: 3.3,
 }
 
 // Reference designators (R1, C2, L1, U1 for op/in-amps, V1). A new part increments from the
@@ -476,6 +479,15 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, kind: k } : c) }))
   }
 
+  // Convert a placed diode between plain / LED / Zener; reset value to the new type's sensible
+  // default (LED Vf 2 V, Zener BV 3.3 V; plain diode has no value).
+  function setSelDiodeKind(k: 'diode' | 'led' | 'zener') {
+    if (!sel) return
+    snapshot()
+    const value = k === 'led' ? 2.0 : k === 'zener' ? 3.3 : undefined
+    setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, kind: k, value } : c) }))
+  }
+
   // A pin is powered if a wire reaches it or another part's terminal sits on it.
   function pinConnected(gx: number, gy: number, selfId: string): boolean {
     if (sch.wires.some((w) => (w.x1 === gx && w.y1 === gy) || (w.x2 === gx && w.y2 === gy))) return true
@@ -676,6 +688,16 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                 onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                 style={{ width: 80 }} />
             </div>
+            {(sel.kind === 'diode' || sel.kind === 'led' || sel.kind === 'zener') && (
+              <div className="control-row-inline">
+                <label>Type</label>
+                <select value={sel.kind} onChange={(e) => setSelDiodeKind(e.target.value as 'diode' | 'led' | 'zener')} style={{ width: 150 }}>
+                  <option value="diode">Diode (silicon)</option>
+                  <option value="led">LED (set Vf)</option>
+                  <option value="zener">Zener (set BV)</option>
+                </select>
+              </div>
+            )}
             {UNIT[sel.kind] && (
               <div className="control-row-inline">
                 <label>Value ({UNIT[sel.kind]})</label>
@@ -823,6 +845,38 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
         <line x1={cx + 5} y1={y - 9} x2={cx + 5} y2={y + 9} stroke={stroke} strokeWidth={sw} />
         <line x1={cx + 5} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
         {upright(cx, y - 15, <text x={cx} y={y - 15} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
+      </g>
+    )
+  } else if (c.kind === 'led') {
+    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
+    inner = (
+      <g>
+        <line x1={x1} y1={y} x2={cx - 7} y2={y} stroke={stroke} strokeWidth={sw} />
+        <polygon points={`${cx - 7},${y - 9} ${cx - 7},${y + 9} ${cx + 5},${y}`} fill={stroke} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
+        <line x1={cx + 5} y1={y - 9} x2={cx + 5} y2={y + 9} stroke={stroke} strokeWidth={sw} />
+        <line x1={cx + 5} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
+        {/* two emission arrows (light coming out) */}
+        <line x1={cx - 1} y1={y - 11} x2={cx + 6} y2={y - 19} stroke={stroke} strokeWidth={1.3} />
+        <line x1={cx + 6} y1={y - 19} x2={cx + 2.5} y2={y - 17.5} stroke={stroke} strokeWidth={1.3} />
+        <line x1={cx + 6} y1={y - 19} x2={cx + 5} y2={y - 15.5} stroke={stroke} strokeWidth={1.3} />
+        <line x1={cx + 5} y1={y - 10} x2={cx + 12} y2={y - 18} stroke={stroke} strokeWidth={1.3} />
+        <line x1={cx + 12} y1={y - 18} x2={cx + 8.5} y2={y - 16.5} stroke={stroke} strokeWidth={1.3} />
+        <line x1={cx + 12} y1={y - 18} x2={cx + 11} y2={y - 14.5} stroke={stroke} strokeWidth={1.3} />
+        {upright(cx, y + 18, <text x={cx} y={y + 18} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{c.id}</text>)}
+      </g>
+    )
+  } else if (c.kind === 'zener') {
+    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
+    inner = (
+      <g>
+        <line x1={x1} y1={y} x2={cx - 7} y2={y} stroke={stroke} strokeWidth={sw} />
+        <polygon points={`${cx - 7},${y - 9} ${cx - 7},${y + 9} ${cx + 5},${y}`} fill={stroke} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
+        {/* Zener cathode bar with bent ends (the "Z" flag) */}
+        <line x1={cx + 5} y1={y - 9} x2={cx + 5} y2={y + 9} stroke={stroke} strokeWidth={sw} />
+        <line x1={cx + 5} y1={y - 9} x2={cx + 1} y2={y - 9} stroke={stroke} strokeWidth={sw} />
+        <line x1={cx + 5} y1={y + 9} x2={cx + 9} y2={y + 9} stroke={stroke} strokeWidth={sw} />
+        <line x1={cx + 5} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
+        {upright(cx, y - 15, <text x={cx} y={y - 15} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{c.id}</text>)}
       </g>
     )
   } else if (c.kind === 'vsource') {

@@ -5,6 +5,7 @@ import type { SchKind } from './schematic'
 
 export const UNIT: Partial<Record<SchKind, string>> = {
   resistor: 'Ω', capacitor: 'F', inductor: 'H', dcrail: 'V', inamp: 'V/V', inamp3: 'V/V',
+  led: 'V', zener: 'V', // led = forward voltage Vf; zener = breakdown voltage BV
 }
 
 // Log range per filter component so dragging a tune slider spans decades smoothly.

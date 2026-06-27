@@ -9,6 +9,8 @@ export type SchKind =
   | 'capacitor'
   | 'inductor'
   | 'diode' // junction diode; terminal 'a' = anode, 'c' = cathode (bar end)
+  | 'led' // LED; value = forward voltage Vf (V)
+  | 'zener' // Zener diode; value = reverse breakdown voltage BV (V)
   | 'vsource' // generator input source; terminal 'a' = +, 'b' = -
   | 'opamp'
   | 'lmc662' // LMC662 dual op-amp as an 8-pin DIP (two LMC662 sections + V+/V- rails)
@@ -70,6 +72,8 @@ export function baseTerminals(kind: SchKind, opModel?: 'ideal' | 'lmc662'): SchT
         { name: 'b', gx: 2, gy: 0 },
       ]
     case 'diode':
+    case 'led':
+    case 'zener':
       return [
         { name: 'a', gx: 0, gy: 0 }, // anode (triangle side)
         { name: 'c', gx: 2, gy: 0 }, // cathode (bar side)
@@ -373,8 +377,17 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
       else if (c.kind === 'capacitor') comps.push({ kind: 'capacitor', id: String(cc++), nodes: [na, nb], farads: c.value ?? 1e-9 })
       else if (c.kind === 'inductor') comps.push({ kind: 'inductor', id: String(lc++), nodes: [na, nb], henries: c.value ?? 1e-3 })
       else comps.push({ kind: 'vsource', id: String(vc++), nodes: [na, nb], dc: 0, acMag: 1 })
-    } else if (c.kind === 'diode') {
-      comps.push({ kind: 'diode', id: String(dd++), nodes: [rename(netOf(ts[0].gx, ts[0].gy)), rename(netOf(ts[1].gx, ts[1].gy))] })
+    } else if (c.kind === 'diode' || c.kind === 'led' || c.kind === 'zener') {
+      const na = rename(netOf(ts[0].gx, ts[0].gy)), nk = rename(netOf(ts[1].gx, ts[1].gy))
+      let p: { is?: number; n?: number; rs?: number; bv?: number } = {}
+      if (c.kind === 'led') {
+        // Set IS so the forward drop ≈ the chosen Vf (V) at ~10 mA, with LED-like ideality N=2.
+        const vf = c.value ?? 2.0, N = 2.0, VT = 0.02585, Iref = 0.01
+        p = { is: Iref / Math.exp(vf / (N * VT)), n: N, rs: 2, bv: 100 }
+      } else if (c.kind === 'zener') {
+        p = { bv: c.value ?? 3.3 } // silicon forward (~0.7 V); reverse breaks down at −BV
+      }
+      comps.push({ kind: 'diode', id: String(dd++), nodes: [na, nk], ...p })
     } else if (c.kind === 'awg1' || c.kind === 'awg2') {
       // Generator output through the M2K AWG output impedance: an ideal source then a 49.9 Ohm
       // series resistor (R132 after the AD8000 buffer) into the wired node. Loading the generator

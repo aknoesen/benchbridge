@@ -109,12 +109,16 @@ export interface Ground {
   node: Net
 }
 
-// Junction diode. nodes = [anode, cathode]. All diodes share one generic small-signal silicon
-// model (.model DGEN), emitted once — enough to show the exponential I-V knee (~0.6 V).
+// Junction diode. nodes = [anode, cathode]. Each diode emits its own .model so an LED (higher Vf
+// via a smaller IS) or a Zener (low reverse breakdown BV) can differ. Defaults = generic silicon.
 export interface Diode {
   kind: 'diode'
   id: string
   nodes: [Net, Net]
+  is?: number // saturation current (sets forward Vf)
+  n?: number  // ideality factor
+  rs?: number // series resistance
+  bv?: number // reverse breakdown voltage (Zener)
 }
 
 export type Component =
@@ -302,16 +306,17 @@ export function buildNetlist(circuit: Circuit, analysis: Analysis): string {
       case 'inamp':
         lines.push(...inampLines(c, n))
         break
-      case 'diode':
-        lines.push(`D${c.id} ${n(c.nodes[0])} ${n(c.nodes[1])} DGEN`)
+      case 'diode': {
+        const is = (c.is ?? 2.52e-9).toExponential(4)
+        const nn = c.n ?? 1.752, rs = c.rs ?? 0.568, bv = c.bv ?? 100
+        const m = `DM${c.id}`
+        lines.push(`D${c.id} ${n(c.nodes[0])} ${n(c.nodes[1])} ${m}`)
+        lines.push(`.model ${m} D(IS=${is} N=${nn} RS=${rs} BV=${bv} IBV=0.1u)`)
         break
+      }
       case 'ground':
         break // net normalisation only
     }
-  }
-  // One shared diode model (generic silicon, ~0.6 V knee) if any diode is present.
-  if (circuit.components.some((c) => c.kind === 'diode')) {
-    lines.push('.model DGEN D(IS=2.52n N=1.752 RS=0.568 BV=100 IBV=0.1u)')
   }
   lines.push(analysisDirective(analysis))
   lines.push('.end')

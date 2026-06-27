@@ -289,4 +289,25 @@ export const EXAMPLES: Example[] = [
       ],
     },
   },
+  {
+    id: 'zener-iv', name: 'Zener I-V curve (XY)', group: 'Passive',
+    blurb: 'Same as the diode I-V but with a 3.3 V Zener: in XY mode you see the forward knee (~0.7 V) AND the reverse breakdown near −3.3 V (within the ±5 V drive). Drive W1 with a sine/triangle.',
+    schematic: {
+      components: [
+        { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
+        { id: 'Z1', kind: 'zener', gx: 4, gy: 4, value: 3.3 },
+        { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 220 },
+        { id: 'G1', kind: 'ground', gx: 6, gy: 6 },
+        { id: 'S1', kind: 'scope1', gx: 4, gy: 2 },   // 1+ anode
+        { id: 'A1', kind: 'adc1n', gx: 8, gy: 4 },    // 1- cathode → CH1 = V across Zener
+        { id: 'S2', kind: 'scope2', gx: 6, gy: 2 },   // 2+ cathode → CH2 = I·Rsense
+      ],
+      wires: [
+        { x1: 2, y1: 4, x2: 4, y2: 4 },
+        { x1: 4, y1: 4, x2: 4, y2: 2 },
+        { x1: 6, y1: 4, x2: 8, y2: 4 },
+        { x1: 6, y1: 4, x2: 6, y2: 2 },
+      ],
+    },
+  },
 ]

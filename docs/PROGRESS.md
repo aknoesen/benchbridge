@@ -36,6 +36,29 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-27 — LED (settable Vf) + Zener (settable breakdown) — DONE
+
+**By:** Claude Code session
+**Commit:** uncommitted
+
+**What I did:**
+- Generalised the diode netlist element with optional model params (`is`/`n`/`rs`/`bv`); each diode
+  now emits its own `.model DM<id>` (no shared DGEN).
+- New `SchKind` **led** and **zener** (same anode/cathode 2-pin footprint as the diode), with
+  toolbar buttons and symbols (LED = diode + emission arrows; Zener = diode + bent "Z" cathode bar).
+  Both editable: `UNIT` led/zener = 'V', `DEFAULT_VALUE` led 2.0, zener 3.3.
+- `toCircuit` maps them to the diode element: **LED** sets IS from the chosen Vf (N=2, ~10 mA ref)
+  so the forward drop equals the value you type; **Zener** sets BV = the value (reverse breakdown).
+- New example **Zener I-V curve (XY)** (3.3 V) alongside the diode I-V; an LED I-V is the diode-IV
+  with the part swapped to an LED.
+
+**Verification (Definition of Done):**
+- build clean: yes — `tsc --noEmit` zero errors.
+- 12-bit floor: unaffected (no `signal.ts` change).
+- math sanity check: simulated — LED Vf=2.0 → forward clamps 2.03 V; Vf=3.0 → 3.00 V (settable Vf
+  confirmed). Zener BV=3.3 → forward +0.72 V, reverse breakdown ~−3.3…−4 V (within ±5 V, visible).
+
+
 ### 2026-06-27 — Diode component + differential probes + diode I-V example — DONE
 
 **By:** Claude Code session
