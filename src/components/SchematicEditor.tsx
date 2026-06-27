@@ -79,7 +79,7 @@ interface EditorProps {
   onLoadScope?: (xy: boolean) => void
 }
 
-export default function SchematicEditor({ schematic, setSchematic, snapshot, undo, redo, onLoadGenerators }: EditorProps) {
+export default function SchematicEditor({ schematic, setSchematic, snapshot, undo, redo, onLoadGenerators, onLoadScope }: EditorProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const sch = schematic
@@ -535,6 +535,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                   setSch(JSON.parse(JSON.stringify(ex.schematic)))
                   setSelected(null); setSelectedWire(null)
                   if (ex.w1) onLoadGenerators?.(ex.w1)
+                  onLoadScope?.(!!ex.xy)
                   setSimStatus('loaded example: ' + ex.name)
                 }
               }}>
