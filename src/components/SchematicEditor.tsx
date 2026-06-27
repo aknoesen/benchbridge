@@ -96,6 +96,65 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
   const [hoverGrid, setHoverGrid] = useState<{ gx: number; gy: number } | null>(null)
   const [selectedWire, setSelectedWire] = useState<number | null>(null)
 
+  // ---- Edit history (undo/redo) + clipboard (copy/paste/cut) ----------------------------------
+  const past = useRef<Schematic[]>([])
+  const future = useRef<Schematic[]>([])
+  const dragSnapped = useRef(false) // snapshot once per drag/tune gesture, not per mouse-move
+  const clip = useRef<{ components: Schematic['components']; wires: Schematic['wires'] } | null>(null)
+  const HIST_MAX = 100
+
+  // Record the current schematic before a mutating edit, so Ctrl+Z can return to it.
+  function snapshot() {
+    past.current.push(sch)
+    if (past.current.length > HIST_MAX) past.current.shift()
+    future.current = []
+  }
+  function undo() {
+    if (!past.current.length) return
+    future.current.push(sch)
+    const prev = past.current.pop()!
+    setSch(prev)
+    setSelected(null); setSelectedWire(null); setSelSet(new Set()); setSelWires(new Set())
+  }
+  function redo() {
+    if (!future.current.length) return
+    past.current.push(sch)
+    const next = future.current.pop()!
+    setSch(next)
+    setSelected(null); setSelectedWire(null); setSelSet(new Set()); setSelWires(new Set())
+  }
+
+  // Copy the current selection (parts + any wires whose both ends sit on selected parts' pins).
+  function copySelection(): boolean {
+    const ids = selSet.size ? [...selSet] : (selected ? [selected] : [])
+    if (!ids.length) return false
+    const comps = sch.components.filter((c) => ids.includes(c.id))
+    const term = new Set<string>()
+    for (const c of comps) for (const t of terminalsOf(c)) term.add(`${t.gx},${t.gy}`)
+    const wires = sch.wires.filter((w) => term.has(`${w.x1},${w.y1}`) && term.has(`${w.x2},${w.y2}`))
+    clip.current = { components: comps.map((c) => ({ ...c })), wires: wires.map((w) => ({ ...w })) }
+    return true
+  }
+  function pasteClipboard() {
+    if (!clip.current || !clip.current.components.length) return
+    snapshot()
+    const dx = 2, dy = 2 // offset the copy so it doesn't sit on the original
+    const existing = [...sch.components]
+    const newComps = clip.current.components.map((c) => {
+      const nc = { ...c, id: newId(c.kind, existing), gx: c.gx + dx, gy: c.gy + dy }
+      existing.push(nc)
+      return nc
+    })
+    const newWires = clip.current.wires.map((w) => ({ x1: w.x1 + dx, y1: w.y1 + dy, x2: w.x2 + dx, y2: w.y2 + dy }))
+    setSch((s) => ({ components: [...s.components, ...newComps], wires: [...s.wires, ...newWires] }))
+    setSelSet(new Set(newComps.map((c) => c.id)))
+    setSelected(newComps.length === 1 ? newComps[0].id : null)
+    setSelWires(new Set()); setSelectedWire(null)
+  }
+  function cutSelection() {
+    if (copySelection()) deleteSelected()
+  }
+
   const result = useMemo(() => toCircuit(sch, 'Schematic'), [sch])
 
   // Create the SPICE engine (worker) once for the Simulate action.
@@ -183,6 +242,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
         const fromLab = d && d.schematic && Array.isArray(d.schematic.components) && Array.isArray(d.schematic.wires)
         const src = fromLab ? d.schematic : d
         if (Array.isArray(src.components) && Array.isArray(src.wires)) {
+          snapshot()
           setSch({ components: src.components, wires: src.wires })
           setSelected(null)
           setSelectedWire(null)
@@ -224,6 +284,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
     if (tool !== 'select') return
     const { gx, gy } = gridAt(e)
     marqueeMoved.current = false
+    dragSnapped.current = false
     // Press inside an existing selection → drag the whole group; press outside → start a new box.
     const b = selectionBounds()
     if (b && gx >= b.minx - 1 && gx <= b.maxx + 1 && gy >= b.miny - 1 && gy <= b.maxy + 1) {
@@ -242,6 +303,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
       if (!wireStart) setWireStart({ x: gx, y: gy })
       else {
         if (wireStart.x !== gx || wireStart.y !== gy) {
+          snapshot()
           setSch((s) => ({ ...s, wires: [...s.wires, { x1: wireStart.x, y1: wireStart.y, x2: gx, y2: gy }] }))
         }
         setWireStart(null)
@@ -259,6 +321,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
       kind = inampType // 'inamp' (ideal) or 'inamp3' (3-op-amp)
     }
     const c: SchComponent = { id: newId(kind, sch.components), kind, gx, gy, rotation: placeRotation, value: DEFAULT_VALUE[kind], ...(opModel ? { opModel } : {}) }
+    snapshot()
     setSch((s) => ({ ...s, components: [...s.components, c] }))
     setSelected(c.id)
     setSelSet(new Set([c.id]))
@@ -268,6 +331,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
   function onComponentDown(e: React.MouseEvent, id: string) {
     e.stopPropagation()
     setSelectedWire(null)
+    dragSnapped.current = false
     if (e.shiftKey) {
       // Shift-click toggles membership in the multi-selection (no drag starts).
       setSelSet((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -308,13 +372,15 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
       const minGx = Math.min(...drag.ids.map((id) => sch.components.find((c) => c.id === id)?.gx ?? 0))
       const minGy = Math.min(...drag.ids.map((id) => sch.components.find((c) => c.id === id)?.gy ?? 0))
       ddx = Math.max(ddx, -minGx); ddy = Math.max(ddy, -minGy)
-      if (ddx !== 0 || ddy !== 0) { marqueeMoved.current = true; setSch((s) => moveSelectionBy(s, new Set(drag.ids), new Set(drag.wireEnds), ddx, ddy)) }
+      if (ddx !== 0 || ddy !== 0) { if (!dragSnapped.current) { snapshot(); dragSnapped.current = true } marqueeMoved.current = true; setSch((s) => moveSelectionBy(s, new Set(drag.ids), new Set(drag.wireEnds), ddx, ddy)) }
       setDrag({ ids: drag.ids, wireEnds: drag.wireEnds, lastGx: drag.lastGx + ddx, lastGy: drag.lastGy + ddy })
       return
     }
+    if (!dragSnapped.current) { snapshot(); dragSnapped.current = true }
     setSch((s) => moveComponentWithWires(s, drag.id, Math.max(0, gx - drag.ox), Math.max(0, gy - drag.oy), drag.attached))
   }
   function onMouseUp() {
+    dragSnapped.current = false
     if (marquee) {
       if (marqueeMoved.current) {
         const xlo = Math.min(marquee.x0, marquee.x1), xhi = Math.max(marquee.x0, marquee.x1)
@@ -335,6 +401,8 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
   }
 
   function deleteSelected() {
+    if (selectedWire === null && selSet.size === 0 && !selected) return
+    snapshot()
     if (selectedWire !== null) {
       setSch((s) => ({ ...s, wires: s.wires.filter((_, i) => i !== selectedWire) }))
       setSelectedWire(null)
@@ -355,6 +423,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
   }
   function rotate() {
     if (selected) {
+      snapshot()
       setSch((s) => rotateComponentWithWires(s, selected))
     } else {
       setPlaceRotation((r) => (r + 1) % 4)
@@ -362,8 +431,19 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
   }
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === 'INPUT') return // don't hijack value typing
-      if ((e.key === 'Delete' || e.key === 'Backspace') && (selected || selectedWire !== null)) deleteSelected()
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return // let text fields keep their own keys
+      const mod = e.ctrlKey || e.metaKey
+      if (mod) {
+        const k = e.key.toLowerCase()
+        if (k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo() }
+        else if (k === 'y') { e.preventDefault(); redo() }
+        else if (k === 'c') { e.preventDefault(); copySelection() }
+        else if (k === 'v') { e.preventDefault(); pasteClipboard() }
+        else if (k === 'x') { e.preventDefault(); cutSelection() }
+        return
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && (selected || selectedWire !== null || selSet.size)) deleteSelected()
       else if (e.key === 'r' || e.key === 'R') rotate()
     }
     window.addEventListener('keydown', h)
@@ -380,6 +460,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
       return
     }
     const oldId = sel.id
+    snapshot()
     setSch((s) => ({ ...s, components: s.components.map((c) => c.id === oldId ? { ...c, id: name } : c) }))
     setSelected(name)
   }
@@ -387,6 +468,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
   function setSelValue(text: string) {
     const v = parseEng(text)
     if (v === undefined || !sel) return
+    snapshot()
     setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, value: v } : c) }))
   }
 
@@ -400,6 +482,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
   // drops the V+/V- pins; any wires that were on them stay put as free segments.
   function setSelModel(m: 'ideal' | 'lmc662') {
     if (!sel) return
+    snapshot()
     setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, opModel: m } : c) }))
   }
 
@@ -407,6 +490,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
   // so this is a clean swap of the underlying kind.
   function setSelInampType(k: 'inamp' | 'inamp3') {
     if (!sel) return
+    snapshot()
     setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, kind: k } : c) }))
   }
 
@@ -449,6 +533,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
               onChange={(e) => {
                 const ex = EXAMPLES.find((x) => x.id === e.target.value)
                 if (ex) {
+                  snapshot()
                   setSch(JSON.parse(JSON.stringify(ex.schematic)))
                   setSelected(null); setSelectedWire(null)
                   setSimStatus('loaded example: ' + ex.name)
@@ -463,7 +548,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
                 </optgroup>
               ))}
             </select>
-            <button className="run-btn" onClick={() => { setSch({ components: [], wires: [] }); setSelected(null); setSelectedWire(null) }}>Clear</button>
+            <button className="run-btn" onClick={() => { snapshot(); setSch({ components: [], wires: [] }); setSelected(null); setSelectedWire(null) }}>Clear</button>
             <input ref={fileRef} type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={openCircuit} />
           </div>
         </div>
@@ -624,6 +709,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
                 <div className="control-row-inline" title="Drag to tune live — the Bode/scope update as you go">
                   <label>Tune</label>
                   <input type="range" min={0} max={1000} value={tunePos(sel.value ?? lo, lo, hi)}
+                    onPointerDown={() => snapshot()}
                     onChange={(e) => setSelValueNum(tuneValue(Number(e.target.value), lo, hi))}
                     style={{ width: 90 }} />
                 </div>

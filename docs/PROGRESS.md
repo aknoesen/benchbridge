@@ -36,6 +36,36 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-27 — Schematic editor: undo/redo + copy/paste/cut — DONE
+
+**By:** Claude Code session
+**Commit:** uncommitted
+
+**What I did:**
+- `SchematicEditor.tsx`: an in-component history stack (`past`/`future` refs, cap 100) with a
+  `snapshot()` taken before every mutating edit — place, wire, drag (one snapshot per gesture via a
+  `dragSnapped` ref), delete, rotate, ref/value/model/type change, tune-slider grab, paste, and the
+  load/example/clear actions. `undo()`/`redo()` swap states and clear selection.
+- Clipboard (`clip` ref): `copySelection()` grabs the selected parts plus any wires whose both ends
+  sit on selected pins; `pasteClipboard()` re-ids the parts (unique per kind), offsets by (2,2),
+  translates the wires, and selects the paste. `cutSelection()` = copy then delete.
+- Keyboard: extended the keydown handler with Ctrl/Cmd+Z (undo), Ctrl+Shift+Z / Ctrl+Y (redo),
+  Ctrl/Cmd+C / V / X. Guarded against INPUT/TEXTAREA/SELECT so text fields keep their own keys, and
+  `preventDefault` on the combos. Delete now also removes a multi-selection.
+
+**Verification (Definition of Done):**
+- build clean: yes — `tsc --noEmit` zero errors.
+- 12-bit floor: unaffected (no `signal.ts` change).
+- math sanity check: N/A (editor interaction). Manual: place/move/delete then Ctrl+Z reverts each;
+  Ctrl+C/Ctrl+V duplicates the selection offset with fresh ids; Ctrl+X removes and re-pastes.
+
+**State for the next session:**
+- History lives in the editor and snapshots on its own edits + its load/example/clear. A wholesale
+  schematic replacement from the **Board tab's** lab Open does not reset the circuit-editor history
+  (minor: an undo right after that reverts the schematic). If that becomes annoying, lift history to
+  App.tsx so all schematic owners share one stack.
+
+
 ### 2026-06-27 — Example circuit library (built-in Examples menu) — DONE
 
 **By:** Claude Code session
