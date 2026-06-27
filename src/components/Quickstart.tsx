@@ -4,8 +4,13 @@
 // measurement: a voltage divider on the Power Supply + Voltmeter. The step buttons drive the app —
 // they load the matching example and jump to the right instrument so "load X, open Y, read Z" just
 // works on the deterministic example library. Static content only; touches no core/ signal math.
+import { useLayoutEffect, useRef } from 'react'
 import type { CSSProperties } from 'react'
 import './Instrument.css'
+
+// Remembered scroll offset of the guide. Module-level so it survives the panel unmounting when the
+// user clicks a step to visit an instrument — on return we restore them to where they left off.
+let lastScroll = 0
 
 interface Props {
   // Switch the visible instrument panel (id is an App ActiveInstrument).
@@ -34,11 +39,15 @@ const BRIDGE: { real: string; panel: string; id: string }[] = [
 ]
 
 export default function Quickstart({ onGoTo, onLoadExample }: Props) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  // Restore the remembered scroll position before paint (no flash of the top).
+  useLayoutEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = lastScroll }, [])
   return (
     <div className="instrument-panel">
       <div className="display-area">
         <div className="display-header"><span className="display-title">Quickstart</span></div>
-        <div style={{ padding: 24, overflow: 'auto', maxWidth: 860, lineHeight: 1.7, color: 'var(--text-primary)' }}>
+        <div ref={scrollRef} onScroll={(e) => { lastScroll = e.currentTarget.scrollTop }}
+          style={{ padding: 24, overflow: 'auto', maxWidth: 860, lineHeight: 1.7, color: 'var(--text-primary)' }}>
 
           <h2 style={{ color: GOLD, margin: '0 0 4px' }}>Welcome to BridgeM2K</h2>
           <p style={{ color: 'var(--text-secondary)', marginTop: 0 }}>
