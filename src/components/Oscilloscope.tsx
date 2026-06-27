@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Plotly from 'plotly.js-dist-min'
-import { SignalParams } from '../core/signal'
+import { SignalParams, generateSignal } from '../core/signal'
 import { captureWindow, measureTrace, SCOPE_H_DIVS, SCOPE_V_DIVS, type ScopeMeasurements } from '../core/scope'
 import { findEdgeTrigger, nextTriggerState, type Slope, type TriggerMode } from '../core/trigger'
 import './Instrument.css'
@@ -13,6 +13,9 @@ interface Props {
   signal2: Samples | null  // CH2
   params2: SignalParams
   running: boolean
+  // True when CH1/CH2 are circuit outputs (fixed-length .tran). When false the scope
+  // synthesises its own capture buffer sized to the timebase, so long time/div works.
+  circuitActive?: boolean
   compact?: boolean
   onRunToggle: () => void
   onParams2Change: <K extends keyof SignalParams>(key: K, value: SignalParams[K]) => void
@@ -23,6 +26,15 @@ const TIME_PER_DIV: { label: string; value: number }[] = [
   { label: '200 µs', value: 0.0002 },
   { label: '500 µs', value: 0.0005 },
   { label: '1 ms', value: 0.001 },
+  { label: '2 ms', value: 0.002 },
+  { label: '5 ms', value: 0.005 },
+  { label: '10 ms', value: 0.01 },
+  { label: '20 ms', value: 0.02 },
+  { label: '50 ms', value: 0.05 },
+  { label: '100 ms', value: 0.1 },
+  { label: '200 ms', value: 0.2 },
+  { label: '500 ms', value: 0.5 },
+  { label: '1 s', value: 1 },
 ]
 const VOLTS_PER_DIV: { label: string; value: number }[] = [
   { label: '50 mV', value: 0.05 },
@@ -39,10 +51,10 @@ const CURSOR_V_COLOR = '#60e0c0' // voltage cursors (teal)
 
 const fmtV = (v: number) => (Math.abs(v) < 1 ? `${(v * 1000).toFixed(0)} mV` : `${v.toFixed(3)} V`)
 const fmtF = (f: number | null) => (f == null ? '—' : f >= 1000 ? `${(f / 1000).toFixed(3)} kHz` : `${f.toFixed(1)} Hz`)
-const fmtT = (s: number | null) => (s == null ? '—' : s < 1e-3 ? `${(s * 1e6).toFixed(1)} µs` : `${(s * 1e3).toFixed(3)} ms`)
+const fmtT = (s: number | null) => (s == null ? '—' : s < 1e-3 ? `${(s * 1e6).toFixed(1)} µs` : s < 1 ? `${(s * 1e3).toFixed(3)} ms` : `${s.toFixed(4)} s`)
 const fmtD = (d: number | null) => (d == null ? '—' : `${(d * 100).toFixed(1)} %`)
 
-export default function Oscilloscope({ params, signal, signal2, params2, running, compact, onRunToggle, onParams2Change }: Props) {
+export default function Oscilloscope({ params, signal, signal2, params2, running, circuitActive, compact, onRunToggle, onParams2Change }: Props) {
   const plotRef = useRef<HTMLDivElement>(null)
   const initialised = useRef(false)
   const frameRef = useRef(0) // free-running capture-phase counter
@@ -67,34 +79,54 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
   const [meas1, setMeas1] = useState<ScopeMeasurements | null>(null)
   const [meas2, setMeas2] = useState<ScopeMeasurements | null>(null)
   const [showCursors, setShowCursors] = useState(false)
-  const [cx1, setCx1] = useState(2) // time cursor 1 (ms)
-  const [cx2, setCx2] = useState(8) // time cursor 2 (ms)
+  const [cx1, setCx1] = useState(2) // time cursor 1 (display units)
+  const [cx2, setCx2] = useState(8) // time cursor 2 (display units)
   const [cy1, setCy1] = useState(1) // voltage cursor 1 (divisions)
   const [cy2, setCy2] = useState(-1) // voltage cursor 2 (divisions)
 
-  const windowMsR = SCOPE_H_DIVS * timePerDiv * 1000
+  // Display-unit handling: short windows read in ms, long ones (≥1 s) in seconds.
+  const windowSec = SCOPE_H_DIVS * timePerDiv
+  const useSec = windowSec >= 1
+  const tScale = useSec ? 1 : 1000
+  const tUnit = useSec ? 's' : 'ms'
+  const windowDisp = windowSec * tScale
   const halfR = SCOPE_V_DIVS / 2
-  const dt = Math.abs(cx2 - cx1) / 1000 // seconds
+  const dtSec = Math.abs(cx2 - cx1) / tScale
   const dvVolts = Math.abs(cy2 - cy1) * ch1VoltsPerDiv
+
+  // Capture buffer. Through a circuit, use the provided .tran samples. Viewing the generator
+  // directly, synthesise enough samples for this timebase so long time/div (down to ~1 Hz)
+  // displays properly. Cap total samples so very long windows stay cheap (drop the synthetic
+  // rate, not the coverage — the trace is downsampled for display anyway).
+  const memoSig = circuitActive ? signal : null
+  const memoSig2 = circuitActive ? signal2 : null
+  const { ch1src, ch2src, srcFs } = useMemo(() => {
+    if (circuitActive) return { ch1src: signal, ch2src: signal2, srcFs: params.samplingRate }
+    const capSec = windowSec * 2.2
+    const fs = Math.min(params.samplingRate, Math.max(2000, Math.floor(200000 / capSec)))
+    const a = generateSignal({ ...params, samplingRate: fs, duration: capSec })
+    const b = ch2Enabled ? generateSignal({ ...params2, samplingRate: fs, duration: capSec }) : null
+    return { ch1src: a, ch2src: b, srcFs: fs }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [circuitActive, memoSig, memoSig2, params, params2, ch2Enabled, windowSec])
 
   useEffect(() => {
     if (!plotRef.current) return
     const el = plotRef.current
-    if (!signal) {
+    if (!ch1src) {
       if (initialised.current) Plotly.purge(el)
       initialised.current = false
       setMeas1(null); setMeas2(null)
       return
     }
 
-    const Fs = params.samplingRate
-    const windowSec = SCOPE_H_DIVS * timePerDiv
+    const Fs = srcFs
     const halfWinSec = (SCOPE_H_DIVS / 2) * timePerDiv
     const halfWinSamples = Math.round(halfWinSec * Fs)
     const half = SCOPE_V_DIVS / 2
 
     // ── Trigger ────────────────────────────────────────────────────────────────
-    const src = trigSource === 'ch2' ? signal2 : signal
+    const src = trigSource === 'ch2' ? ch2src : ch1src
     const trigIdx = src ? findEdgeTrigger(src.x, trigLevel, trigSlope, halfWinSamples) : null
     const decision = nextTriggerState({ armed: singleArmed }, trigIdx !== null, trigMode)
     if (decision.state.armed !== singleArmed) setSingleArmed(decision.state.armed)
@@ -107,22 +139,21 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
     } else {
       // free-run: advance the capture window each frame so an untriggered trace visibly scrolls
       if (running) frameRef.current += 1
-      const maxOffset = Math.max(0, signal.x.length / Fs - windowSec)
+      const maxOffset = Math.max(0, ch1src.x.length / Fs - windowSec)
       offsetSec = maxOffset > 0 ? (frameRef.current * (windowSec / 25)) % maxOffset : 0
     }
 
-    const windowMs = windowSec * 1000
     const data: Plotly.Data[] = []
-    const tr1 = captureWindow(signal, Fs, timePerDiv, offsetSec)
+    const tr1 = captureWindow(ch1src, Fs, timePerDiv, offsetSec)
     data.push({
-      x: tr1.t.map((s) => s * 1000),
+      x: tr1.t.map((s) => s * tScale),
       y: tr1.v.map((v) => (v + ch1Offset) / ch1VoltsPerDiv),
       type: 'scatter', mode: 'lines', line: { color: CH1_COLOR, width: 2.5 }, name: 'CH1', hoverinfo: 'none' as const,
     })
-    if (ch2Enabled && signal2) {
-      const tr2 = captureWindow(signal2, Fs, timePerDiv, offsetSec)
+    if (ch2Enabled && ch2src) {
+      const tr2 = captureWindow(ch2src, Fs, timePerDiv, offsetSec)
       data.push({
-        x: tr2.t.map((s) => s * 1000),
+        x: tr2.t.map((s) => s * tScale),
         y: tr2.v.map((v) => (v + ch2Offset) / ch2VoltsPerDiv),
         type: 'scatter', mode: 'lines', line: { color: CH2_COLOR, width: 2.5 }, name: 'CH2', hoverinfo: 'none' as const,
       })
@@ -131,18 +162,18 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
     // Measurements over the full-resolution captured window (not the downsampled trace).
     const winSamples = Math.round(windowSec * Fs)
     const startIdx = Math.max(0, Math.round(offsetSec * Fs))
-    setMeas1(measureTrace(signal.x.subarray(startIdx, startIdx + winSamples), 1 / Fs))
-    setMeas2(ch2Enabled && signal2 ? measureTrace(signal2.x.subarray(startIdx, startIdx + winSamples), 1 / Fs) : null)
+    setMeas1(measureTrace(ch1src.x.subarray(startIdx, startIdx + winSamples), 1 / Fs))
+    setMeas2(ch2Enabled && ch2src ? measureTrace(ch2src.x.subarray(startIdx, startIdx + winSamples), 1 / Fs) : null)
 
     // Trigger level marker (on the source channel's scaling) + centre alignment line when triggered.
     const srcVpd = trigSource === 'ch2' ? ch2VoltsPerDiv : ch1VoltsPerDiv
     const srcOff = trigSource === 'ch2' ? ch2Offset : ch1Offset
     const trigDiv = (trigLevel + srcOff) / srcVpd
     const shapes: Partial<Plotly.Shape>[] = [
-      { type: 'line', x0: 0, x1: windowMs, y0: trigDiv, y1: trigDiv, line: { color: TRIG_COLOR, width: 1, dash: 'dot' } },
+      { type: 'line', x0: 0, x1: windowDisp, y0: trigDiv, y1: trigDiv, line: { color: TRIG_COLOR, width: 1, dash: 'dot' } },
     ]
     if (decision.show === 'triggered') {
-      shapes.push({ type: 'line', xref: 'x', yref: 'paper', x0: windowMs / 2, x1: windowMs / 2, y0: 0, y1: 1, line: { color: TRIG_COLOR, width: 1, dash: 'dot' } })
+      shapes.push({ type: 'line', xref: 'x', yref: 'paper', x0: windowDisp / 2, x1: windowDisp / 2, y0: 0, y1: 1, line: { color: TRIG_COLOR, width: 1, dash: 'dot' } })
     }
     if (showCursors) {
       shapes.push(
@@ -157,7 +188,7 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
       paper_bgcolor: 'var(--bg-display)', plot_bgcolor: 'var(--bg-display)',
       font: { color: 'var(--text-primary)', size: 11 },
       margin: { l: 48, r: 16, t: 24, b: 44 }, showlegend: false,
-      xaxis: { title: { text: 'Time (ms)', font: { size: 11 } }, range: [0, windowMs], dtick: timePerDiv * 1000,
+      xaxis: { title: { text: `Time (${tUnit})`, font: { size: 11 } }, range: [0, windowDisp], dtick: timePerDiv * tScale,
         gridcolor: '#2a2a2a', zerolinecolor: '#444', tickfont: { size: 10 }, color: 'var(--text-secondary)' },
       yaxis: { title: { text: 'Divisions', font: { size: 11 } }, range: [-half, half], dtick: 1,
         gridcolor: '#2a2a2a', zerolinecolor: '#666', tickfont: { size: 10 }, color: 'var(--text-secondary)' },
@@ -167,9 +198,9 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
     if (!initialised.current) { Plotly.newPlot(el, data, layout, config); initialised.current = true }
     else Plotly.react(el, data, layout, config)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signal, signal2, ch2Enabled, timePerDiv, ch1VoltsPerDiv, ch1Offset, ch2VoltsPerDiv, ch2Offset,
-      params.samplingRate, trigSource, trigLevel, trigSlope, trigMode, singleArmed, running,
-      showCursors, cx1, cx2, cy1, cy2])
+  }, [ch1src, ch2src, srcFs, ch2Enabled, timePerDiv, ch1VoltsPerDiv, ch1Offset, ch2VoltsPerDiv, ch2Offset,
+      trigSource, trigLevel, trigSlope, trigMode, singleArmed, running,
+      showCursors, cx1, cx2, cy1, cy2, tScale, tUnit, windowDisp, windowSec])
 
   const statusColor = trigStatus.startsWith('Trig') ? TRIG_COLOR : trigStatus === 'Auto' ? '#88dd88' : 'var(--text-secondary)'
 
@@ -212,8 +243,8 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
             {showCursors && (
               <div className="marker-row" style={{ marginTop: 2 }}>
                 <span className="marker-id" style={{ color: CURSOR_T_COLOR }}>⇿</span>
-                <span style={{ color: CURSOR_T_COLOR }}>Δt {fmtT(dt)}</span>
-                <span style={{ color: CURSOR_T_COLOR }}>1/Δt {fmtF(cx2 !== cx1 ? 1 / dt : null)}</span>
+                <span style={{ color: CURSOR_T_COLOR }}>Δt {fmtT(dtSec)}</span>
+                <span style={{ color: CURSOR_T_COLOR }}>1/Δt {fmtF(cx2 !== cx1 ? 1 / dtSec : null)}</span>
                 <span style={{ color: CURSOR_V_COLOR }}>ΔV {fmtV(dvVolts)}</span>
               </div>
             )}
@@ -229,6 +260,9 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
           <select value={timePerDiv} onChange={(e) => setTimePerDiv(Number(e.target.value))} style={{ width: 90 }}>
             {TIME_PER_DIV.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>
+          Window: {windowDisp.toFixed(windowDisp >= 100 ? 0 : 2)} {tUnit} (10 div)
         </div>
 
         <div className="section-title" style={{ color: TRIG_COLOR }}>Trigger</div>
@@ -277,12 +311,12 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
         {showCursors && (
           <>
             <div className="control-row-inline">
-              <label style={{ color: CURSOR_T_COLOR }}>t1 (ms)</label>
-              <input type="range" min={0} max={windowMsR} step={windowMsR / 200} value={cx1} onChange={(e) => setCx1(Number(e.target.value))} style={{ width: 90 }} />
+              <label style={{ color: CURSOR_T_COLOR }}>t1 ({tUnit})</label>
+              <input type="range" min={0} max={windowDisp} step={windowDisp / 200} value={cx1} onChange={(e) => setCx1(Number(e.target.value))} style={{ width: 90 }} />
             </div>
             <div className="control-row-inline">
-              <label style={{ color: CURSOR_T_COLOR }}>t2 (ms)</label>
-              <input type="range" min={0} max={windowMsR} step={windowMsR / 200} value={cx2} onChange={(e) => setCx2(Number(e.target.value))} style={{ width: 90 }} />
+              <label style={{ color: CURSOR_T_COLOR }}>t2 ({tUnit})</label>
+              <input type="range" min={0} max={windowDisp} step={windowDisp / 200} value={cx2} onChange={(e) => setCx2(Number(e.target.value))} style={{ width: 90 }} />
             </div>
             <div className="control-row-inline">
               <label style={{ color: CURSOR_V_COLOR }}>v1 (div)</label>
@@ -319,7 +353,7 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
           <>
             <div className="control-row-inline">
               <label>Frequency</label>
-              <input type="number" min={10} max={20000} step={10} value={params2.frequency}
+              <input type="number" min={1} max={20000} step={1} value={params2.frequency}
                 onChange={(e) => onParams2Change('frequency', Number(e.target.value))} style={{ width: 80 }} />
             </div>
             <div className="control-row-inline">

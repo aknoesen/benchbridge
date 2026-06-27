@@ -132,9 +132,9 @@ export default function SignalGenerator({ params, signal, running, compact, onPa
           <label>Frequency</label>
           <input
             type="number"
-            min={10}
+            min={1}
             max={20000}
-            step={10}
+            step={1}
             value={params.frequency}
             onChange={e => onParamChange('frequency', Number(e.target.value))}
             style={{ width: 80 }}

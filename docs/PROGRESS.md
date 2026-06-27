@@ -36,6 +36,43 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-26 — SCOPE-LONG: long timebase + synthesized capture buffer — DONE
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**Why:** scope time/div maxed at 1 ms, and even adding longer options wouldn't help — the scope read
+the App's fixed ~16 ms signal buffer, so a long window had nothing to show. andre wanted to display at
+least a 1 Hz sine properly.
+
+**What I did:**
+- `Oscilloscope.tsx`: when viewing the generator directly (`circuitActive` false), the scope now
+  **synthesizes its own capture buffer** sized to the timebase via `generateSignal({ ...params,
+  samplingRate, duration: window×2.2 })`. Total samples capped at 200k (the synthetic rate drops for
+  very long windows; the trace is downsampled for display anyway, and the trigger keeps sub-sample
+  interpolation). Through a circuit (`circuitActive` true) it still uses the provided `.tran` samples.
+- Time/div options extended **100 µs → 1 s** (10 s window). X-axis switches to **seconds** for windows
+  ≥ 1 s; cursors, Δt/1·Δt and the window readout all follow the display unit.
+- Signal Generator + scope CH2 frequency min lowered **10 Hz → 1 Hz** (step 1) so 1 Hz is settable.
+- `App.tsx`: passes `circuitActive={drawnValid && circuitOut !== null}` to the scope.
+
+**Verification (Definition of Done):**
+- build clean: yes. 12-bit floor: holds (the Spectrum Analyzer path is untouched; the scope buffer is
+  separate and only feeds the scope).
+- tests: **57 passed** (no core math added; the change is component-level — sanity-checked numerically:
+  1 Hz at 100 ms/div → 90 909 Sa/s buffer, window shows 1 full period; 1 Hz at 1 s/div → 10 periods;
+  default 1 kHz at 1 ms/div unchanged at 100 kSa/s, 10 periods).
+
+**State for the next session:**
+- The scope is no longer tied to the 16 ms generator buffer — it scales its own capture to time/div.
+- **Known limitation:** through a *drawn circuit*, the scope still uses the App's `.tran` buffer (sized
+  to the generator grid), so very long time/div on a circuit-routed channel shows only the available
+  span. Extending that means lengthening the App `.tran` stop/grid — deferred (separate from this ask).
+- The synthetic scope rate is a display buffer, not the ADC-rate lesson (that stays in the Spectrum
+  Analyzer), so dropping it for long windows is fine pedagogically.
+
+---
+
 ### 2026-06-26 — BODE-GEN: topology-aware −3 dB readout (de-specialize the loop) — DONE
 
 **By:** Claude Code session (in Cowork)

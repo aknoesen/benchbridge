@@ -232,6 +232,7 @@ export default function App() {
             signal2={measured2}
             params2={params2}
             running={running}
+            circuitActive={drawnValid && circuitOut !== null}
             onRunToggle={() => setRunning(r => !r)}
             onParams2Change={(k, v) => setParams2(prev => ({ ...prev, [k]: v }))}
           />
