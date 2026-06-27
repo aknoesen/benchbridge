@@ -279,8 +279,15 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
       else if (c.kind === 'inductor') comps.push({ kind: 'inductor', id: String(lc++), nodes: [na, nb], henries: c.value ?? 1e-3 })
       else comps.push({ kind: 'vsource', id: String(vc++), nodes: [na, nb], dc: 0, acMag: 1 })
     } else if (c.kind === 'awg1' || c.kind === 'awg2') {
-      // Generator output port: a V source from its node to ground (AC 1 for sweeps).
-      comps.push({ kind: 'vsource', id: `W${aw++}`, nodes: [rename(netOf(ts[0].gx, ts[0].gy)), '0'], dc: 0, acMag: 1 })
+      // Generator output through the M2K AWG output impedance: an ideal source then a 49.9 Ohm
+      // series resistor (R132 after the AD8000 buffer) into the wired node. Loading the generator
+      // with a low resistance divides the amplitude down, exactly as on the bench. The source keeps
+      // id W1/W2 so applyGeneratorParams stamps it. See docs/reference/m2k-spec.md.
+      const outNet = rename(netOf(ts[0].gx, ts[0].gy))
+      const srcNet = `w${aw}_src`
+      comps.push({ kind: 'vsource', id: `W${aw}`, nodes: [srcNet, '0'], dc: 0, acMag: 1 })
+      comps.push({ kind: 'resistor', id: `aout${aw}`, nodes: [srcNet, outNet], ohms: 49.9 })
+      aw++
     } else if (c.kind === 'opamp') {
       comps.push({
         kind: 'opamp',

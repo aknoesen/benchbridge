@@ -23,7 +23,7 @@ describe('schematic toCircuit', () => {
   it('converts an RC low-pass to the expected SPICE circuit', () => {
     const { circuit, warnings } = toCircuit(rcSchematic, 'RC')
     expect(warnings).toEqual([])
-    const r = circuit.components.find((c) => c.kind === 'resistor')!
+    const r = circuit.components.find((c) => c.kind === 'resistor' && (c as { ohms: number }).ohms === 1000)!
     const c = circuit.components.find((x) => x.kind === 'capacitor')!
     const v = circuit.components.find((x) => x.kind === 'vsource')!
     expect((r as any).nodes).toEqual(['in', 'out'])
@@ -90,7 +90,7 @@ describe('breadboard ports (WIRE-1)', () => {
     }
     const { circuit, warnings } = toCircuit(sch)
     expect(warnings).toEqual([])
-    const r = circuit.components.find((c) => c.kind === 'resistor')!
+    const r = circuit.components.find((c) => c.kind === 'resistor' && (c as { ohms: number }).ohms === 1000)!
     expect((r as { nodes: string[] }).nodes).toEqual(['in', 'out'])
 
     const nl = buildNetlist(circuit, { kind: 'ac', sweep: 'dec', points: 50, fStart: 10, fStop: 1e6 })
@@ -157,4 +157,32 @@ describe('rubber-band wires (EDIT-1)', () => {
     const nets = computeNets(r)
     expect(nets.get('4,6')).toBe(nets.get('8,4'))
   })
+})
+
+import { nodeVoltage } from './spice'
+import { applyGeneratorParams } from './netlist'
+
+describe('AWG output impedance (49.9 Ohm, R132)', () => {
+  it('loading W1 with 49.9 Ohm halves the amplitude', async () => {
+    // W1 at (0,0); a 49.9 Ohm load from (0,0) to GND at (2,0). Series R132 (49.9) + load (49.9)
+    // form a 2:1 divider, so V(in) = half the source.
+    const sch: Schematic = {
+      components: [
+        { id: 'W1', kind: 'awg1', gx: 0, gy: 0 },
+        { id: 'R1', kind: 'resistor', gx: 0, gy: 0, value: 49.9 },
+        { id: 'G1', kind: 'ground', gx: 2, gy: 0 },
+      ],
+      wires: [],
+    }
+    const drawn = toCircuit(sch)
+    const ckt = applyGeneratorParams(drawn.circuit, {
+      waveType: 'sine', frequency: 1000, amplitude: 0, offset: 1, dutyCycle: 50,
+      samplingRate: 100000, duration: 0.016,
+    }, undefined)
+    const sim = new Simulation()
+    await sim.start()
+    sim.setNetList(buildNetlist(ckt, { kind: 'op' }))
+    const r = normalizeResult(await sim.runSim())
+    expect(nodeVoltage(r, 'in')).toBeCloseTo(0.5, 2)
+  }, 30000)
 })

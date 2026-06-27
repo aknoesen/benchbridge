@@ -54,6 +54,7 @@ Spec: `docs/specs/schematic-ngspice.md` (these instruments couple to the simulat
 | Phase | Title | Depends on | Status |
 |-------|-------|-----------|--------|
 | PSU-1 | Power Supply instrument — 2 rails (0..+5 V / 0..-5 V), tracking + independent | SPICE-2 | DONE |
+| PSU-2 | Live per-rail current via `.op` (sum `i(Vrail)`) vs the ~50 mA M2K limit; W1/W2-not-power note | PSU-1 | DONE |
 | DMM-1 | Voltmeter instrument — 2-channel AC/DC (±25 V), reads node V via `.op`/RMS | SPICE-2 | DONE |
 
 Notes:
@@ -149,7 +150,7 @@ Spec: `docs/specs/iio-scopy.md`
 
 | Phase | Title | Depends on | Status |
 |-------|-------|-----------|--------|
-| G-A | Fidelity alignment: match the twin's params/names to AD's `adalm2000.xml` + ADC/DAC source | — | TODO |
+| G-A | Fidelity alignment: match the twin's params/names to AD's `adalm2000.xml` + ADC/DAC source | — | DONE |
 | G-B | SPICE-in-the-loop with **real Scopy** via iio-emu generic mode (bridge: TX file → ngspice → RX file) | G-A, SCH-2 | TODO |
 | G-C | (Long horizon, parked) browser twin speaks IIO via a libiio-over-WebSocket bridge | G-B | TODO |
 

@@ -187,3 +187,23 @@ describe('transient drive + resample (WIRE-3)', () => {
     expect(stopPP).toBeLessThan(passPP)
   }, 30000)
 })
+
+import { sourceCurrent } from './spice'
+
+describe('supply current (PSU-2)', () => {
+  it('reads the current a rail delivers to a load (5 V / 1 k = 5 mA)', async () => {
+    const ckt: Ckt = {
+      title: 'rail load',
+      components: [
+        { kind: 'dcrail', id: 'S1', node: 'out', volts: 5 },
+        { kind: 'resistor', id: '1', nodes: ['out', '0'], ohms: 1000 },
+        { kind: 'ground', id: '0', node: '0' },
+      ],
+    }
+    const sim = new Simulation()
+    await sim.start()
+    sim.setNetList(buildNl(ckt, { kind: 'op' }))
+    const r = normalizeResult(await sim.runSim())
+    expect(sourceCurrent(r, 'S1')).toBeCloseTo(0.005, 4)
+  }, 30000)
+})

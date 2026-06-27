@@ -227,7 +227,7 @@ export default function App() {
         ) : layout === 'single' && active === 'voltmeter' ? (
           <Voltmeter circuit={drawn.circuit} w1={params} w2={params2} psu={psu} />
         ) : layout === 'single' && active === 'psu' ? (
-          <PowerSupply psu={psu} onChange={setPsu} />
+          <PowerSupply psu={psu} onChange={setPsu} circuit={drawn.circuit} w1={params} w2={params2} />
         ) : (
           <>
             {(layout === 'split' || active === 'siggen') && (

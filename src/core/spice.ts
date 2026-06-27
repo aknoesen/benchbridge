@@ -216,3 +216,15 @@ export function sampleNodeTransient(r: SimResult, node: string, tGrid: Float64Ar
   }
   return out
 }
+
+// Branch current of a voltage source from an .op/.dc result, returned as the current the source
+// DELIVERS to the circuit. ngspice reports the internal +→- current, which is the negative of the
+// delivered current, so we flip the sign. Used by the Power Supply to show per-rail load current.
+export function sourceCurrent(r: SimResult, sourceId: string): number {
+  const name = `i(v${sourceId.toLowerCase()})`
+  const i = r.variables.findIndex((v) => v.name.toLowerCase() === name)
+  if (i < 0) return 0
+  const col = r.columns[i]
+  const raw = col.kind === 'real' ? col.values[0] : col.mag[0]
+  return -raw
+}

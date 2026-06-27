@@ -33,7 +33,11 @@ That is the difference between an instrument and a tutor.
 **It closes the loop without hardware.** Because the SPICE engine lives in the browser, a student
 draws a circuit and immediately sees it measured: the filtered waveform on the scope, the harmonics
 in the spectrum, the Bode curve in the network analyzer. Source, circuit, and instrument are unified
-in one tab. Neither Scopy nor a bare emulator can do this alone, because neither contains a circuit.
+in one tab, with nothing to install. Out of the box neither Scopy nor iio-emu can do this, because
+neither contains a circuit or a place to draw one. That loop can be closed on the native side too,
+by bridging a simulator into the emulator (Track G-B), and that is the point rather than a threat:
+the circuit engine and the schematic the twin provides are exactly what such a bridge needs. The
+lasting distinction is not who can hold a circuit, but where it is authored and how it is delivered.
 
 **It bridges the gap where students actually fail.** The schematic to breadboard transfer, with a
 Check that confirms the physical wiring is electrically the drawn circuit, targets the exact step
@@ -89,6 +93,17 @@ from rung one to rung two is a deployment choice, not a rewrite.
 
 That is the merge: the serverless twin and the Scopy emulator are two presentations of one
 underlying system, the device model plus the student's circuit, met at the libiio seam.
+
+**And the engine is a choice, not a lock in.** The twin already runs its simulator behind an
+adapter, so the SPICE engine is swappable. In the browser that engine is ngspice compiled to
+WebAssembly, because only WebAssembly runs client side with zero install. On the native bridge it
+can be native ngspice, or, when Analog Devices opens an API to drive LTSpice, LTSpice itself. That
+option matters: LTSpice carries Analog Devices' own device models, so the native rung can simulate
+real ADI parts, the op-amps, in-amps, and converters a student will actually use, instead of ideal
+blocks. The stack then becomes end to end Analog Devices: LTSpice simulates, iio-emu bridges, Scopy
+displays, the ADALM2000 is the bench. The twin authors the circuit that flows through all of it.
+This also extends the learning ladder: the browser teaches with ideal models, LTSpice adds the real
+device behavior of actual ADI parts, and the hardware adds the rest of the physical world.
 
 ## Why this is the right story for Analog Devices
 

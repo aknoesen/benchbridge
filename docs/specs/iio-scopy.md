@@ -72,6 +72,22 @@ Scopy (Oscilloscope) <--scope samples--  [RX file]
 `m2k_adc/dac`):** exact sample/scan format (int16 LE, scale), buffer cadence/streaming sync, how
 Scopy's buffer pull maps to file reads, and timing (this is file streaming, not real-time sim).
 
+**Live vs offline simulation (the hard part).** The browser twin runs a clean offline `.tran`
+because it knows the generator waveform is periodic. A live bridge streams arbitrary DAC buffers
+through the sim in real time and must carry circuit **state across buffer boundaries** (a capacitor's
+charge at the end of one buffer is the initial condition for the next). The right mechanism is
+**libngspice's external-source callbacks**, which let the host feed source values per timestep in a
+continuous transient run (true co-simulation). De-risk by starting offline (capture one buffer, sim,
+return) before attempting continuous streaming.
+
+**Engine choice (adapter-swappable).** The `SpiceEngine` adapter already decouples the engine.
+Browser stays on ngspice-WASM (only WebAssembly runs client-side). The native bridge can use native
+ngspice via libngspice, or **LTSpice** once Analog Devices opens an API to drive it (reportedly
+forthcoming). LTSpice carries Analog Devices' own device models, so the native rung can simulate real
+ADI parts (op-amps, in-amps, converters), making the stack end to end Analog Devices
+(LTSpice → iio-emu → Scopy → ADALM2000) and extending the ideal→real learning ladder. See
+`docs/POSITIONING.md` and `docs/NOTES.md`.
+
 **Acceptance:** real Scopy, connected to local iio-emu, shows a square wave on W1 rounded by an RC
 the student drew, on the scope. Document the exact command + bridge in PROGRESS.
 

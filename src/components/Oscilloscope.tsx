@@ -163,7 +163,7 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
             </div>
             <div className="control-row-inline">
               <label>Amplitude</label>
-              <input type="number" min={0.1} max={2.5} step={0.1} value={params2.amplitude}
+              <input type="number" min={0.1} max={5} step={0.1} value={params2.amplitude}
                 onChange={(e) => onParams2Change('amplitude', Number(e.target.value))} style={{ width: 80 }} />
             </div>
             <div className="control-row-inline">

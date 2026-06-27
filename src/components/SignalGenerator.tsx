@@ -147,7 +147,7 @@ export default function SignalGenerator({ params, signal, running, compact, onPa
           <input
             type="number"
             min={0.1}
-            max={2.5}
+            max={5}
             step={0.1}
             value={params.amplitude}
             onChange={e => onParamChange('amplitude', Number(e.target.value))}
@@ -160,8 +160,8 @@ export default function SignalGenerator({ params, signal, running, compact, onPa
           <label>Offset</label>
           <input
             type="number"
-            min={-2.5}
-            max={2.5}
+            min={-5}
+            max={5}
             step={0.1}
             value={params.offset}
             onChange={e => onParamChange('offset', Number(e.target.value))}

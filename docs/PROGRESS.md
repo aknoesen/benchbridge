@@ -36,6 +36,75 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-26 — AWG output impedance (49.9 Ω / R132) modeled — DONE
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**What I did:**
+- `core/schematic.ts` `toCircuit`: each W1/W2 (awg1/awg2) now emits an ideal source to an internal
+  node plus a **49.9 Ω series resistor** (R132, after the AD8000 buffer) into the wired node. The
+  source keeps id W1/W2 so `applyGeneratorParams` still stamps it. Loading the generator with a low
+  resistance now visibly divides the amplitude — the bench reality behind "don't power from W1/W2."
+- Fixed the two resistor-find tests to target the 1 kΩ DUT (not the new 49.9 Ω series R); added a
+  test: a 49.9 Ω load on W1 → V(in) = 0.5 (2:1 divider). `docs/reference/m2k-spec.md` updated.
+
+**Verification:** build clean; **32/32 tests**; canary holds (toCircuit only; `signal.ts` untouched).
+The 49.9 Ω is upstream of the `in` node, so Bode V(out)/V(in) and the RC cutoff are unchanged for
+high-impedance DUTs; it only matters when the generator is loaded.
+
+### 2026-06-26 — PSU-2: live per-rail supply current + 50 mA limit — DONE
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**What I did:**
+- `core/spice.ts`: `sourceCurrent(r, sourceId)` reads a voltage-source branch current from an `.op`
+  result (sign-flipped to "current delivered"). Test: a 5 V rail into 1 kΩ reads 5 mA.
+- `components/PowerSupply.tsx`: now takes `circuit`/`w1`/`w2`, runs an `.op` (debounced) of the drawn
+  circuit with the rails applied, sums `i(Vrail)` per rail, and shows **I = X mA / 50 mA** under each
+  rail (red + warning when over the M2K's ~50 mA per-rail limit). Added a "power budget" note: the
+  supplies are the regulated source; **W1/W2 are signal outputs, not a power source**.
+- `App.tsx`: passes `circuit={drawn.circuit} w1={params} w2={params2}` to the Power Supply.
+- `docs/reference/m2k-spec.md`: added the AWG output stage from the Rev C schematic (buffer =
+  **AD8000YCPZ**, ×−11 gain, ≈ ±5.46 V, **49.9 Ω series → ~50 Ω output impedance**) and the supply
+  ~50 mA/rail; logged "model AWG ~50 Ω output impedance" as a fidelity enhancement.
+
+**Verification:** build clean; **31/31 tests**; canary holds (`signal.ts` untouched; PSU/Voltmeter
+only).
+
+**State for the next session:**
+- Enhancement candidate: model W1/W2 with a 49.9 Ω series output resistance so loading the generator
+  visibly divides the amplitude (makes "don't power from W1/W2" visible). Small toCircuit change.
+
+### 2026-06-26 — G-A: fidelity alignment to ADI's M2K reference model — DONE
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**What I did:**
+- Pulled ADI's authoritative M2K parameters from the iio-emu source (`m2k_adc.cpp`, `m2k_dac.cpp`)
+  and wrote `docs/reference/m2k-spec.md` with a reconciliation table (twin vs ADI).
+- **Findings — the twin already matches the M2K high-gain config:** ADC 12-bit; ADC high-gain range
+  ±2.5 V (the twin's `adcRangeV=5`, 0 dBFS = 2.5 V); 100 kSa/s is a real M2K rate; channel names
+  W1/W2/1±/2± and supplies 0..±5 V all match.
+- **One genuine correction:** the M2K AWG (W1/W2) output is **±5 V** (DAC `vlsb = 10/4095` → 10 Vpp),
+  but the twin capped generation at ±2.5 V. Raised the generator **amplitude** cap to 5 V and the
+  **offset** range to ±5 V in SignalGenerator, SpectrumAnalyzer, and Oscilloscope CH2.
+
+**Verification (Definition of Done):**
+- build clean; **30/30 tests**. 12-bit canary holds — defaults (amplitude 1 V, offset 0,
+  `adcRangeV=5`) unchanged and `signal.ts` untouched.
+
+**State for the next session:**
+- The twin is now demonstrably faithful to ADI's reference M2K model (documented in
+  `docs/reference/m2k-spec.md`), which backs the credibility claim in the Mark Thoren memo and
+  `POSITIONING.md`.
+- Noted fidelity enhancement: model the M2K's **two** scope ranges (±2.5 V high / ±25 V low) with a
+  range selector so dBFS follows the range; the AWG can now drive the full ±5 V (viewed on ±25 V on
+  real hardware).
+- Remaining Track G: G-B (native real-Scopy bridge). Elsewhere: OSC-3, LOOP-2, F-3, Track E.
+
 ### 2026-06-26 — F-2: transfer schematic → breadboard + verification loop — DONE
 
 **By:** Claude Code session (in Cowork) — on branch `track-f-breadboard`

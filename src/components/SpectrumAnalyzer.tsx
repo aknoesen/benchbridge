@@ -307,7 +307,7 @@ export default function SpectrumAnalyzer({
         </div>
         <div className="control-row-inline">
           <label>Amplitude</label>
-          <input type="number" min={0.1} max={2.5} step={0.1}
+          <input type="number" min={0.1} max={5} step={0.1}
             value={par.amplitude}
             onChange={e => onParChange('amplitude', Number(e.target.value))}
             style={{ width: 80 }} />
