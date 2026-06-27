@@ -247,3 +247,20 @@ describe('moveComponentsBy (group drag)', () => {
     expect(out.wires[1]).toEqual({ x1: 8, y1: 5, x2: 12, y2: 2 }) // stretched
   })
 })
+
+import { moveSelectionBy } from './schematic'
+describe('moveSelectionBy (box group move incl. loose wires)', () => {
+  it('moves listed wire ends (loose segments) and terminal-attached ends', () => {
+    const s: Schematic = {
+      components: [{ id: 'R1', kind: 'resistor', gx: 2, gy: 2, value: 1 }],
+      wires: [
+        { x1: 10, y1: 10, x2: 14, y2: 10 }, // loose wire, both ends boxed
+        { x1: 2, y1: 2, x2: 5, y2: 2 }, // one end on R1.a, far end not boxed
+      ],
+    }
+    const out = moveSelectionBy(s, new Set(['R1']), new Set(['0:1', '0:2']), 0, 3)
+    expect(out.wires[0]).toEqual({ x1: 10, y1: 13, x2: 14, y2: 13 }) // loose wire moved whole
+    expect(out.wires[1]).toEqual({ x1: 2, y1: 5, x2: 5, y2: 2 }) // R1 end follows, far end stays
+    expect(out.components[0].gy).toBe(5)
+  })
+})

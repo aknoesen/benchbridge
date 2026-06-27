@@ -224,6 +224,34 @@ export function moveComponentsBy(s: Schematic, ids: Set<string>, ddx: number, dd
   }
 }
 
+// Group move for a box selection: translate the given component ids AND the given wire endpoints
+// (refs "<index>:1" / "<index>:2") by (ddx, ddy). Wire endpoints also move if they sit on a
+// selected component's terminal, so connections stay attached. This is the "move everything in the
+// box" behaviour — components and the wire segments inside the box travel together.
+export function moveSelectionBy(
+  s: Schematic, ids: Set<string>, wireEnds: Set<string>, ddx: number, ddy: number,
+): Schematic {
+  if ((ddx === 0 && ddy === 0) || (ids.size === 0 && wireEnds.size === 0)) return s
+  const moved = new Set<string>()
+  const selCoords = new Set<string>()
+  for (const c of s.components) {
+    if (!ids.has(c.id)) continue
+    moved.add(c.id)
+    for (const t of terminalsOf(c)) selCoords.add(key(t.gx, t.gy))
+  }
+  return {
+    components: s.components.map((c) => (moved.has(c.id) ? { ...c, gx: c.gx + ddx, gy: c.gy + ddy } : c)),
+    wires: s.wires.map((w, i) => {
+      const m1 = selCoords.has(key(w.x1, w.y1)) || wireEnds.has(`${i}:1`)
+      const m2 = selCoords.has(key(w.x2, w.y2)) || wireEnds.has(`${i}:2`)
+      return {
+        x1: m1 ? w.x1 + ddx : w.x1, y1: m1 ? w.y1 + ddy : w.y1,
+        x2: m2 ? w.x2 + ddx : w.x2, y2: m2 ? w.y2 + ddy : w.y2,
+      }
+    }),
+  }
+}
+
 // Rotate component `id` one quarter-turn clockwise, carrying terminal-attached wire endpoints
 // to the rotated terminal positions (matched by terminal index).
 export function rotateComponentWithWires(s: Schematic, id: string): Schematic {

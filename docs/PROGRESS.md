@@ -36,6 +36,22 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-26 — EDIT-2b: box-select (marquee) + move everything inside it — DONE
+
+**By:** Claude Code session (in Cowork) · **Commit:** uncommitted (run `.\push.ps1`)
+
+andre: shift-click was unreliable for him, and a first box-select left wires behind. Now:
+- **Marquee:** in the Select tool, drag a box on empty canvas to select. A part is selected if **any
+  of its pins** is in the box (forgiving for big parts like the DIP); **wire segments inside the box**
+  are selected too (highlighted blue).
+- `core/schematic.ts`: `moveSelectionBy(s, ids, wireEnds, ddx, ddy)` — group move that translates the
+  selected components AND the boxed wire endpoints (loose segments included), keeping terminal-attached
+  ends together. Group delete removes the boxed wires too.
+- `core/schematic.test.ts` (+1): loose boxed wire moves whole; a wire from a selected part to outside
+  stretches. **74 passed.** Build clean.
+
+---
+
 ### 2026-06-26 — EDIT-2: multi-select + group drag in the schematic editor — DONE
 
 **By:** Claude Code session (in Cowork)

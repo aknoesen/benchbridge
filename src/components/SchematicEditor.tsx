@@ -4,7 +4,7 @@
 import { useMemo, useRef, useState, useEffect, type ReactElement, type Dispatch, type SetStateAction } from 'react'
 import {
   Schematic, SchComponent, SchKind, terminalsOf, toCircuit,
-  attachedWireEnds, moveComponentWithWires, moveComponentsBy, rotateComponentWithWires, type WireEndRef,
+  attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentWithWires, type WireEndRef,
 } from '../core/schematic'
 import { buildNetlist } from '../core/netlist'
 import { createSpiceEngine, type SpiceEngine, transferFunction } from '../core/spice'
@@ -76,13 +76,14 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
   const [tool, setTool] = useState<Tool>('resistor')
   const [selected, setSelected] = useState<string | null>(null)
   const [selSet, setSelSet] = useState<Set<string>>(new Set()) // multi-select (shift-click or box)
+  const [selWires, setSelWires] = useState<Set<string>>(new Set()) // box-selected wire ends "i:1"/"i:2"
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
   const marqueeMoved = useRef(false)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
-  // Single drag (one component, absolute target) OR group drag (a set, by delta from last grid pos).
+  // Single drag (one component, absolute target) OR group drag (a set + wire ends, by delta).
   const [drag, setDrag] = useState<
     | { id: string; ox: number; oy: number; attached: WireEndRef[] }
-    | { ids: string[]; lastGx: number; lastGy: number }
+    | { ids: string[]; wireEnds: string[]; lastGx: number; lastGy: number }
     | null
   >(null)
   const [placeRotation, setPlaceRotation] = useState(0)
@@ -210,7 +211,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
     if (marqueeMoved.current) { marqueeMoved.current = false; return } // a box-drag, not a click
     const { gx, gy } = gridAt(e)
     setSelectedWire(null)
-    if (tool === 'select') { setSelected(null); setSelSet(new Set()); return }
+    if (tool === 'select') { setSelected(null); setSelSet(new Set()); setSelWires(new Set()); return }
     if (tool === 'wire') {
       if (!wireStart) setWireStart({ x: gx, y: gy })
       else {
@@ -227,6 +228,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
     setSch((s) => ({ ...s, components: [...s.components, c] }))
     setSelected(c.id)
     setSelSet(new Set([c.id]))
+    setSelWires(new Set())
   }
 
   function onComponentDown(e: React.MouseEvent, id: string) {
@@ -240,11 +242,11 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
     }
     setSelected(id) // clicking a placed part selects it in any tool (so R / Rotate act on it)
     const groupDrag = selSet.has(id) && selSet.size > 1
-    if (!groupDrag) setSelSet(new Set([id]))
+    if (!groupDrag) { setSelSet(new Set([id])); setSelWires(new Set()) }
     if (tool !== 'select') return
     const { gx, gy } = gridAt(e)
     if (groupDrag) {
-      setDrag({ ids: [...selSet], lastGx: gx, lastGy: gy })
+      setDrag({ ids: [...selSet], wireEnds: [...selWires], lastGx: gx, lastGy: gy })
     } else {
       const c = sch.components.find((x) => x.id === id)!
       setDrag({ id, ox: gx - c.gx, oy: gy - c.gy, attached: attachedWireEnds(sch, c) })
@@ -272,8 +274,8 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
       const minGx = Math.min(...drag.ids.map((id) => sch.components.find((c) => c.id === id)?.gx ?? 0))
       const minGy = Math.min(...drag.ids.map((id) => sch.components.find((c) => c.id === id)?.gy ?? 0))
       ddx = Math.max(ddx, -minGx); ddy = Math.max(ddy, -minGy)
-      if (ddx !== 0 || ddy !== 0) setSch((s) => moveComponentsBy(s, new Set(drag.ids), ddx, ddy))
-      setDrag({ ids: drag.ids, lastGx: drag.lastGx + ddx, lastGy: drag.lastGy + ddy })
+      if (ddx !== 0 || ddy !== 0) setSch((s) => moveSelectionBy(s, new Set(drag.ids), new Set(drag.wireEnds), ddx, ddy))
+      setDrag({ ids: drag.ids, wireEnds: drag.wireEnds, lastGx: drag.lastGx + ddx, lastGy: drag.lastGy + ddy })
       return
     }
     setSch((s) => moveComponentWithWires(s, drag.id, Math.max(0, gx - drag.ox), Math.max(0, gy - drag.oy), drag.attached))
@@ -283,8 +285,13 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
       if (marqueeMoved.current) {
         const xlo = Math.min(marquee.x0, marquee.x1), xhi = Math.max(marquee.x0, marquee.x1)
         const ylo = Math.min(marquee.y0, marquee.y1), yhi = Math.max(marquee.y0, marquee.y1)
-        const hit = sch.components.filter((c) => c.gx >= xlo && c.gx <= xhi && c.gy >= ylo && c.gy <= yhi)
+        const inBox = (x: number, y: number) => x >= xlo && x <= xhi && y >= ylo && y <= yhi
+        // a part is selected if ANY of its pins is in the box (forgiving for big parts like the DIP)
+        const hit = sch.components.filter((c) => terminalsOf(c).some((t) => inBox(t.gx, t.gy)))
+        const we = new Set<string>()
+        sch.wires.forEach((w, i) => { if (inBox(w.x1, w.y1)) we.add(`${i}:1`); if (inBox(w.x2, w.y2)) we.add(`${i}:2`) })
         setSelSet(new Set(hit.map((c) => c.id)))
+        setSelWires(we)
         setSelected(hit.length === 1 ? hit[0].id : null)
         setSelectedWire(null)
       }
@@ -300,13 +307,17 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
       return
     }
     if (selSet.size > 1) {
-      setSch((s) => ({ ...s, components: s.components.filter((c) => !selSet.has(c.id)) }))
-      setSelSet(new Set()); setSelected(null)
+      const wi = new Set([...selWires].map((e) => Number(e.split(':')[0])))
+      setSch((s) => ({
+        components: s.components.filter((c) => !selSet.has(c.id)),
+        wires: s.wires.filter((_, i) => !wi.has(i)),
+      }))
+      setSelSet(new Set()); setSelWires(new Set()); setSelected(null)
       return
     }
     if (!selected) return
     setSch((s) => ({ ...s, components: s.components.filter((c) => c.id !== selected) }))
-    setSelSet(new Set()); setSelected(null)
+    setSelSet(new Set()); setSelWires(new Set()); setSelected(null)
   }
   function rotate() {
     if (selected) {
@@ -396,7 +407,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
           {sch.wires.map((w, i) => (
             <g key={i}>
               <line x1={px(w.x1)} y1={px(w.y1)} x2={px(w.x2)} y2={px(w.y2)}
-                stroke={selectedWire === i ? 'var(--accent-blue)' : 'var(--wire-color)'}
+                stroke={selectedWire === i || selWires.has(`${i}:1`) || selWires.has(`${i}:2`) ? 'var(--accent-blue)' : 'var(--wire-color)'}
                 strokeWidth={selectedWire === i ? 3 : 2} />
               <line x1={px(w.x1)} y1={px(w.y1)} x2={px(w.x2)} y2={px(w.y2)}
                 stroke="transparent" strokeWidth={12}
