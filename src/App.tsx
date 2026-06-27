@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
 import { SignalParams, WaveType, generateSignal } from './core/signal'
 import { DEFAULT_CHANNELS, resolveChannelSamples, ChannelInputs, type Samples } from './core/scope'
 import { toCircuit, type Schematic } from './core/schematic'
@@ -18,7 +18,18 @@ import PowerSupply from './components/PowerSupply'
 import './App.css'
 
 type ActiveInstrument = 'siggen' | 'spectrum' | 'scope' | 'network' | 'schematic' | 'voltmeter' | 'psu' | 'breadboard' | 'about'
-type LayoutMode = 'single' | 'split'
+
+// E-1: preset lab layouts. A workspace is an ordered list of instrument panels plus an
+// arrangement hint; CSS grid/flex in `.instrument-area` lays them out. Single-instrument view is
+// just a one-panel workspace. No drag-docking (that's E-2) and no new dependency.
+type Arrange = 'single' | 'row' | 'grid'
+interface Preset { id: string; icon: string; label: React.ReactNode; title: string; panels: ActiveInstrument[]; arrange: Arrange }
+const PRESETS: Preset[] = [
+  { id: 'lab3', icon: '⊟', label: <>Lab 3<br />Spectrum</>, title: 'Lab 3 — Signal Gen + Spectrum', panels: ['siggen', 'spectrum'], arrange: 'row' },
+  { id: 'lab5', icon: '⊞', label: <>Lab 5<br />Circuit</>, title: 'Lab 5 — Circuit + Network Analyzer (Bode)', panels: ['schematic', 'network'], arrange: 'row' },
+  { id: 'bench', icon: '▦', label: <>Bench</>, title: 'Bench — Scope + Supply + Voltmeter', panels: ['scope', 'psu', 'voltmeter'], arrange: 'grid' },
+]
+const WORKSPACE_KEY = 'm2k-workspace-v1'
 
 const DEFAULT_PARAMS: SignalParams = {
   waveType: 'square',
@@ -69,11 +80,16 @@ function loadStoredBoard(): BoardLayout {
 }
 
 export default function App() {
-  const [active, setActive] = useState<ActiveInstrument>('siggen')
+  const stored0 = (() => {
+    try { const r = localStorage.getItem(WORKSPACE_KEY); if (r) return JSON.parse(r) as { active?: ActiveInstrument; presetId?: string | null } } catch { /* ignore */ }
+    return {}
+  })()
+  // `presetId` null → single-instrument view of `active`; otherwise a multi-panel preset.
+  const [active, setActive] = useState<ActiveInstrument>(stored0.active ?? 'siggen')
+  const [presetId, setPresetId] = useState<string | null>(stored0.presetId ?? null)
   const [entered, setEntered] = useState<boolean>(() => {
     try { return localStorage.getItem('bm2k-welcomed') === '1' } catch { return false }
   })
-  const [layout, setLayout] = useState<LayoutMode>('single')
   const [params, setParams] = useState<SignalParams>(DEFAULT_PARAMS)
   const [params2, setParams2] = useState<SignalParams>(DEFAULT_PARAMS2)
   const [psu, setPsu] = useState<SupplySettings>(DEFAULT_PSU)
@@ -264,12 +280,62 @@ export default function App() {
     setParams(prev => ({ ...prev, [key]: value }))
   }
 
+  // Persist the chosen workspace (geometry layer only — instrument settings stay component-local).
+  useEffect(() => {
+    try { localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ active, presetId })) } catch { /* quota */ }
+  }, [active, presetId])
+
+  const preset = presetId ? PRESETS.find((p) => p.id === presetId) ?? null : null
+  const panels: ActiveInstrument[] = preset ? preset.panels : [active]
+  const arrange: Arrange = preset ? preset.arrange : 'single'
+  const multi = panels.length > 1
+
   const navBtn = (id: ActiveInstrument, icon: string, label: React.ReactNode, title: string) => (
-    <button className={`nav-btn ${active === id && layout === 'single' ? 'nav-active' : ''}`}
-      onClick={() => { setActive(id); setLayout('single') }} title={title}>
+    <button className={`nav-btn ${active === id && !presetId ? 'nav-active' : ''}`}
+      onClick={() => { setActive(id); setPresetId(null) }} title={title}>
       <span className="nav-icon">{icon}</span><span className="nav-label">{label}</span>
     </button>
   )
+
+  // One instrument panel by id. `multi` (more than one visible) drives the `compact` prop on the
+  // instruments that support it. Pure function of props + each instrument's local state.
+  function renderPanel(id: ActiveInstrument): React.ReactNode {
+    switch (id) {
+      case 'scope':
+        return <Oscilloscope params={params} signal={scopeSig1} signal2={scopeSig2} params2={params2}
+          running={running} circuitActive={circuitActive} outputClipping={outputClipping}
+          circuitFs={scopeCircuitFs} onWindowSecChange={setScopeWinSec} compact={multi}
+          onRunToggle={() => setRunning(r => !r)} onParams2Change={(k, v) => setParams2(prev => ({ ...prev, [k]: v }))} />
+      case 'schematic':
+        return <SchematicEditor schematic={schematic} setSchematic={setSchematic} />
+      case 'breadboard':
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', minHeight: 0 }}>
+            <div className="stacked-pane"><SchematicEditor schematic={schematic} setSchematic={setSchematic} /></div>
+            <div className="stacked-pane"><Breadboard schematic={schematic} setSchematic={setSchematic} board={board} setBoard={setBoard}
+              generators={{ w1: params, w2: params2 }}
+              onLoadGenerators={(w1, w2) => { setParams({ ...DEFAULT_PARAMS, ...w1 }); setParams2({ ...DEFAULT_PARAMS2, ...w2 }) }} /></div>
+          </div>
+        )
+      case 'network':
+        return <NetworkAnalyzer circuit={drawnValid ? drawn.circuit : undefined} dutName={drawnValid ? 'your drawn circuit' : undefined}
+          probes={drawnValid ? drawn.probes : undefined} tunables={tunables} onTune={tuneComponent} />
+      case 'voltmeter':
+        return <Voltmeter circuit={drawn.circuit} w1={params} w2={params2} psu={psu} />
+      case 'psu':
+        return <PowerSupply psu={psu} onChange={setPsu} circuit={drawn.circuit} w1={params} w2={params2} />
+      case 'about':
+        return <About />
+      case 'siggen':
+        return <SignalGenerator params={params} signal={signal} running={running} compact={multi}
+          onParamChange={updateParam} onWaveTypeChange={(w: WaveType) => updateParam('waveType', w)}
+          onRunToggle={() => setRunning(r => !r)} />
+      case 'spectrum':
+        return <SpectrumAnalyzer params={params} signal={measured} params2={params2} signal2={measured2}
+          running={running} compact={multi} onParamChange={updateParam}
+          onParam2Change={(k, v) => setParams2(prev => ({ ...prev, [k]: v }))} onRunToggle={() => setRunning(r => !r)} />
+    }
+  }
 
   if (!entered) {
     return <Welcome onEnter={() => { try { localStorage.setItem('bm2k-welcomed', '1') } catch { /* quota */ } setEntered(true) }} />
@@ -288,88 +354,23 @@ export default function App() {
         {navBtn('schematic', '▤', 'Circuit', 'Schematic Editor')}
         {navBtn('breadboard', '∷', 'Board', 'Breadboard layout')}
 
-        <button className={`nav-btn ${layout === 'split' ? 'nav-active' : ''}`}
-          onClick={() => setLayout(l => l === 'split' ? 'single' : 'split')} title="Split view: Signal Gen + Spectrum">
-          <span className="nav-icon">&#8863;</span><span className="nav-label">Split<br/>View</span>
-        </button>
+        <div className="nav-sep">Layouts</div>
+        {PRESETS.map((p) => (
+          <button key={p.id} className={`nav-btn ${presetId === p.id ? 'nav-active' : ''}`}
+            onClick={() => setPresetId(p.id)} title={p.title}>
+            <span className="nav-icon">{p.icon}</span><span className="nav-label">{p.label}</span>
+          </button>
+        ))}
 
-        <button className={`nav-btn ${active === 'about' && layout === 'single' ? 'nav-active' : ''}`}
+        <button className={`nav-btn ${active === 'about' && !presetId ? 'nav-active' : ''}`}
           style={{ marginTop: 'auto' }}
-          onClick={() => { setActive('about'); setLayout('single') }} title="About & licenses">
+          onClick={() => { setActive('about'); setPresetId(null) }} title="About & licenses">
           <span className="nav-icon">ⓘ</span><span className="nav-label">About</span>
         </button>
       </nav>
 
-      <main className={`instrument-area ${layout === 'split' ? 'split' : ''}`}>
-        {layout === 'single' && active === 'scope' ? (
-          <Oscilloscope
-            params={params}
-            signal={scopeSig1}
-            signal2={scopeSig2}
-            params2={params2}
-            running={running}
-            circuitActive={circuitActive}
-            outputClipping={outputClipping}
-            circuitFs={scopeCircuitFs}
-            onWindowSecChange={setScopeWinSec}
-            onRunToggle={() => setRunning(r => !r)}
-            onParams2Change={(k, v) => setParams2(prev => ({ ...prev, [k]: v }))}
-          />
-        ) : layout === 'single' && active === 'schematic' ? (
-          <SchematicEditor schematic={schematic} setSchematic={setSchematic} />
-        ) : layout === 'single' && active === 'breadboard' ? (
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', minHeight: 0 }}>
-            <div className="stacked-pane">
-              <SchematicEditor schematic={schematic} setSchematic={setSchematic} />
-            </div>
-            <div className="stacked-pane">
-              <Breadboard schematic={schematic} setSchematic={setSchematic} board={board} setBoard={setBoard}
-                generators={{ w1: params, w2: params2 }}
-                onLoadGenerators={(w1, w2) => { setParams({ ...DEFAULT_PARAMS, ...w1 }); setParams2({ ...DEFAULT_PARAMS2, ...w2 }) }} />
-            </div>
-          </div>
-        ) : layout === 'single' && active === 'network' ? (
-          <NetworkAnalyzer
-            circuit={drawnValid ? drawn.circuit : undefined}
-            dutName={drawnValid ? 'your drawn circuit' : undefined}
-            probes={drawnValid ? drawn.probes : undefined}
-            tunables={tunables}
-            onTune={tuneComponent}
-          />
-        ) : layout === 'single' && active === 'voltmeter' ? (
-          <Voltmeter circuit={drawn.circuit} w1={params} w2={params2} psu={psu} />
-        ) : layout === 'single' && active === 'psu' ? (
-          <PowerSupply psu={psu} onChange={setPsu} circuit={drawn.circuit} w1={params} w2={params2} />
-        ) : layout === 'single' && active === 'about' ? (
-          <About />
-        ) : (
-          <>
-            {(layout === 'split' || active === 'siggen') && (
-              <SignalGenerator
-                params={params}
-                signal={signal}
-                running={running}
-                compact={layout === 'split'}
-                onParamChange={updateParam}
-                onWaveTypeChange={(w: WaveType) => updateParam('waveType', w)}
-                onRunToggle={() => setRunning(r => !r)}
-              />
-            )}
-            {(layout === 'split' || active === 'spectrum') && (
-              <SpectrumAnalyzer
-                params={params}
-                signal={measured}
-                params2={params2}
-                signal2={measured2}
-                running={running}
-                compact={layout === 'split'}
-                onParamChange={updateParam}
-                onParam2Change={(k, v) => setParams2(prev => ({ ...prev, [k]: v }))}
-                onRunToggle={() => setRunning(r => !r)}
-              />
-            )}
-          </>
-        )}
+      <main className={`instrument-area arrange-${arrange}`}>
+        {panels.map((id) => <Fragment key={id}>{renderPanel(id)}</Fragment>)}
       </main>
     </div>
   )

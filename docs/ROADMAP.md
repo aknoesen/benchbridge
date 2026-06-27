@@ -105,7 +105,7 @@ Spec: `docs/specs/docking-workspace.md`
 
 | Phase | Title | Depends on | Status |
 |-------|-------|-----------|--------|
-| E-1 | Preset snap layouts (lab-keyed multi-panel, no new dependency) | OSC-2, NET-1 | TODO |
+| E-1 | Preset snap layouts (lab-keyed multi-panel, no new dependency) | OSC-2, NET-1 | DONE |
 | E-2 | True dockable panels via docking lib (dockview) + geometry workspace save/load | E-1 | TODO |
 | E-3 | Full-config workspace (persist each instrument's settings) — OPTIONAL | E-2 | TODO |
 

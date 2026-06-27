@@ -36,6 +36,45 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-27 — E-1: preset lab layouts (replace hardcoded split) — DONE
+
+**By:** Claude Code session
+**Commit:** uncommitted
+
+**What I did:**
+- Replaced the `LayoutMode = 'single' | 'split'` model (a hardcoded Signal Gen + Spectrum split,
+  a leftover from the two-instrument era) with a `Preset` workspace model: an ordered list of
+  panel ids + an arrangement hint (`single | row | grid`). Single-instrument view is a one-panel
+  workspace; `presetId` null = single, else a multi-panel preset.
+- Seeded presets in the nav under a "Layouts" separator: **Lab 3** (Signal Gen + Spectrum, row),
+  **Lab 5** (Circuit + Network Analyzer, row), **Bench** (Scope + Supply + Voltmeter, grid).
+- `App.tsx` `<main>` now renders `panels.map(renderPanel)`; `renderPanel(id)` is a single switch
+  that returns each instrument with its existing props and passes `compact` (where supported:
+  scope/siggen/spectrum) when more than one panel is visible. CSS grid/flex via
+  `.instrument-area.arrange-{single,row,grid}` in `App.css`.
+- Selected workspace (`{active, presetId}`) persists to localStorage (`m2k-workspace-v1`) —
+  geometry layer only; instrument settings stay component-local per CONVENTIONS §4.
+- No new dependency (E-2/dockview deferred). Each panel keyed by id so switching presets reconciles
+  with minimal remounts.
+
+**Verification (Definition of Done):**
+- build clean: yes — `tsc --noEmit` zero errors.
+- 12-bit floor at −104 dBFS: holds — `signal.ts` untouched; the Spectrum panel still receives the
+  default-params signal when no circuit is wired.
+- math sanity check: N/A (layout-only; no `core/` logic added).
+
+**State for the next session:**
+- This is the E-1 stopping point the spec flags as possibly sufficient for the course. E-2 (true
+  dockview docking + geometry workspace save/load) is the next layout phase if free docking is
+  wanted; it needs the dependency sign-off noted in the spec.
+- To add a preset, append to `PRESETS` in `App.tsx`. To add an instrument to a multi-panel preset,
+  give it a `compact` prop if it needs to shrink gracefully.
+
+**Open questions / flags for andre:**
+- Bench preset packs 3 panels into a 2-col grid (voltmeter wraps to row 2). Fine, or prefer a row?
+
+---
+
 ### 2026-06-26 — F-3: LMC662 DIP on the breadboard — DONE
 
 **By:** Claude Code session
