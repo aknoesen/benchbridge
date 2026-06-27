@@ -12,7 +12,7 @@ import SchematicEditor from './components/SchematicEditor'
 import Breadboard from './components/Breadboard'
 import About from './components/About'
 import Welcome from './components/Welcome'
-import { type BoardLayout } from './core/breadboard'
+import { type BoardLayout, PLACEABLE_KINDS } from './core/breadboard'
 import Voltmeter from './components/Voltmeter'
 import PowerSupply from './components/PowerSupply'
 import './App.css'
@@ -103,6 +103,20 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem(BOARD_KEY, JSON.stringify(board)) } catch { /* quota */ }
   }, [board])
+
+  // Keep the breadboard in sync with the schematic: when parts are cleared/loaded/deleted, drop
+  // board parts whose id no longer exists. If that empties the board (e.g. Clear or a brand-new
+  // circuit was loaded), reset jumpers + ports too so the board starts fresh for the new circuit.
+  useEffect(() => {
+    const valid = new Set(
+      schematic.components.filter((c) => PLACEABLE_KINDS.has(c.kind)).map((c) => c.id),
+    )
+    setBoard((b) => {
+      const parts = b.parts.filter((p) => valid.has(p.id))
+      if (parts.length === b.parts.length) return b // nothing stale → leave the board alone
+      return parts.length === 0 ? { parts: [], jumpers: [], ports: [] } : { ...b, parts }
+    })
+  }, [schematic])
 
   const channelInputs = useMemo<ChannelInputs>(() => ({
     generatorParams: params,
