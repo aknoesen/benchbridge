@@ -2,6 +2,8 @@
 
 A browser-based digital twin of the [Analog Devices ADALM2000](https://www.analog.com/en/resources/evaluation-hardware-and-software/evaluation-boards-kits/adalm2000.html) (M2K) USB instrument, styled after the Scopy software interface. Draw a circuit, measure it with a full bench of virtual instruments, and transfer it to a solderless breadboard — all in the browser, no hardware and nothing to install.
 
+### ▶ Live app: https://bridgem2k.onrender.com
+
 Built for the EEC1 first-year ECE course at UC Davis. The twin teaches the ideal and parametric side of measurement so students arrive at the real bench already fluent in the instruments.
 
 ## Instruments
@@ -48,13 +50,10 @@ Output goes to `dist/`. The app is fully static (no backend).
 
 ## Deploying
 
-**GitHub Pages** — the base path defaults to `/BridgeM2K/`. Build, then publish `dist/` to the `gh-pages` branch:
-
-```bash
-npx gh-pages -d dist
-```
-
-**Render** (served at the domain root) — `render.yaml` defines a static-site Blueprint. In the Render dashboard choose **New → Blueprint** (or **New → Static Site → Public Git Repository**) and point it at this repo. It builds with `npm install && npm run build`, publishes `dist`, sets `BASE_PATH=/` and `NODE_VERSION=22`, and rewrites `/*` → `/index.html`. The base is `process.env.BASE_PATH || '/BridgeM2K/'`, so Pages builds stay on the subpath while Render builds at root.
+The build is fully static (`dist/`), no backend. The live site runs on **Render** via the included
+`render.yaml` Blueprint (served at root, `BASE_PATH=/`); it also deploys to **GitHub Pages** at the
+`/BridgeM2K/` subpath, the default base (`npx gh-pages -d dist`). The base path is
+`process.env.BASE_PATH || '/BridgeM2K/'`; `render.yaml` holds the Render specifics.
 
 ## Tech stack
 
