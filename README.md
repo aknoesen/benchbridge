@@ -47,6 +47,20 @@ npm install --save-dev gh-pages
 npx gh-pages -d dist
 ```
 
+## Deploying to Render (served at the domain root)
+
+`render.yaml` defines a static-site Blueprint. In the Render dashboard choose **New → Blueprint**
+and select this repo, or set up a **Static Site** manually with:
+
+- Build command: `npm install && npm run build`
+- Publish directory: `dist`
+- Environment variable `BASE_PATH=/` (so Vite builds for the root domain, not the `/BridgeM2K/`
+  Pages subpath) and `NODE_VERSION=22`
+- A rewrite rule: source `/*` → destination `/index.html` (SPA fallback)
+
+The base path is `process.env.BASE_PATH || '/BridgeM2K/'`, so GitHub Pages builds are unchanged
+while Render builds at `/`.
+
 ## Tech stack
 
 - React 19 + TypeScript + Vite 8

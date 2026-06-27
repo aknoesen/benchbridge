@@ -1,0 +1,19 @@
+# Render Blueprint — deploys BridgeM2K as a static site served at the domain root.
+# Use it: in the Render dashboard choose New > Blueprint and point at this repo. Render builds the
+# Vite app and serves dist/. BASE_PATH=/ tells Vite to build for a root domain (not the GitHub
+# Pages /BridgeM2K/ subpath). The rewrite makes any path fall back to index.html (SPA).
+services:
+  - type: web
+    name: bridgem2k
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: BASE_PATH
+        value: /
+      - key: NODE_VERSION
+        value: "22"
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
