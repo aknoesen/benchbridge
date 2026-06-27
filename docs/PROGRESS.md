@@ -36,6 +36,33 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-26 — OSC-3: scope edge trigger + capture-phase — DONE
+
+**By:** Claude Code session (in Cowork)
+**Commit:** uncommitted (run `.\push.ps1`)
+
+**What I did:**
+- `core/trigger.ts` (new, pure): `findEdgeTrigger(v, level, slope, startIndex)` (linear-interpolated
+  sub-sample crossing, null if none) + `nextTriggerState(prev, found, mode)` reducer
+  (Auto/Normal/Single → show triggered / free / hold + status string).
+- `core/trigger.test.ts` (8 tests): rising/falling interpolated index, level-out-of-range → null,
+  startIndex honoured, **phase-invariance** (a 0.5 V rising trigger on a 1 kHz sine lands at the same
+  within-period phase for every capture offset), and the Auto/Normal/Single reducer.
+- `components/Oscilloscope.tsx`: trigger controls (Source CH1/CH2, Mode Auto/Normal/Single, Slope,
+  Level), a dotted **level marker** (`--trigger-color`) on the source channel's scaling, a centre
+  alignment line + 50% pre-trigger when triggered, a status badge ("Trig'd"/"Auto"/"Ready"/"Stop"),
+  a **Single Re-arm** button, and the **free-running capture-phase scroll** (the window advances each
+  frame when Auto can't find a trigger, so an untriggered trace visibly scrolls and the trigger
+  cancels it). `index.css`: added `--trigger-color`.
+
+**Verification (Definition of Done):**
+- build clean; **40/40 tests** (+8). canary holds — `signal.ts` untouched; trigger logic is scope-only.
+
+**State for the next session:**
+- Default (Auto, level 0, rising, CH1) locks a stable square; set the level beyond the signal to see
+  the free-run scroll. The scope MVP is now shippable (ROADMAP milestone). OSC-4 (holdoff/pulse) and
+  OSC-5 (measurements/cursors) remain. Also open: G-B, F-3.
+
 ### 2026-06-26 — AWG output impedance (49.9 Ω / R132) modeled — DONE
 
 **By:** Claude Code session (in Cowork)

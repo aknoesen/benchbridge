@@ -2,14 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import Plotly from 'plotly.js-dist-min'
 import { SignalParams } from '../core/signal'
 import { captureWindow, SCOPE_H_DIVS, SCOPE_V_DIVS } from '../core/scope'
+import { findEdgeTrigger, nextTriggerState, type Slope, type TriggerMode } from '../core/trigger'
 import './Instrument.css'
 
 interface Samples { t: Float64Array; x: Float64Array }
 
 interface Props {
   params: SignalParams
-  signal: Samples | null   // CH1 (generator)
-  signal2: Samples | null  // CH2 (second generator)
+  signal: Samples | null   // CH1
+  signal2: Samples | null  // CH2
   params2: SignalParams
   running: boolean
   compact?: boolean
@@ -17,7 +18,6 @@ interface Props {
   onParams2Change: <K extends keyof SignalParams>(key: K, value: SignalParams[K]) => void
 }
 
-// 1-2-5 steps. time/div capped so the 10-div window fits the generator capture (16 ms).
 const TIME_PER_DIV: { label: string; value: number }[] = [
   { label: '100 µs', value: 0.0001 },
   { label: '200 µs', value: 0.0002 },
@@ -33,22 +33,31 @@ const VOLTS_PER_DIV: { label: string; value: number }[] = [
 ]
 const CH1_COLOR = '#f0a030'
 const CH2_COLOR = '#40c0e0'
+const TRIG_COLOR = '#dddd44'
 
 export default function Oscilloscope({ params, signal, signal2, params2, running, compact, onRunToggle, onParams2Change }: Props) {
   const plotRef = useRef<HTMLDivElement>(null)
   const initialised = useRef(false)
+  const frameRef = useRef(0) // free-running capture-phase counter
 
-  const [timePerDiv, setTimePerDiv] = useState(0.001) // 1 ms/div → period of 1 kHz spans 1 div
+  const [timePerDiv, setTimePerDiv] = useState(0.001)
   const [ch1VoltsPerDiv, setCh1VoltsPerDiv] = useState(0.5)
   const [ch1Offset, setCh1Offset] = useState(0)
   const [ch2Enabled, setCh2Enabled] = useState(false)
   const [ch2VoltsPerDiv, setCh2VoltsPerDiv] = useState(0.5)
   const [ch2Offset, setCh2Offset] = useState(0)
 
+  // Trigger (OSC-3)
+  const [trigSource, setTrigSource] = useState<'ch1' | 'ch2'>('ch1')
+  const [trigLevel, setTrigLevel] = useState(0)
+  const [trigSlope, setTrigSlope] = useState<Slope>('rising')
+  const [trigMode, setTrigMode] = useState<TriggerMode>('auto')
+  const [singleArmed, setSingleArmed] = useState(true)
+  const [trigStatus, setTrigStatus] = useState('Auto')
+
   useEffect(() => {
     if (!plotRef.current) return
     const el = plotRef.current
-
     if (!signal) {
       if (initialised.current) Plotly.purge(el)
       initialised.current = false
@@ -56,59 +65,75 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
     }
 
     const Fs = params.samplingRate
-    const windowMs = SCOPE_H_DIVS * timePerDiv * 1000
+    const windowSec = SCOPE_H_DIVS * timePerDiv
+    const halfWinSec = (SCOPE_H_DIVS / 2) * timePerDiv
+    const halfWinSamples = Math.round(halfWinSec * Fs)
     const half = SCOPE_V_DIVS / 2
 
-    // Plot in graticule divisions so two channels with different volts/div share one grid.
+    // ── Trigger ────────────────────────────────────────────────────────────────
+    const src = trigSource === 'ch2' ? signal2 : signal
+    const trigIdx = src ? findEdgeTrigger(src.x, trigLevel, trigSlope, halfWinSamples) : null
+    const decision = nextTriggerState({ armed: singleArmed }, trigIdx !== null, trigMode)
+    if (decision.state.armed !== singleArmed) setSingleArmed(decision.state.armed)
+    setTrigStatus(decision.status)
+    if (decision.show === 'hold') return // keep the previous frame on screen
+
+    let offsetSec = 0
+    if (decision.show === 'triggered' && trigIdx !== null) {
+      offsetSec = Math.max(0, trigIdx / Fs - halfWinSec) // put the edge at centre (50% pre-trigger)
+    } else {
+      // free-run: advance the capture window each frame so an untriggered trace visibly scrolls
+      if (running) frameRef.current += 1
+      const maxOffset = Math.max(0, signal.x.length / Fs - windowSec)
+      offsetSec = maxOffset > 0 ? (frameRef.current * (windowSec / 25)) % maxOffset : 0
+    }
+
+    const windowMs = windowSec * 1000
     const data: Plotly.Data[] = []
-    const tr1 = captureWindow(signal, Fs, timePerDiv)
+    const tr1 = captureWindow(signal, Fs, timePerDiv, offsetSec)
     data.push({
       x: tr1.t.map((s) => s * 1000),
       y: tr1.v.map((v) => (v + ch1Offset) / ch1VoltsPerDiv),
-      type: 'scatter', mode: 'lines', line: { color: CH1_COLOR, width: 2.5 },
-      name: 'CH1', hoverinfo: 'none' as const,
+      type: 'scatter', mode: 'lines', line: { color: CH1_COLOR, width: 2.5 }, name: 'CH1', hoverinfo: 'none' as const,
     })
     if (ch2Enabled && signal2) {
-      const tr2 = captureWindow(signal2, Fs, timePerDiv)
+      const tr2 = captureWindow(signal2, Fs, timePerDiv, offsetSec)
       data.push({
         x: tr2.t.map((s) => s * 1000),
         y: tr2.v.map((v) => (v + ch2Offset) / ch2VoltsPerDiv),
-        type: 'scatter', mode: 'lines', line: { color: CH2_COLOR, width: 2.5 },
-        name: 'CH2', hoverinfo: 'none' as const,
+        type: 'scatter', mode: 'lines', line: { color: CH2_COLOR, width: 2.5 }, name: 'CH2', hoverinfo: 'none' as const,
       })
     }
 
+    // Trigger level marker (on the source channel's scaling) + centre alignment line when triggered.
+    const srcVpd = trigSource === 'ch2' ? ch2VoltsPerDiv : ch1VoltsPerDiv
+    const srcOff = trigSource === 'ch2' ? ch2Offset : ch1Offset
+    const trigDiv = (trigLevel + srcOff) / srcVpd
+    const shapes: Partial<Plotly.Shape>[] = [
+      { type: 'line', x0: 0, x1: windowMs, y0: trigDiv, y1: trigDiv, line: { color: TRIG_COLOR, width: 1, dash: 'dot' } },
+    ]
+    if (decision.show === 'triggered') {
+      shapes.push({ type: 'line', xref: 'x', yref: 'paper', x0: windowMs / 2, x1: windowMs / 2, y0: 0, y1: 1, line: { color: TRIG_COLOR, width: 1, dash: 'dot' } })
+    }
+
     const layout: Partial<Plotly.Layout> = {
-      paper_bgcolor: 'var(--bg-display)',
-      plot_bgcolor: 'var(--bg-display)',
+      paper_bgcolor: 'var(--bg-display)', plot_bgcolor: 'var(--bg-display)',
       font: { color: 'var(--text-primary)', size: 11 },
-      margin: { l: 48, r: 16, t: 24, b: 44 },
-      showlegend: false,
-      xaxis: {
-        title: { text: 'Time (ms)', font: { size: 11 } },
-        range: [0, windowMs],
-        dtick: timePerDiv * 1000,
-        gridcolor: '#2a2a2a', zerolinecolor: '#444',
-        tickfont: { size: 10 }, color: 'var(--text-secondary)',
-      },
-      yaxis: {
-        title: { text: 'Divisions', font: { size: 11 } },
-        range: [-half, half],
-        dtick: 1,
-        gridcolor: '#2a2a2a', zerolinecolor: '#666',
-        tickfont: { size: 10 }, color: 'var(--text-secondary)',
-      },
+      margin: { l: 48, r: 16, t: 24, b: 44 }, showlegend: false,
+      xaxis: { title: { text: 'Time (ms)', font: { size: 11 } }, range: [0, windowMs], dtick: timePerDiv * 1000,
+        gridcolor: '#2a2a2a', zerolinecolor: '#444', tickfont: { size: 10 }, color: 'var(--text-secondary)' },
+      yaxis: { title: { text: 'Divisions', font: { size: 11 } }, range: [-half, half], dtick: 1,
+        gridcolor: '#2a2a2a', zerolinecolor: '#666', tickfont: { size: 10 }, color: 'var(--text-secondary)' },
+      shapes,
     }
     const config: Partial<Plotly.Config> = { displayModeBar: false, responsive: true }
-
-    if (!initialised.current) {
-      Plotly.newPlot(el, data, layout, config)
-      initialised.current = true
-    } else {
-      Plotly.react(el, data, layout, config)
-    }
+    if (!initialised.current) { Plotly.newPlot(el, data, layout, config); initialised.current = true }
+    else Plotly.react(el, data, layout, config)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signal, signal2, ch2Enabled, timePerDiv, ch1VoltsPerDiv, ch1Offset, ch2VoltsPerDiv, ch2Offset, params.samplingRate])
+  }, [signal, signal2, ch2Enabled, timePerDiv, ch1VoltsPerDiv, ch1Offset, ch2VoltsPerDiv, ch2Offset,
+      params.samplingRate, trigSource, trigLevel, trigSlope, trigMode, singleArmed, running])
+
+  const statusColor = trigStatus.startsWith('Trig') ? TRIG_COLOR : trigStatus === 'Auto' ? '#88dd88' : 'var(--text-secondary)'
 
   return (
     <div className="instrument-panel">
@@ -117,6 +142,7 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
           <span className="display-title">
             Oscilloscope — <span style={{ color: CH1_COLOR }}>CH1</span>
             {ch2Enabled && <> · <span style={{ color: CH2_COLOR }}>CH2</span></>}
+            <span style={{ color: statusColor, marginLeft: 10, fontSize: 11 }}>● {trigStatus}</span>
           </span>
           <div className="display-controls">
             <button className={`run-btn ${running ? 'active' : ''}`} onClick={onRunToggle}>
@@ -135,6 +161,40 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
           <select value={timePerDiv} onChange={(e) => setTimePerDiv(Number(e.target.value))} style={{ width: 90 }}>
             {TIME_PER_DIV.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
+        </div>
+
+        <div className="section-title" style={{ color: TRIG_COLOR }}>Trigger</div>
+        <div className="control-row-inline">
+          <label>Source</label>
+          <select value={trigSource} onChange={(e) => setTrigSource(e.target.value as 'ch1' | 'ch2')} style={{ width: 90 }}>
+            <option value="ch1">CH1</option>
+            <option value="ch2">CH2</option>
+          </select>
+        </div>
+        <div className="control-row-inline">
+          <label>Mode</label>
+          <select value={trigMode} onChange={(e) => { setTrigMode(e.target.value as TriggerMode); setSingleArmed(true) }} style={{ width: 90 }}>
+            <option value="auto">Auto</option>
+            <option value="normal">Normal</option>
+            <option value="single">Single</option>
+          </select>
+        </div>
+        <div className="control-row-inline">
+          <label>Slope</label>
+          <select value={trigSlope} onChange={(e) => setTrigSlope(e.target.value as Slope)} style={{ width: 90 }}>
+            <option value="rising">Rising ↑</option>
+            <option value="falling">Falling ↓</option>
+          </select>
+        </div>
+        <div className="control-row-inline">
+          <label>Level (V)</label>
+          <input type="number" step={0.1} value={trigLevel} onChange={(e) => setTrigLevel(Number(e.target.value))} style={{ width: 80 }} />
+        </div>
+        {trigMode === 'single' && (
+          <button className="run-btn" style={{ marginTop: 6 }} onClick={() => setSingleArmed(true)}>Re-arm</button>
+        )}
+        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.5 }}>
+          Auto free-runs (scrolls) without a trigger; Normal holds; Single captures one frame then stops.
         </div>
 
         <div className="section-title" style={{ color: CH1_COLOR }}>CH1</div>
@@ -178,13 +238,6 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
             </div>
           </>
         )}
-
-        <div className="section-title">Readout</div>
-        <div style={{ fontSize: 11, lineHeight: 1.7, fontFamily: 'monospace', color: 'var(--text-primary)' }}>
-          <div>Time/div: <span style={{ color: 'var(--ch1-color)' }}>{timePerDiv * 1000} ms</span></div>
-          <div>CH1: <span style={{ color: CH1_COLOR }}>{ch1VoltsPerDiv} V/div</span></div>
-          {ch2Enabled && <div>CH2: <span style={{ color: CH2_COLOR }}>{ch2VoltsPerDiv} V/div</span></div>}
-        </div>
       </div>
     </div>
   )

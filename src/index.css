@@ -12,6 +12,7 @@
   --accent-blue:   #4a9eff;
   --accent-orange: #f0a030;
   --ch1-color:     #f0a030;   /* CH1: orange, as in Scopy */
+  --trigger-color: #dddd44;   /* trigger level marker */
   --ch2-color:     #9b59b6;   /* CH2: purple */
   --grid-color:    #2a2a2a;
   --noise-color:   #ff4444;
