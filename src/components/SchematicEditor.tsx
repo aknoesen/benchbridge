@@ -75,7 +75,9 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
   const setSch = setSchematic
   const [tool, setTool] = useState<Tool>('resistor')
   const [selected, setSelected] = useState<string | null>(null)
-  const [selSet, setSelSet] = useState<Set<string>>(new Set()) // multi-select (shift-click)
+  const [selSet, setSelSet] = useState<Set<string>>(new Set()) // multi-select (shift-click or box)
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
+  const marqueeMoved = useRef(false)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
   // Single drag (one component, absolute target) OR group drag (a set, by delta from last grid pos).
   const [drag, setDrag] = useState<
@@ -195,7 +197,17 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
     }
   }
 
+  // Background mouse-down: in the Select tool, start a marquee (drag a box to select). Components
+  // stop propagation on their own mouse-down, so this only fires on empty canvas.
+  function onSvgDown(e: React.MouseEvent) {
+    if (tool !== 'select') return
+    const { gx, gy } = gridAt(e)
+    marqueeMoved.current = false
+    setMarquee({ x0: gx, y0: gy, x1: gx, y1: gy })
+  }
+
   function onBackgroundClick(e: React.MouseEvent) {
+    if (marqueeMoved.current) { marqueeMoved.current = false; return } // a box-drag, not a click
     const { gx, gy } = gridAt(e)
     setSelectedWire(null)
     if (tool === 'select') { setSelected(null); setSelSet(new Set()); return }
@@ -247,6 +259,11 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
   function onMouseMove(e: React.MouseEvent) {
     const { gx, gy } = gridAt(e)
     setHoverGrid({ gx, gy }) // live snap indicator for the wire tool
+    if (marquee) {
+      if (gx !== marquee.x0 || gy !== marquee.y0) marqueeMoved.current = true
+      setMarquee((m) => (m ? { ...m, x1: gx, y1: gy } : m))
+      return
+    }
     if (!drag) return
     if ('ids' in drag) {
       // Group drag: translate the whole selection by the delta since the last grid position,
@@ -261,7 +278,20 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
     }
     setSch((s) => moveComponentWithWires(s, drag.id, Math.max(0, gx - drag.ox), Math.max(0, gy - drag.oy), drag.attached))
   }
-  function onMouseUp() { setDrag(null) }
+  function onMouseUp() {
+    if (marquee) {
+      if (marqueeMoved.current) {
+        const xlo = Math.min(marquee.x0, marquee.x1), xhi = Math.max(marquee.x0, marquee.x1)
+        const ylo = Math.min(marquee.y0, marquee.y1), yhi = Math.max(marquee.y0, marquee.y1)
+        const hit = sch.components.filter((c) => c.gx >= xlo && c.gx <= xhi && c.gy >= ylo && c.gy <= yhi)
+        setSelSet(new Set(hit.map((c) => c.id)))
+        setSelected(hit.length === 1 ? hit[0].id : null)
+        setSelectedWire(null)
+      }
+      setMarquee(null)
+    }
+    setDrag(null)
+  }
 
   function deleteSelected() {
     if (selectedWire !== null) {
@@ -349,8 +379,10 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
           className="plotly-display"
           style={{ background: 'var(--bg-display)', cursor: tool === 'select' ? 'default' : 'crosshair' }}
           onClick={onBackgroundClick}
+          onMouseDown={onSvgDown}
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}
+          onMouseLeave={() => { setMarquee(null); setDrag(null) }}
         >
           {/* grid dots */}
           <defs>
@@ -386,6 +418,13 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
             <circle cx={px(hoverGrid.gx)} cy={px(hoverGrid.gy)} r={5} fill="none"
               stroke="var(--accent-blue)" strokeWidth={1.5} pointerEvents="none" />
           )}
+          {/* marquee box-select */}
+          {marquee && (
+            <rect x={px(Math.min(marquee.x0, marquee.x1))} y={px(Math.min(marquee.y0, marquee.y1))}
+              width={Math.abs(marquee.x1 - marquee.x0) * GRID} height={Math.abs(marquee.y1 - marquee.y0) * GRID}
+              fill="var(--accent-blue)" fillOpacity={0.12} stroke="var(--accent-blue)" strokeWidth={1}
+              strokeDasharray="4 3" pointerEvents="none" />
+          )}
 
           {/* components */}
           {sch.components.map((c) => (
@@ -418,7 +457,7 @@ export default function SchematicEditor({ schematic, setSchematic }: EditorProps
           Place angle: {placeRotation * 90}° &nbsp;(press R to rotate; rotates selected part if one is selected)
         </div>
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>
-          Select tool: <b>Shift+click</b> to select multiple parts, then drag any of them to move the group{selSet.size > 1 ? ` (${selSet.size} selected)` : ''}.
+          Select tool: <b>drag a box</b> over parts to select them (or Shift+click), then drag any to move the group{selSet.size > 1 ? ` (${selSet.size} selected)` : ''}.
         </div>
 
         <div className="section-title">Selected</div>
