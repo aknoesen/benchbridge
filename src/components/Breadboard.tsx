@@ -228,13 +228,18 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
               const base = h.kind === 'railP' ? '#5a2a2a' : h.kind === 'railN' ? '#23304a' : '#2b2b2b'
               const fill = hover ? '#ffffff' : (aCol ?? base)
               const r = (hover || pending === h.key) ? 4.4 : (aCol ? 3.6 : 3)
+              const cy = h.y + OY
               return (
-                <circle key={h.key} cx={h.x} cy={h.y + OY} r={r} fill={fill}
-                  stroke={pending === h.key ? '#fff' : '#000'} strokeWidth={pending === h.key ? 1.5 : 0.5}
-                  style={{ cursor: 'pointer' }}
+                <g key={h.key} style={{ cursor: 'pointer' }}
                   onMouseEnter={() => { if (mode === 'practice') setHoverNet(net) }}
                   onMouseLeave={() => setHoverNet(null)}
-                  onClick={() => onNode(h.key)} />
+                  onClick={() => onNode(h.key)}>
+                  {/* generous invisible hit target (the whole cell) so clicks don't need to be precise */}
+                  <circle cx={h.x} cy={cy} r={PITCH / 2 - 1} fill="transparent" />
+                  <circle cx={h.x} cy={cy} r={r} fill={fill}
+                    stroke={pending === h.key ? '#fff' : '#000'} strokeWidth={pending === h.key ? 1.5 : 0.5}
+                    style={{ pointerEvents: 'none' }} />
+                </g>
               )
             })}
             {/* standard power distribution — always present, coloured by terminal, not deletable */}
@@ -310,6 +315,8 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                   onMouseEnter={() => { if (mode === 'practice' && net) setHoverNet(net) }}
                   onMouseLeave={() => setHoverNet(null)}
                   onClick={() => onNode(t.key, true)}>
+                  {/* generous invisible hit target around the pad + its label */}
+                  <rect x={x - 13} y={y - 16} width={26} height={32} fill="transparent" />
                   <rect x={x - 9} y={y - 9} width={18} height={18} rx={3}
                     fill={hover ? '#ffffff' : (aCol ?? '#15202c')}
                     stroke={pending === t.key ? '#fff' : c} strokeWidth={pending === t.key ? 2 : 1.5} />
