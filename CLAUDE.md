@@ -1,14 +1,16 @@
 # CLAUDE.md — BridgeM2K
 
-A React digital twin of the Analog Devices ADALM2000 (M2K) USB instrument, built for
-the EEC1 first-year ECE course at UC Davis. Students interact with a browser-based
-Scopy-style interface to explore ADC bit depth, spectral analysis, and signal properties
-before (and alongside) touching the real hardware.
+A React digital twin of the Analog Devices ADALM2000 (M2K) USB instrument, built for the
+EEC1 first-year ECE course at UC Davis. It is now a full Scopy-style bench: signal generator,
+two-channel oscilloscope (with XY mode), spectrum analyzer, network analyzer (Bode), voltmeter,
+power supply, a schematic editor with in-browser NGSpice (WASM) simulation, and a breadboard
+transfer/verify view — plus an example-circuit library. The original pedagogy (ADC bit depth,
+spectral analysis, quantization noise) lives on in the Spectrum Analyzer's Learning Mode.
 
 ## Active development — read `docs/` before building new features
 
-Planning for the in-progress features (Oscilloscope panel, Schematic editor + NGSpice WASM)
-lives in `docs/`. **Any Claude Code session adding to those features must read, in order:**
+The instruments above are built. Planning, phase status, and per-phase specs live in `docs/`.
+**Any Claude Code session adding a feature must read, in order:**
 
 1. `docs/CONVENTIONS.md` — the engineering contract (session protocol, style, Definition of Done)
 2. `docs/ROADMAP.md` — phased plan + live status; take the first `TODO` phase
@@ -24,27 +26,39 @@ Do one phase per session, verify against the Definition of Done, update `PROGRES
 |-------|--------|
 | Framework | React 19 + TypeScript + Vite 8 |
 | Plots | Plotly.js (`plotly.js-dist-min`) |
+| SPICE | `eecircuit-engine` (ngspice → WASM) in a Web Worker — see `core/spice.ts` / `core/spice.worker.ts` |
 | Build | `tsc && vite build` |
-| Deploy target | GitHub Pages at `/BridgeM2K/` (base set in `vite.config.ts`) |
-| Dev server | `npm run dev` → `http://localhost:5173` (or 5174 if port taken) |
+| Deploy | GitHub Pages at `/BridgeM2K/` (default base) or Render at `/` (sets `BASE_PATH=/`); base is `process.env.BASE_PATH \|\| '/BridgeM2K/'` |
+| Dev server | `npm run dev` → `http://localhost:5173/BridgeM2K/` (or 5174 if port taken) |
 
-No state management library. All state lives in `App.tsx` (signal params, running/tick)
-and component-local `useState` (bits, windowType, freqMax, etc.).
+No state-management library. Shared state (signal params, schematic, board, the shared
+schematic undo/redo history, workspace/layout) lives in `App.tsx`; view-only state stays
+component-local (scope bits/volts-div/trigger, spectrum window, editor selection, etc.).
 
 ## File map
 
 ```
 src/
   main.tsx                    — React root, StrictMode
-  App.tsx                     — top-level state, animation loop, layout (single/split)
-  App.css                     — nav panel + instrument-area layout
+  App.tsx                     — top-level state, animation loop, channel bus, circuit-sim loop,
+                                undo/redo history, Layouts presets, renderPanel()
+  App.css                     — nav panel + instrument-area (preset arrange-row/grid) layout
   index.css                   — Scopy dark theme CSS variables, shared controls
-  core/
-    signal.ts                 — ALL signal math (see below); no React
+  core/                       — pure logic, NO React
+    signal.ts                 — ALL signal math (see below); protected
+    scope.ts                  — channel bus + oscilloscope capture/timebase
+    trigger.ts                — edge/pulse/holdoff trigger engine
+    netlist.ts                — Circuit graph → ngspice netlist (R/C/L, diode, op-amp, in-amp, …)
+    spice.ts / spice.worker.ts— SpiceEngine adapter; ngspice WASM in a Web Worker
+    schematic.ts              — schematic model, terminals, computeNets, toCircuit, diode/amp helpers
+    breadboard.ts             — solderless-board model, nets, schematic-equivalence check, DIP geometry
+    units.ts                  — value units + tune ranges (shared with Network Analyzer)
+    examples.ts               — built-in example-circuit library (schematic + optional W1/scope preset)
   components/
-    SignalGenerator.tsx       — waveform display + controls
-    SpectrumAnalyzer.tsx      — FFT display + Learning Mode controls
-    Instrument.css            — shared instrument panel layout (display-area, settings-panel)
+    SignalGenerator.tsx  SpectrumAnalyzer.tsx  Oscilloscope.tsx  NetworkAnalyzer.tsx
+    Voltmeter.tsx  PowerSupply.tsx  SchematicEditor.tsx  Breadboard.tsx
+    Welcome.tsx (landing)  About.tsx (credits)  Instrument.css (shared panel layout)
+docs/                         — CONVENTIONS.md, ROADMAP.md, PROGRESS.md, specs/*.md
 ```
 
 ## Architecture
@@ -58,6 +72,14 @@ directly inside its `useEffect` — it does NOT cache the spectrum result, inten
 each render gets a fresh noise realization.
 
 `SignalGenerator` shows a downsampled time-domain trace (max 2000 points, 4 periods shown).
+
+**Circuit-simulation loop.** When a valid schematic is drawn, `App.tsx` runs `toCircuit` →
+`buildNetlist` → the ngspice Web Worker (`.tran`/`.ac`) and feeds the result back into the scope
+and spectrum: `measured`/`measured2` are the circuit's probe nodes when a circuit is active, else
+the raw generator. CH1/CH2 can be **differential** (the 1−/2− probes set `ch1n`/`ch2n`, subtracted
+in App's sampling — e.g. a clean diode I-V). The Network Analyzer sweeps the same circuit via `.ac`.
+None of this perturbs the signal-math path below: with no circuit drawn, the Spectrum Analyzer still
+sees the exact generator signal, so the 12-bit canary holds.
 
 ## Core signal math (`src/core/signal.ts`)
 
@@ -202,40 +224,24 @@ npm run build          # outputs to dist/
 `vite.config.ts` has `base: '/BridgeM2K/'` — required for GitHub Pages subdirectory
 deployment. Asset paths break if this is removed.
 
-## Planned additions (not yet implemented)
+## Built since the original spec
 
-1. **Oscilloscope panel** — time-domain with trigger controls, matches Scopy Oscilloscope
-2. **Guided discovery sequences** — in-app structured prompts that walk students through
-   Lab 3 spectrum analyzer exercises (find harmonic content, measure −3 dB bandwidth, etc.)
-3. **Lab 3 prelab integration** — `<!-- TWIN: -->` markers in
-   `C:\Users\aknoesen\Documents\Knoesen\EEC1 Spring 2026\organize coursematerials\Labs_2027\Lab3\Lab3Instructions_2027.md`
-   are waiting for the twin MVP to be deployed before those prelab sections are finalized
-4. **Oversampling control** — analogous to vertiam.github.io/adc-simulator/; shows noise
-   reduction through faster sampling; maps to Lab 3 sampling rate discussion
+The oscilloscope (incl. XY mode), the schematic editor + NGSpice-WASM simulation, the
+generator → circuit → scope/Bode loop, the breadboard transfer/verify, and the example
+library are all implemented — closing the original "Signal Generator → circuit → Spectrum/
+Scope" goal. Diodes/LED/Zener, the op-amp model picker, differential probes, undo/redo,
+copy/paste, and preset layouts are in. `docs/ROADMAP.md` is the phase-by-phase status of record.
 
-## Future expansion: browser-native schematic + NGSpice WASM
+## Remaining / future ideas
 
-The long-horizon goal is to close the loop between the signal generator and a circuit
-simulator: Signal Generator output → circuit → Spectrum Analyzer input.
-
-**Engine:** NGSpice compiled to WebAssembly. NGSpice is already the SPICE engine inside
-KiCad, is open-source, and has been compiled to WASM (prior art exists). It takes standard
-SPICE netlists, so the schematic layer is decoupled from the solver.
-
-**Schematic entry:** A lightweight browser-native node-and-wire editor, NOT KiCad. EEC1
-students are first-year; a full EDA suite introduces a separate install and steep UI
-learning curve before they see a result. The circuits needed are simple (RC filter,
-inverting amp, INA125 front end) — a minimal editor with R, C, L, voltage source, and
-op-amp symbols is sufficient.
-
-**KiCad netlist import** is a sensible stretch feature for later-course students who
-already know KiCad — a "bring your KiCad schematic into the M2K twin" path. Defer until
-the core browser editor + NGSpice WASM is working.
-
-**Why this matters pedagogically:** Students draw the Lab 5 RC filter in the browser,
-set the cutoff frequency, and immediately see the Bode plot emerge in the Spectrum
-Analyzer — the same measurement they will make on the bench, but parametric and
-zero-hardware-required. The twin teaches the ideal; hardware teaches the real deviation.
+1. **Guided discovery sequences** — in-app structured prompts walking students through lab
+   exercises (find harmonic content, measure −3 dB bandwidth, etc.).
+2. **Lab prelab integration** — `<!-- TWIN: -->` markers in the EEC1 lab instructions hook the
+   twin into prelab sections.
+3. **Oversampling control** — noise reduction through faster sampling (Lab 3 sampling-rate point).
+4. **KiCad netlist import** (ROADMAP `KICAD-1`).
+5. **True dockable panels + saveable workspaces** (ROADMAP Track E, beyond the E-1 preset layouts).
+6. **Real-Scopy / iio-emu integration** (ROADMAP Track G) — SPICE-in-the-loop with the real Scopy.
 
 ## Things NOT to change without understanding the math
 
