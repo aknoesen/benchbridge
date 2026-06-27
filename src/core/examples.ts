@@ -268,4 +268,25 @@ export const EXAMPLES: Example[] = [
       ],
     },
   },
+  {
+    id: 'diode-iv', name: 'Diode I-V curve (XY)', group: 'Passive',
+    blurb: 'Switch the scope to XY mode: CH1 (X) is differential across the diode (V), CH2 (Y) reads the current (I·Rsense). Drive W1 with a sine/triangle — a few volts shows the full knee.',
+    schematic: {
+      components: [
+        { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
+        { id: 'D1', kind: 'diode', gx: 4, gy: 4 },               // anode (4,4) → cathode (6,4)
+        { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 220 }, // sense R to ground
+        { id: 'G1', kind: 'ground', gx: 6, gy: 6 },
+        { id: 'S1', kind: 'scope1', gx: 4, gy: 2 },              // 1+ on the anode
+        { id: 'A1', kind: 'adc1n', gx: 8, gy: 4 },               // 1- on the cathode → CH1 = V across diode
+        { id: 'S2', kind: 'scope2', gx: 6, gy: 2 },              // 2+ on the cathode → CH2 = I·Rsense
+      ],
+      wires: [
+        { x1: 2, y1: 4, x2: 4, y2: 4 },  // W1 -> anode
+        { x1: 4, y1: 4, x2: 4, y2: 2 },  // anode -> 1+
+        { x1: 6, y1: 4, x2: 8, y2: 4 },  // cathode -> 1-
+        { x1: 6, y1: 4, x2: 6, y2: 2 },  // cathode -> 2+
+      ],
+    },
+  },
 ]

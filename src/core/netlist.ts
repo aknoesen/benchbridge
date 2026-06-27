@@ -109,6 +109,14 @@ export interface Ground {
   node: Net
 }
 
+// Junction diode. nodes = [anode, cathode]. All diodes share one generic small-signal silicon
+// model (.model DGEN), emitted once — enough to show the exponential I-V knee (~0.6 V).
+export interface Diode {
+  kind: 'diode'
+  id: string
+  nodes: [Net, Net]
+}
+
 export type Component =
   | Resistor
   | Capacitor
@@ -118,6 +126,7 @@ export type Component =
   | OpAmp
   | InAmp
   | Ground
+  | Diode
 
 export interface Circuit {
   title: string
@@ -293,9 +302,16 @@ export function buildNetlist(circuit: Circuit, analysis: Analysis): string {
       case 'inamp':
         lines.push(...inampLines(c, n))
         break
+      case 'diode':
+        lines.push(`D${c.id} ${n(c.nodes[0])} ${n(c.nodes[1])} DGEN`)
+        break
       case 'ground':
         break // net normalisation only
     }
+  }
+  // One shared diode model (generic silicon, ~0.6 V knee) if any diode is present.
+  if (circuit.components.some((c) => c.kind === 'diode')) {
+    lines.push('.model DGEN D(IS=2.52n N=1.752 RS=0.568 BV=100 IBV=0.1u)')
   }
   lines.push(analysisDirective(analysis))
   lines.push('.end')

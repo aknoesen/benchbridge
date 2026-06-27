@@ -36,6 +36,34 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-27 — Diode component + differential probes + diode I-V example — DONE
+
+**By:** Claude Code session
+**Commit:** uncommitted
+
+**What I did:**
+- New **diode** component end to end: `SchKind 'diode'` (anode/cathode pins), `core/netlist.ts`
+  `Diode` element emitting `D<id> a c DGEN` plus one shared `.model DGEN D(IS=2.52n N=1.752 RS=0.568
+  BV=100 IBV=0.1u)` (generic silicon, ~0.6 V knee), `toCircuit` emission, editor symbol
+  (triangle + cathode bar) and a Diode toolbar button.
+- **Differential scope probing (opt-in):** `toCircuit` probes now also return `ch1n`/`ch2n` (the
+  1-/2- reference nets, which already had names `out_n`/`scope2_n`). App's transient sampling
+  subtracts the reference when a 1-/2- probe is placed, else stays single-ended. Existing examples
+  (no 1-/2-) are unchanged; the inverting-amp file's grounded 1- also stays equivalent.
+- New example **Diode I-V curve (XY)**: W1 → diode → sense R → gnd, with 1+/1- across the diode
+  (differential V) and 2+ on the current-sense node. View in the scope's XY mode.
+
+**Verification (Definition of Done):**
+- build clean: yes — `tsc --noEmit` zero errors.
+- 12-bit floor: unaffected (no `signal.ts` change).
+- math sanity check: simulated the diode I-V (5 V sine drive). V across the diode clamps at +0.72 V
+  forward / −5 V reverse; peak current ~16 mA. Correct exponential-knee behaviour.
+
+**State for the next session:**
+- All diodes share one model (DGEN). If a specific part (e.g. an LED with higher Vf, or a Zener)
+  is wanted later, add a `model` field to the Diode element + per-part `.model` emission.
+
+
 ### 2026-06-27 — Oscilloscope XY mode — DONE
 
 **By:** Claude Code session

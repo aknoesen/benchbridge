@@ -203,6 +203,18 @@ export default function App() {
   // scope/spectrum. circuitOut holds the resampled 1+ node voltage; null when no valid circuit.
   const [circuitOut, setCircuitOut] = useState<Samples | null>(null)
   const [circuitOut2, setCircuitOut2] = useState<Samples | null>(null)
+
+  // Sample a scope channel, differentially when a 1-/2- reference probe is placed (pos − neg),
+  // else single-ended (pos to ground). Lets a diode I-V read true V across the device.
+  const sampleDiff = (res: Parameters<typeof sampleNodeTransient>[0], pos: string, neg: string | undefined, grid: Float64Array) => {
+    const a = sampleNodeTransient(res, pos, grid)
+    if (!a || !neg) return a
+    const b = sampleNodeTransient(res, neg, grid)
+    if (!b) return a
+    const o = new Float64Array(a.length)
+    for (let i = 0; i < a.length; i++) o[i] = a[i] - b[i]
+    return o
+  }
   const spiceRef = useRef<SpiceEngine | null>(null)
 
   useEffect(() => {
@@ -225,9 +237,9 @@ export default function App() {
         const nl = buildNetlist(ckt, { kind: 'tran', step: span / (N * 2), stop: 2 * span })
         const res = await spiceRef.current!.run(nl)
         if (cancelled) return
-        const x1 = sampleNodeTransient(res, drawn.probes.ch1 ?? 'out', sampleTimes)
+        const x1 = sampleDiff(res, drawn.probes.ch1 ?? 'out', drawn.probes.ch1n, sampleTimes)
         setCircuitOut(x1 ? { t: grid, x: x1 } : null)
-        const x2 = drawn.probes.ch2 ? sampleNodeTransient(res, drawn.probes.ch2, sampleTimes) : null
+        const x2 = drawn.probes.ch2 ? sampleDiff(res, drawn.probes.ch2, drawn.probes.ch2n, sampleTimes) : null
         setCircuitOut2(x2 ? { t: grid, x: x2 } : null)
       } catch {
         if (!cancelled) setCircuitOut(null)
@@ -285,9 +297,9 @@ export default function App() {
         const tGrid = new Float64Array(Nn)
         const sampGrid = new Float64Array(Nn)
         for (let k = 0; k < Nn; k++) { tGrid[k] = k / fs; sampGrid[k] = settle + k / fs }
-        const x1 = sampleNodeTransient(res, drawn.probes.ch1 ?? 'out', sampGrid)
+        const x1 = sampleDiff(res, drawn.probes.ch1 ?? 'out', drawn.probes.ch1n, sampGrid)
         setScopeOut1(x1 ? { t: tGrid, x: x1 } : null)
-        const x2 = drawn.probes.ch2 ? sampleNodeTransient(res, drawn.probes.ch2, sampGrid) : null
+        const x2 = drawn.probes.ch2 ? sampleDiff(res, drawn.probes.ch2, drawn.probes.ch2n, sampGrid) : null
         setScopeOut2(x2 ? { t: tGrid, x: x2 } : null)
         setScopeFs(fs)
       } catch {

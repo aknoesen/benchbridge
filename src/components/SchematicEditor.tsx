@@ -23,6 +23,7 @@ const TOOLS: { tool: Tool; label: string }[] = [
   { tool: 'resistor', label: 'R' },
   { tool: 'capacitor', label: 'C' },
   { tool: 'inductor', label: 'L' },
+  { tool: 'diode', label: 'Diode' },
   { tool: 'opamp', label: 'Op-amp' },
   { tool: 'inamp', label: 'In-amp' },
   { tool: 'awg1', label: 'W1' },
@@ -810,6 +811,18 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
         <line x1={cx + 4} y1={y - 11} x2={cx + 4} y2={y + 11} stroke={stroke} strokeWidth={sw} />
         {upright(cx, y - 15, <text x={cx} y={y - 15} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
         {upright(cx, y + 20, <text x={cx} y={y + 20} fill="var(--text-primary)" fontSize={10} textAnchor="middle">C</text>)}
+      </g>
+    )
+  } else if (c.kind === 'diode') {
+    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
+    inner = (
+      <g>
+        <line x1={x1} y1={y} x2={cx - 7} y2={y} stroke={stroke} strokeWidth={sw} />
+        {/* anode triangle pointing to the cathode bar */}
+        <polygon points={`${cx - 7},${y - 9} ${cx - 7},${y + 9} ${cx + 5},${y}`} fill={stroke} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
+        <line x1={cx + 5} y1={y - 9} x2={cx + 5} y2={y + 9} stroke={stroke} strokeWidth={sw} />
+        <line x1={cx + 5} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
+        {upright(cx, y - 15, <text x={cx} y={y - 15} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
       </g>
     )
   } else if (c.kind === 'vsource') {

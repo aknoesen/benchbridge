@@ -8,6 +8,7 @@ export type SchKind =
   | 'resistor'
   | 'capacitor'
   | 'inductor'
+  | 'diode' // junction diode; terminal 'a' = anode, 'c' = cathode (bar end)
   | 'vsource' // generator input source; terminal 'a' = +, 'b' = -
   | 'opamp'
   | 'lmc662' // LMC662 dual op-amp as an 8-pin DIP (two LMC662 sections + V+/V- rails)
@@ -67,6 +68,11 @@ export function baseTerminals(kind: SchKind, opModel?: 'ideal' | 'lmc662'): SchT
       return [
         { name: 'a', gx: 0, gy: 0 },
         { name: 'b', gx: 2, gy: 0 },
+      ]
+    case 'diode':
+      return [
+        { name: 'a', gx: 0, gy: 0 }, // anode (triangle side)
+        { name: 'c', gx: 2, gy: 0 }, // cathode (bar side)
       ]
     case 'opamp': {
       const pins: SchTerminal[] = [
@@ -298,7 +304,7 @@ export interface ToCircuitResult {
   warnings: string[]
   // SPICE node each scope input is wired to (WIRE-3 readback). undefined if the port is not
   // placed. ch1 = 1+ node, ch2 = 2+ node. Lets the scope show whatever node a probe sits on.
-  probes: { ch1?: string; ch2?: string }
+  probes: { ch1?: string; ch1n?: string; ch2?: string; ch2n?: string }
 }
 
 // Convert the schematic to a SPICE-2 Circuit. Net labelling: ground→'0', W1→'in', 1+→'out',
@@ -357,7 +363,7 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
       : net
 
   const comps: SpiceComponent[] = []
-  let rc = 1, cc = 1, lc = 1, vc = 1, ec = 1, sc = 1, aw = 1, ic = 1
+  let rc = 1, cc = 1, lc = 1, vc = 1, ec = 1, sc = 1, aw = 1, ic = 1, dd = 1
   for (const c of s.components) {
     const ts = terminalsOf(c)
     if (c.kind === 'resistor' || c.kind === 'capacitor' || c.kind === 'inductor' || c.kind === 'vsource') {
@@ -367,6 +373,8 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
       else if (c.kind === 'capacitor') comps.push({ kind: 'capacitor', id: String(cc++), nodes: [na, nb], farads: c.value ?? 1e-9 })
       else if (c.kind === 'inductor') comps.push({ kind: 'inductor', id: String(lc++), nodes: [na, nb], henries: c.value ?? 1e-3 })
       else comps.push({ kind: 'vsource', id: String(vc++), nodes: [na, nb], dc: 0, acMag: 1 })
+    } else if (c.kind === 'diode') {
+      comps.push({ kind: 'diode', id: String(dd++), nodes: [rename(netOf(ts[0].gx, ts[0].gy)), rename(netOf(ts[1].gx, ts[1].gy))] })
     } else if (c.kind === 'awg1' || c.kind === 'awg2') {
       // Generator output through the M2K AWG output impedance: an ideal source then a 49.9 Ohm
       // series resistor (R132 after the AD8000 buffer) into the wired node. Loading the generator
@@ -426,7 +434,9 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
 
   const probes = {
     ch1: outNet ? rename(outNet) : undefined,
+    ch1n: outRefNet ? rename(outRefNet) : undefined,   // 1- reference (differential CH1)
     ch2: scope2Net ? rename(scope2Net) : undefined,
+    ch2n: scope2RefNet ? rename(scope2RefNet) : undefined, // 2- reference (differential CH2)
   }
   return { circuit: { title, components: comps }, warnings, probes }
 }
