@@ -1,8 +1,9 @@
 name: Trigger Render Deploy
 
 # Public-URL Render connections get no GitHub webhook, so Render's "On Commit" auto-deploy never
-# fires. This Action runs inside the repo on every push to main and pokes Render's Deploy Hook,
-# which builds & deploys the latest commit. Set the RENDER_DEPLOY_HOOK repo secret first.
+# fires. This Action runs on every push to main and triggers a deploy via the Render API, targeting
+# the service by ID (explicit below, NOT hidden in a secret) so it can never point at the wrong
+# service. Set the RENDER_API_KEY repo secret (Render -> Account Settings -> API Keys).
 on:
   push:
     branches: [main]
@@ -11,9 +12,19 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Call Render deploy hook
+      - name: Trigger deploy of bridgem2k via Render API
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          SERVICE_ID: srv-d900u7n7f7vs739md7o0   # bridgem2k
         run: |
-          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK }}" ]; then
-            echo "RENDER_DEPLOY_HOOK secret is not set"; exit 1
+          if [ -z "$RENDER_API_KEY" ]; then
+            echo "RENDER_API_KEY secret is not set"; exit 1
           fi
-          curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+          resp=$(curl -fsS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            "https://api.render.com/v1/services/${SERVICE_ID}/deploys" \
+            -d '{"clearCache":"do_not_clear"}')
+          echo "Render deploy triggered for ${SERVICE_ID}:"
+          echo "$resp"
