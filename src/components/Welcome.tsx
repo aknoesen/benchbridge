@@ -3,12 +3,12 @@
 // Colour-branded to UC Davis: Aggie Blue (#022851) + Aggie Gold (#FFBF00) per the UC Davis
 // Brand Communications Guide (blue + gold are the dominant palette).
 
-interface Props { onEnter: () => void }
+interface Props { onEnter: () => void; onQuickstart: () => void }
 
 const AGGIE_BLUE = '#022851'
 const AGGIE_GOLD = '#FFBF00'
 
-export default function Welcome({ onEnter }: Props) {
+export default function Welcome({ onEnter, onQuickstart }: Props) {
   const base = import.meta.env.BASE_URL
   return (
     <div style={{
@@ -38,6 +38,13 @@ export default function Welcome({ onEnter }: Props) {
         boxShadow: '0 0 26px rgba(255,191,0,0.45)',
       }}>
         Launch BridgeM2K →
+      </button>
+
+      <button onClick={onQuickstart} style={{
+        marginTop: -10, padding: '6px 14px', fontSize: 13, fontWeight: 600, color: AGGIE_GOLD,
+        background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline',
+      }}>
+        New to the M2K? Start with the Quickstart →
       </button>
 
       <div style={{ position: 'absolute', bottom: 18, fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>

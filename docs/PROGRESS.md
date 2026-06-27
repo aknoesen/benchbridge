@@ -36,6 +36,38 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-27 — QS-1 In-app Quickstart (Track H) — DONE
+
+**By:** Cowork session (andre)
+**Commit:** uncommitted
+
+**What I did:**
+- New `components/Quickstart.tsx`: onboarding panel for two audiences (new app user / new to the
+  real M2K). Leads with an M2K↔app bridge table (each row has an Open button), then a 3-step Lab 1
+  walkthrough (voltage divider on Power Supply + Voltmeter) whose buttons load the `divider` example
+  and jump to the Circuit / Supply / Voltmeter panels. "Where next" one-click loaders too.
+- `App.tsx`: `ActiveInstrument` += `'quickstart'`; `loadExample(id)` helper (mirrors the editor's
+  Examples dropdown); renderPanel case; top nav button (first item, under the logo); Welcome wiring.
+- `Welcome.tsx`: `onQuickstart` prop + "New to the M2K? Start with the Quickstart" link that enters
+  straight into the panel.
+- Spec written: `docs/specs/quickstart.md`. ROADMAP Track H: QS-1 → DONE, QS-2 (full tour) added.
+
+**Verification (Definition of Done):**
+- build clean: `tsc --noEmit` clean. NOTE: `vite build` could not run in this sandbox (rolldown
+  native binding `MODULE_NOT_FOUND` — environment, not code); run `npm run build` locally to confirm.
+- 12-bit spectrum floor at −104 dBFS: unaffected — no `core/` changes (Quickstart is static UI).
+- sanity check: all example ids the panel references resolve (divider, rc-lp, inv-ideal, diode-iv).
+
+**State for the next session:**
+- There is now an App-level `loadExample(id)`; the Quickstart drives the app via `onGoTo`/`onLoadExample`.
+- QS-2 (full per-instrument tour + figures, Lab `<!-- TWIN: -->` deep-links) is the next Track H phase.
+- Lab 1 source connected at `…/EEC1 Spring 2026/…/Labs_2027/Lab1/Lab1Instructions.md` for QS-2 content.
+
+**Open questions / flags for andre:**
+- Confirm `npm run build` (Vite) is clean on your machine before deploy.
+
+---
+
 ### 2026-06-27 — LED (settable Vf) + Zener (settable breakdown) — DONE
 
 **By:** Claude Code session

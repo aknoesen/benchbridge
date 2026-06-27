@@ -12,12 +12,14 @@ import SchematicEditor from './components/SchematicEditor'
 import Breadboard from './components/Breadboard'
 import About from './components/About'
 import Welcome from './components/Welcome'
+import Quickstart from './components/Quickstart'
+import { EXAMPLES } from './core/examples'
 import { type BoardLayout, PLACEABLE_KINDS, DIP_KINDS } from './core/breadboard'
 import Voltmeter from './components/Voltmeter'
 import PowerSupply from './components/PowerSupply'
 import './App.css'
 
-type ActiveInstrument = 'siggen' | 'spectrum' | 'scope' | 'network' | 'schematic' | 'voltmeter' | 'psu' | 'breadboard' | 'about'
+type ActiveInstrument = 'siggen' | 'spectrum' | 'scope' | 'network' | 'schematic' | 'voltmeter' | 'psu' | 'breadboard' | 'about' | 'quickstart'
 
 // E-1: preset lab layouts. A workspace is an ordered list of instrument panels plus an
 // arrangement hint; CSS grid/flex in `.instrument-area` lays them out. Single-instrument view is
@@ -340,6 +342,19 @@ export default function App() {
     </button>
   )
 
+  // Load a built-in example by id (used by the Quickstart's step buttons). Mirrors the Circuit
+  // editor's Examples dropdown: snapshot for undo, swap the schematic, reset both generators
+  // (defaults + the example's presets), and request the scope's XY/Volts-div framing.
+  function loadExample(id: string) {
+    const ex = EXAMPLES.find((x) => x.id === id)
+    if (!ex) return
+    snapshotSchematic()
+    setSchematic(JSON.parse(JSON.stringify(ex.schematic)))
+    setParams({ ...DEFAULT_PARAMS, ...ex.w1 })
+    setParams2({ ...DEFAULT_PARAMS2, ...ex.w2 })
+    setScopeReq({ xy: !!ex.xy, ch1Vdiv: ex.ch1Vdiv, ch2Vdiv: ex.ch2Vdiv })
+  }
+
   // One instrument panel by id. `multi` (more than one visible) drives the `compact` prop on the
   // instruments that support it. Pure function of props + each instrument's local state.
   function renderPanel(id: ActiveInstrument): React.ReactNode {
@@ -377,6 +392,10 @@ export default function App() {
         return <PowerSupply psu={psu} onChange={setPsu} circuit={drawn.circuit} w1={params} w2={params2} />
       case 'about':
         return <About />
+      case 'quickstart':
+        return <Quickstart
+          onGoTo={(t) => { setActive(t as ActiveInstrument); setPresetId(null) }}
+          onLoadExample={loadExample} />
       case 'siggen':
         return <SignalGenerator params={params} params2={params2} signal={signal} signal2={signal2} running={running} compact={multi}
           onParamChange={updateParam} onParam2Change={(k, v) => setParams2(prev => ({ ...prev, [k]: v }))}
@@ -390,13 +409,16 @@ export default function App() {
   }
 
   if (!entered) {
-    return <Welcome onEnter={() => { try { localStorage.setItem('bm2k-welcomed', '1') } catch { /* quota */ } setEntered(true) }} />
+    return <Welcome
+      onEnter={() => { try { localStorage.setItem('bm2k-welcomed', '1') } catch { /* quota */ } setEntered(true) }}
+      onQuickstart={() => { try { localStorage.setItem('bm2k-welcomed', '1') } catch { /* quota */ } setActive('quickstart'); setPresetId(null); setEntered(true) }} />
   }
 
   return (
     <div className="app-shell">
       <nav className="nav-panel">
         <div className="nav-logo" onClick={() => setEntered(false)} title="Welcome" style={{ cursor: 'pointer' }}><img src={`${import.meta.env.BASE_URL}bridgem2k.svg`} alt="BridgeM2K" style={{ width: 48, height: 48, display: "block", margin: "0 auto" }} /></div>
+        {navBtn('quickstart', '▷', <>Quick<br/>start</>, 'Quickstart — new here? Start with this')}
         {navBtn('siggen', '⌇', <>Signal<br/>Gen</>, 'Signal Generator')}
         {navBtn('scope', '∿', 'Scope', 'Oscilloscope')}
         {navBtn('spectrum', '▲', 'Spectrum', 'Spectrum Analyzer')}

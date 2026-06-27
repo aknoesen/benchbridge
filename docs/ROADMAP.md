@@ -168,11 +168,12 @@ Notes:
 
 ## Track H — Onboarding / in-app Quickstart  ← requested (andre, 2026-06-27)
 
-No spec yet — write `docs/specs/quickstart.md` when QS-1 is picked up.
+Spec: `docs/specs/quickstart.md`
 
 | Phase | Title | Depends on | Status |
 |-------|-------|-----------|--------|
-| QS-1 | In-app Quickstart doc, reachable from the app (nav button / Welcome link), that walks a new user through the bench using the built-in example library to illustrate each instrument | examples.ts | TODO |
+| QS-1 | In-app Quickstart panel (nav button + Welcome link): M2K↔app bridge + Lab 1 walkthrough (divider on Power Supply + Voltmeter), with step buttons that load examples and jump to instruments | examples.ts | DONE |
+| QS-2 | (Future) Full per-instrument tour + figures/screenshots; hook Lab prelab `<!-- TWIN: -->` markers | QS-1 | TODO |
 
 Notes:
 - **Goal:** get a general (non-CC) user going. Open an example → see it framed → understand
