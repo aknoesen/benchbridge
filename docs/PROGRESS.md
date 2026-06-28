@@ -8,6 +8,17 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
+## Next session: start here (updated 2026-06-28)
+
+**SCH-8 (transistor parts) is DONE.** The final slice — the `Breadboard.tsx` TO-92 render +
+drag-placement UI — is in, so transistors now go schematic → board → Check end to end. **SWEEP-1**
+(the hardware-faithful curve tracer) is the next phase; spec at `docs/specs/sch8-sweep1.md`. Still
+pending (a SWEEP-1 concern, noted by the prior SCH-8 entry): tune the level-1 MOSFET `KP` and the
+`nmos-output-xy` example operating point — the devices currently run hard-on, so the seed curve looks
+flat. Full detail in the top log entry below.
+
+---
+
 ## Entry template (copy this, fill in, put newest on top)
 
 ```
@@ -35,6 +46,107 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 ---
 
 ## Log
+
+### 2026-06-28 — SCH-8 transistor parts — Breadboard TO-92 UI — DONE (SCH-8 complete)
+
+**By:** Claude Code session
+**Commit:** uncommitted
+
+**What I did:**
+- `components/Breadboard.tsx`: finished the one remaining SCH-8 slice — the TO-92 render +
+  drag-placement UI, mirroring the existing DIP path:
+  - New `placeTransistor` Tool variant + a placement handler in `onNode` (anchor on a `TO92_ROW`
+    hole with two more columns to the right; rejects an out-of-range column with a hint).
+  - SVG render of placed transistors: three leads from the leg holes up into a flat-front /
+    rounded-back TO-92 package, each leg coloured by its live net (Practice/revealed) and tagged with
+    its package-face leg label (BJT C-B-E, MOSFET D-G-S) via `to92Legend`; click-to-delete in Select.
+  - "Place from schematic" chips now list `exp.transistors` ("(TO-92)"); the empty-state guard and
+    `activeColor` net set both account for transistors; Clear and both `openLab` resets seed
+    `transistors: []`; saved labs already round-trip `board.transistors` (whole-board serialize).
+  - A "TO-92 pinout" side-panel legend (package-face order, with a "no supply pins" note) appears when
+    the schematic has a transistor, alongside the existing LMC662/INA125 legends.
+- No `core/` change this session — `breadboard.ts` already had `to92PinHoles`/`to92Legend`/
+  `PlacedTransistor`/`BoardLayout.transistors`/`checkEquivalence` from the prior SCH-8 entry, so this
+  was purely the component layer.
+
+**Verification (Definition of Done):**
+- build clean: YES — `npm run build` (`tsc && vite build`) clean on host, 40 modules transformed.
+- tests: `npm test -- --run` → 95 passed (7 files). No new core logic, so no new test needed; the
+  existing `breadboard.test.ts` transistor-equivalence coverage stands.
+- 12-bit canary: `core/signal.ts` and the FFT path were NOT touched (only `Breadboard.tsx` + docs), so
+  the spectrum floor is unaffected — canary holds by construction.
+
+**State for the next session:**
+- A BJT/MOSFET now transfers schematic → board: pick the chip, drop its left leg on a row-`b` hole,
+  the three legs fill adjacent columns in schematic-terminal order, and Check maps them. SCH-8 is
+  complete; **SWEEP-1** is the next phase.
+- Inherited open item for SWEEP-1: the level-1 MOSFET `KP` / `nmos-output-xy` operating point still run
+  the device hard-on, so the curve-tracer seed needs tuning when SWEEP-1 builds the family.
+
+**Open questions / flags for andre:**
+- TO-92 legs sit in one term row (`TO92_ROW = 'b'`), three adjacent isolated columns — a discrete
+  transistor bridges three nets and (unlike a DIP) does not straddle the channel. Confirm that bank
+  placement reads naturally on the board; trivial to move to another term row if preferred.
+
+### 2026-06-28 — SCH-8 transistor parts (BJT/MOSFET) — PARTIAL (schematic/sim/parts done; board UI + host build pending)
+
+**By:** Cowork session
+**Commit:** uncommitted
+
+**What I did:**
+- `core/netlist.ts`: new `BJT` and `MOSFET` `Component` types + emission, mirroring the diode path.
+  BJT → `Q<id> c b e QM<id>` + `.model QM<id> NPN|PNP(...)`; MOSFET → `M<id> d g s s MM<id>` (bulk
+  tied to source for a discrete TO-92) + `.model MM<id> NMOS|PMOS(...)`. Added `TRANSISTOR_PARTS`
+  (ADALP2000 kit: 2N3904/2N3903 NPN, 2N3906 PNP, ZVN2110A/ZVN3310A NMOS, ZVP2110A PMOS) as
+  (type + ngspice `.model` body) pairs, plus generic fallback bodies.
+- `core/schematic.ts`: `bjt`/`mosfet` `SchKind`, 3-terminal `baseTerminals` (c/b/e, d/g/s), a `part`
+  field on `SchComponent`, and `toCircuit` mapping that resolves the part name → polarity/channel +
+  model body.
+- `components/SchematicEditor.tsx`: BJT/MOSFET palette tools, refdes Q/M, a default part on place, a
+  Part dropdown in the Selected panel (filtered by kind), and the BJT/MOSFET symbol drawing
+  (emitter/source arrow flips with NPN/PNP, N/P).
+- `core/breadboard.ts`: TO-92 3-lead footprint core — `TO92_KINDS`, `to92PinHoles`, `to92Legend`,
+  `PlacedTransistor`, `transistors` in `BoardLayout`/`SchematicExpectation`, and the `checkEquivalence`
+  path (placement + per-leg net mapping). Legs sit in three adjacent columns of one bank.
+- `core/examples.ts`: `nmos-output-xy` — a ZVN2110A with gate at V+, W1 sweeping the drain, scope XY
+  through a sense resistor (one Vgs output curve; the SWEEP-1 seed).
+- Tests: `netlist.test.ts` (BJT/MOSFET emission + an NMOS `.op` that confirms the cards run in
+  ngspice), `schematic.test.ts` (toCircuit part resolution).
+
+**Verification (Definition of Done):**
+- build clean: YES on host — `npm run build` (`tsc && vite build`) passed, 40 modules transformed.
+  (Note: the Cowork sandbox mount tears Edit-modified source files, so the build/tests were run on the
+  host instead. The sandbox is unreliable for builds in this project — same class of issue as the
+  SPICE-1 entry's "vite build could not run in the Linux sandbox".)
+- tests: `npm test` — the new transistor netlist tests pass (BJT/MOSFET emission + an NMOS `.op` that
+  runs in ngspice). Independent check also confirmed both `.model QM1 NPN(... BF=300 ...)` (2N3904) and
+  `.model MM1 NMOS(VTO=1.5 KP=0.15 LAMBDA=0.01)` (ZVN2110A) parse and converge (v(drain)=0.0095 V,
+  v(coll)=0.039 V, devices hard on).
+- 12-bit canary: `core/signal.ts` was NOT touched, so the spectrum floor is unaffected.
+- **Pre-existing test issues surfaced by the run (NOT from SCH-8) — both fixed:** (1) `schematic.test.ts`
+  had a duplicate import (`moveComponentWithWires`/`attachedWireEnds`/`computeNets` declared at two
+  import lines) present at HEAD; tolerated by the old esbuild transform, rejected by vite 8's oxc.
+  Deduped so the file (and the new transistor toCircuit test) loads. (2) `breadboard.test.ts` had 3
+  failing RC equivalence tests because `correctBoard` used the old ports-at-holes model with no
+  jumpers, while F-5's `checkEquivalence` anchors on the fixed M2K terminals and ignores `board.ports`
+  holes. Rewrote `correctBoard` (and the short/split tests) to jumper from the fixed terminals
+  (`PORT_TERMINAL[...]`), matching how Breadboard.tsx wires them. These were red at HEAD too; now green.
+
+**State for the next session:**
+- SCH-8's schematic → toCircuit → netlist → sim path for transistors is complete and logic-verified;
+  you can place a BJT/MOSFET, pick a kit part, and simulate. This is enough for SWEEP-1 to build on.
+- Remaining SCH-8 slice: `components/Breadboard.tsx` rendering + drag-placement of the TO-92 (the
+  `breadboard.ts` model already supports it; this is the UI half, mirroring the DIP render). Until that
+  lands, SCH-8 is IN PROGRESS, not DONE.
+- Model fidelity: the level-1 MOSFET params run "strong" (KP=0.15 pulls the drain near 0 when hard on),
+  and BJT BF drives saturation easily. Fine electrically, but tune KP / example operating points on a
+  host sim for clean-looking curves (the `nmos-output-xy` example especially).
+
+**Open questions / flags for andre:**
+- OK to finish the Breadboard.tsx TO-92 UI next session, then flip SCH-8 to DONE? Or split it out as a
+  small F-phase like the DIP render was.
+- The transistor `.model` cards are representative (standard 2N390x; level-1 MOSFET approximations).
+  Swap in manufacturer cards if you want higher fidelity (the spec notes this).
 
 ### 2026-06-27 — Quickstart QS-3: "Draw your first circuit (supply rails)" — DONE
 

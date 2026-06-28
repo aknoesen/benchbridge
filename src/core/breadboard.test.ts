@@ -30,7 +30,7 @@ describe('breadboard nets (F-1)', () => {
   })
 })
 
-import { checkEquivalence, type BoardLayout } from './breadboard'
+import { checkEquivalence, PORT_TERMINAL, type BoardLayout } from './breadboard'
 import { type Schematic } from './schematic'
 
 // W1 -> R1 -> (out) -> C1 -> GND ; 1+ probes the R-C node.
@@ -52,12 +52,13 @@ function correctBoard(): BoardLayout {
       { id: 'R1', kind: 'resistor', aHole: 'b1', bHole: 'a3' },
       { id: 'C1', kind: 'capacitor', aHole: 'c3', bHole: 'a5' },
     ],
-    jumpers: [],
-    ports: [
-      { port: 'W1', hole: 'a1' },
-      { port: '1+', hole: 'b3' },
-      { port: 'GND', hole: 'b5' },
+    // F-5: ports are fixed M2K terminals; the student jumpers from a terminal to the part column.
+    jumpers: [
+      { a: PORT_TERMINAL['W1'], b: 'a1' },  // W1 terminal → col1 (in)
+      { a: PORT_TERMINAL['1+'], b: 'b3' },  // 1+ terminal → col3 (out)
+      { a: PORT_TERMINAL['GND'], b: 'b5' }, // GND terminal → col5 (gnd)
     ],
+    ports: [],
   }
 }
 
@@ -82,7 +83,7 @@ describe('breadboard equivalence (F-2)', () => {
   })
 
   it('reports an accidental short', () => {
-    const b = correctBoard(); b.ports[2].hole = 'b3' // GND into col3 (= out) → shorts out to gnd
+    const b = correctBoard(); b.jumpers.push({ a: 'b3', b: 'b5' }) // jumper col3(out)↔col5(gnd) → short
     const r = checkEquivalence(rcSch, b, holes)
     expect(r.ok).toBe(false)
     expect(r.message.toLowerCase()).toContain('different nodes')
@@ -90,7 +91,7 @@ describe('breadboard equivalence (F-2)', () => {
 
   it('a jumper can join two columns to fix a split', () => {
     const b = correctBoard(); b.parts[1].aHole = 'a4'           // out split into col3 and col4
-    b.jumpers = [{ a: 'b4', b: 'd3' }]                          // jumper col4 <-> col3 re-joins out
+    b.jumpers.push({ a: 'b4', b: 'd3' })                        // jumper col4 <-> col3 re-joins out
     expect(checkEquivalence(rcSch, b, holes).ok).toBe(true)
   })
 })

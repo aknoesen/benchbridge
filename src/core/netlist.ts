@@ -1,5 +1,5 @@
 // Circuit graph model + ngspice netlist generator — no UI, no React.
-// See docs/specs/schematic-ngspice.md (phase SPICE-2).
+// See docs/specs/schematic-ngspice.md (phase SPICE-2). SCH-8 adds BJT/MOSFET parts.
 //
 // Flow:  UI/editor → Circuit (this model) → buildNetlist() → ngspice string → SpiceEngine.
 // This module is the only place that knows ngspice netlist syntax; the editor and
@@ -121,6 +121,29 @@ export interface Diode {
   bv?: number // reverse breakdown voltage (Zener)
 }
 
+// Bipolar junction transistor (SCH-8). nodes = [collector, base, emitter]; `polarity` sets the
+// device line's .model type (NPN/PNP). Each BJT emits its own .model card (like Diode) so different
+// kit parts (2N3904, 2N3906) differ. `model` is the raw ngspice .model parameter body; omit for a
+// generic small-signal default.
+export interface BJT {
+  kind: 'bjt'
+  id: string
+  nodes: [Net, Net, Net] // [collector, base, emitter]
+  polarity: 'npn' | 'pnp'
+  model?: string // ngspice .model body, e.g. 'BF=300 IS=6.7f VAF=74'
+}
+
+// MOSFET (SCH-8). nodes = [drain, gate, source]; the bulk is tied to the source (discrete TO-92),
+// so buildNetlist emits the 4th node = source. `channel` sets the .model type (NMOS/PMOS). Level-1
+// model via the `model` body; omit for a generic enhancement default.
+export interface MOSFET {
+  kind: 'mosfet'
+  id: string
+  nodes: [Net, Net, Net] // [drain, gate, source]
+  channel: 'nmos' | 'pmos'
+  model?: string // ngspice .model body, e.g. 'VTO=2 KP=0.15 LAMBDA=0.01'
+}
+
 export type Component =
   | Resistor
   | Capacitor
@@ -131,10 +154,41 @@ export type Component =
   | InAmp
   | Ground
   | Diode
+  | BJT
+  | MOSFET
 
 export interface Circuit {
   title: string
   components: Component[]
+}
+
+// ── ADALP2000 transistor kit (SCH-8) ─────────────────────────────────────────────
+// The discrete transistors stocked in the ADALP2000 kit, each a (device type + ngspice .model
+// body) pair so the on-screen part matches the part in the student's hand. Model bodies are
+// representative cards (BJT: standard onsemi/Motorola small-signal; MOSFET: level-1 approximations
+// matched to the datasheet threshold) and should be verified against the manufacturer model at
+// implementation. The schematic stores only the part name; toCircuit resolves it here.
+export type TransistorType = 'npn' | 'pnp' | 'nmos' | 'pmos'
+export interface TransistorPart {
+  type: TransistorType
+  model: string
+}
+
+export const TRANSISTOR_PARTS: Record<string, TransistorPart> = {
+  '2N3904': { type: 'npn', model: 'IS=6.734f BF=300 NF=1 VAF=74 IKF=66.78m ISE=6.734f NE=1.259 BR=0.7371 RC=1 CJC=3.638p CJE=4.493p TF=301.2p TR=239.5n' },
+  '2N3903': { type: 'npn', model: 'IS=6.734f BF=200 NF=1 VAF=74 IKF=66.78m ISE=6.734f NE=1.259 BR=0.7371' },
+  '2N3906': { type: 'pnp', model: 'IS=1.41f BF=180 NF=1 VAF=18.7 IKF=80m ISE=0 NE=1.5 BR=4.977 RC=2.5 CJC=9.728p CJE=8.063p TF=179.3p TR=33.42n' },
+  'ZVN2110A': { type: 'nmos', model: 'VTO=1.5 KP=0.15 LAMBDA=0.01' },
+  'ZVN3310A': { type: 'nmos', model: 'VTO=2 KP=0.15 LAMBDA=0.01' },
+  'ZVP2110A': { type: 'pmos', model: 'VTO=-1.5 KP=0.05 LAMBDA=0.01' },
+}
+
+// Generic fallback bodies when a part is unknown or unset (keeps an unspecified device simulating).
+const DEFAULT_TRANSISTOR_MODEL: Record<TransistorType, string> = {
+  npn: 'BF=100 IS=1e-14',
+  pnp: 'BF=100 IS=1e-14',
+  nmos: 'VTO=2 KP=0.1 LAMBDA=0.01',
+  pmos: 'VTO=-2 KP=0.05 LAMBDA=0.01',
 }
 
 export type Analysis =
@@ -312,6 +366,25 @@ export function buildNetlist(circuit: Circuit, analysis: Analysis): string {
         const m = `DM${c.id}`
         lines.push(`D${c.id} ${n(c.nodes[0])} ${n(c.nodes[1])} ${m}`)
         lines.push(`.model ${m} D(IS=${is} N=${nn} RS=${rs} BV=${bv} IBV=0.1u)`)
+        break
+      }
+      case 'bjt': {
+        const type = c.polarity === 'pnp' ? 'PNP' : 'NPN'
+        const body = c.model ?? DEFAULT_TRANSISTOR_MODEL[c.polarity]
+        const m = `QM${c.id}`
+        // Q<id> collector base emitter <model>
+        lines.push(`Q${c.id} ${n(c.nodes[0])} ${n(c.nodes[1])} ${n(c.nodes[2])} ${m}`)
+        lines.push(`.model ${m} ${type}(${body})`)
+        break
+      }
+      case 'mosfet': {
+        const type = c.channel === 'pmos' ? 'PMOS' : 'NMOS'
+        const body = c.model ?? DEFAULT_TRANSISTOR_MODEL[c.channel]
+        const m = `MM${c.id}`
+        const d = n(c.nodes[0]), g = n(c.nodes[1]), s = n(c.nodes[2])
+        // M<id> drain gate source bulk <model>; discrete TO-92 ties bulk to source.
+        lines.push(`M${c.id} ${d} ${g} ${s} ${s} ${m}`)
+        lines.push(`.model ${m} ${type}(${body})`)
         break
       }
       case 'ground':

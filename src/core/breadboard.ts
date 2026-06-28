@@ -233,13 +233,34 @@ export function dipPinHoles(kind: SchKind, col: number): string[] | null {
   return [...bottom, ...top.reverse()] // top row R→L gives pins n+1..2n
 }
 
+// ── SCH-8: TO-92 / 3-lead footprint (discrete transistors) ──────────────────────
+// A discrete transistor sits in ONE bank with its three legs in three adjacent columns of a single
+// row, so each leg lands in its own isolated terminal column (the part bridges three nets). Unlike a
+// DIP it does NOT straddle the channel. Legs map to the schematic terminal order (BJT c/b/e, MOSFET
+// d/g/s); the side legend names them.
+export const TO92_KINDS = new Set<SchKind>(['bjt', 'mosfet'])
+export const TO92_ROW: Row = 'b' // a top-bank term row (any isolated-column term row works)
+
+// Hole keys for a TO-92 anchored at `col` (three adjacent columns, same row). Null if it overruns.
+export function to92PinHoles(col: number): string[] | null {
+  if (col < 1 || col + 2 > COLS) return null
+  return [holeKey(TO92_ROW, col), holeKey(TO92_ROW, col + 1), holeKey(TO92_ROW, col + 2)]
+}
+
+// Leg labels in schematic-terminal order (matches terminalsOf), for the side legend.
+export function to92Legend(kind: SchKind): string[] {
+  return kind === 'mosfet' ? ['D', 'G', 'S'] : ['C', 'B', 'E']
+}
+
 export interface PlacedPart { id: string; kind: SchKind; value?: number; aHole: string; bHole: string }
 export interface PlacedPort { port: string; hole: string }
 // A placed DIP is anchored by its top-left pin column; pin holes derive via dipPinHoles().
 export interface PlacedDip { id: string; kind: SchKind; col: number }
-export interface BoardLayout { parts: PlacedPart[]; jumpers: Jumper[]; ports: PlacedPort[]; dips?: PlacedDip[] }
+// A placed TO-92 transistor anchored by its left leg column; leg holes derive via to92PinHoles().
+export interface PlacedTransistor { id: string; kind: SchKind; col: number }
+export interface BoardLayout { parts: PlacedPart[]; jumpers: Jumper[]; ports: PlacedPort[]; dips?: PlacedDip[]; transistors?: PlacedTransistor[] }
 
-export const emptyBoard = (): BoardLayout => ({ parts: [], jumpers: [], ports: [], dips: [] })
+export const emptyBoard = (): BoardLayout => ({ parts: [], jumpers: [], ports: [], dips: [], transistors: [] })
 
 // What the schematic expects on the board: its R/C/L parts (with each leg's net) and its ports.
 export interface SchematicExpectation {
@@ -255,6 +276,8 @@ export interface SchematicExpectation {
     rails?: { vpos: number; vneg: number }
     straps?: { pin: number; to: number | 'V+' | 'V-' | 'GND'; label: string }[]
   }[]
+  // SCH-8: discrete transistors (3 legs in schematic-terminal order: BJT c/b/e, MOSFET d/g/s).
+  transistors: { id: string; kind: SchKind; pinNets: string[] }[]
   ports: { name: string; net: string }[]
 }
 export function schematicExpectation(s: Schematic): SchematicExpectation {
@@ -262,11 +285,14 @@ export function schematicExpectation(s: Schematic): SchematicExpectation {
   const netOf = (gx: number, gy: number) => nets.get(`${gx},${gy}`) ?? `x_${gx}_${gy}`
   const parts: SchematicExpectation['parts'] = []
   const dips: SchematicExpectation['dips'] = []
+  const transistors: SchematicExpectation['transistors'] = []
   const ports = new Map<string, string>()
   for (const c of s.components) {
     const ts = terminalsOf(c)
     if (PLACEABLE_KINDS.has(c.kind)) {
       parts.push({ id: c.id, kind: c.kind, a: netOf(ts[0].gx, ts[0].gy), b: netOf(ts[1].gx, ts[1].gy) })
+    } else if (TO92_KINDS.has(c.kind)) {
+      transistors.push({ id: c.id, kind: c.kind, pinNets: ts.map((t) => netOf(t.gx, t.gy)) })
     } else if (DIP_KINDS.has(c.kind)) {
       dips.push({ id: c.id, kind: c.kind, pinNets: ts.map((t) => netOf(t.gx, t.gy)) })
     } else if (c.kind === 'opamp') {
@@ -305,7 +331,7 @@ export function schematicExpectation(s: Schematic): SchematicExpectation {
       if (name && !ports.has(name)) ports.set(name, netOf(ts[0].gx, ts[0].gy))
     }
   }
-  return { parts, dips, ports: [...ports].map(([name, net]) => ({ name, net })) }
+  return { parts, dips, transistors, ports: [...ports].map(([name, net]) => ({ name, net })) }
 }
 
 export interface CheckResult { ok: boolean; message: string }
@@ -322,14 +348,16 @@ function pinLabel(pin: string): string {
 // first problem found, with a student-friendly message.
 export function checkEquivalence(s: Schematic, board: BoardLayout, holes: Hole[]): CheckResult {
   const exp = schematicExpectation(s)
-  if (exp.parts.length === 0 && exp.dips.length === 0 && exp.ports.length === 0) {
+  if (exp.parts.length === 0 && exp.dips.length === 0 && exp.transistors.length === 0 && exp.ports.length === 0) {
     return { ok: false, message: 'Draw a circuit in the Circuit tab first.' }
   }
   const placedPart = new Map(board.parts.map((p) => [p.id, p]))
   const placedDip = new Map((board.dips ?? []).map((d) => [d.id, d]))
+  const placedTr = new Map((board.transistors ?? []).map((t) => [t.id, t]))
 
   for (const p of exp.parts) if (!placedPart.has(p.id)) return { ok: false, message: `Place ${p.id} on the board.` }
   for (const d of exp.dips) if (!placedDip.has(d.id)) return { ok: false, message: `Place ${d.id} on the board (straddle the channel).` }
+  for (const tr of exp.transistors) if (!placedTr.has(tr.id)) return { ok: false, message: `Place ${tr.id} on the board (TO-92, three adjacent columns).` }
   // Ports are the always-present M2K terminals now; the student jumpers from them (no placement step).
 
   const bnets = boardNets(holes, board.jumpers)
@@ -367,6 +395,14 @@ export function checkEquivalence(s: Schematic, board: BoardLayout, holes: Hole[]
         if (pinNet !== target) return { ok: false, message: `Wire ${d.id}: ${sp.label}.` }
       }
     }
+  }
+  for (const tr of exp.transistors) {
+    const pl = placedTr.get(tr.id)!
+    const holesForTr = to92PinHoles(pl.col) ?? []
+    tr.pinNets.forEach((net, k) => {
+      schem.set(`${tr.id}.p${k + 1}`, net)
+      brd.set(`${tr.id}.p${k + 1}`, bn(holesForTr[k] ?? `?${tr.id}.${k}`))
+    })
   }
   for (const p of exp.ports) {
     schem.set(p.name, p.net); brd.set(p.name, bn(PORT_TERMINAL[p.name] ?? `?${p.name}`))

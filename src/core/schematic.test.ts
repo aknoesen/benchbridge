@@ -127,6 +127,26 @@ describe('scope probe mapping (WIRE-3)', () => {
   })
 })
 
+describe('transistor toCircuit (SCH-8)', () => {
+  it('maps placed BJT/MOSFET to circuit components with the kit part model', () => {
+    const s: Schematic = {
+      components: [
+        { id: 'Q1', kind: 'bjt', gx: 2, gy: 0, part: '2N3906' },      // c (4,0), b (2,1), e (4,2)
+        { id: 'M1', kind: 'mosfet', gx: 6, gy: 0, part: 'ZVN2110A' }, // d (8,0), g (6,1), s (8,2)
+        { id: 'G1', kind: 'ground', gx: 0, gy: 4 },
+      ],
+      wires: [],
+    }
+    const { circuit } = toCircuit(s)
+    const q = circuit.components.find((c) => c.kind === 'bjt') as any
+    const m = circuit.components.find((c) => c.kind === 'mosfet') as any
+    expect(q.polarity).toBe('pnp')        // 2N3906 is PNP
+    expect(q.model).toContain('BF=180')
+    expect(m.channel).toBe('nmos')        // ZVN2110A is N-channel
+    expect(m.model).toContain('VTO=1.5')
+  })
+})
+
 import { attachedWireEnds, moveComponentWithWires, rotateComponentWithWires, computeNets } from './schematic'
 
 describe('rubber-band wires (EDIT-1)', () => {
@@ -284,7 +304,7 @@ describe('moveSelectionBy (box group move incl. loose wires)', () => {
   })
 })
 
-import { moveComponentWithWires, attachedWireEnds, computeNets, bridgeWiresForMove } from './schematic'
+import { bridgeWiresForMove } from './schematic' // (moveComponentWithWires/attachedWireEnds/computeNets already imported above)
 describe('touch-connections rubber-band into a wire on move (no silent break)', () => {
   // R1.b and R2.a touch at (6,2) with NO wire between them.
   const base: Schematic = {

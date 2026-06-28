@@ -6,7 +6,7 @@ import {
   Schematic, SchComponent, SchKind, terminalsOf, toCircuit, ampCategory,
   attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentWithWires, type WireEndRef,
 } from '../core/schematic'
-import { buildNetlist } from '../core/netlist'
+import { buildNetlist, TRANSISTOR_PARTS } from '../core/netlist'
 import { EXAMPLES } from '../core/examples'
 import { createSpiceEngine, type SpiceEngine, transferFunction } from '../core/spice'
 import { UNIT, TUNE_RANGE, fmtEng, parseEng, tunePos, tuneValue } from '../core/units'
@@ -27,6 +27,8 @@ const TOOLS: { tool: Tool; label: string }[] = [
   { tool: 'diode', label: 'Diode' },
   { tool: 'led', label: 'LED' },
   { tool: 'zener', label: 'Zener' },
+  { tool: 'bjt', label: 'BJT' },
+  { tool: 'mosfet', label: 'MOSFET' },
   { tool: 'opamp', label: 'Op-amp' },
   { tool: 'ina125', label: 'INA125' },
   { tool: 'awg1', label: 'W1' },
@@ -47,12 +49,17 @@ const DEFAULT_VALUE: Partial<Record<SchKind, number>> = {
   led: 2.0, zener: 3.3,
 }
 
+// Default ADALP2000 part placed for a new transistor (overridable in the Selected panel).
+const DEFAULT_PART: Partial<Record<SchKind, string>> = {
+  bjt: '2N3904', mosfet: 'ZVN2110A',
+}
+
 // Reference designators (R1, C2, L1, U1 for op/in-amps, V1). A new part increments from the
 // highest existing number with the same prefix, so deleting one does not renumber the rest.
 // The Ref field in the Selected panel lets the student override any id (must stay unique).
 const REFDES: Partial<Record<SchKind, string>> = {
   resistor: 'R', capacitor: 'C', inductor: 'L', vsource: 'V',
-  opamp: 'U', lmc662: 'U', ina125: 'U',
+  opamp: 'U', lmc662: 'U', ina125: 'U', bjt: 'Q', mosfet: 'M',
 }
 function refPrefix(k: SchKind): string {
   return REFDES[k] ?? k[0].toUpperCase()
@@ -301,7 +308,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     // place-time sub-selector; everything else places its own kind directly.
     const kind = tool as SchKind
     // Op-amp places kind 'opamp' (LMC662); INA125 places kind 'ina125'. Power implied in sim, DIP on board.
-    const c: SchComponent = { id: newId(kind, sch.components), kind, gx, gy, rotation: placeRotation, value: DEFAULT_VALUE[kind] }
+    const c: SchComponent = { id: newId(kind, sch.components), kind, gx, gy, rotation: placeRotation, value: DEFAULT_VALUE[kind], part: DEFAULT_PART[kind] }
     snapshot()
     setSch((s) => ({ ...s, components: [...s.components, c] }))
     setSelected(c.id)
@@ -467,6 +474,13 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     snapshot()
     const value = k === 'led' ? 2.0 : k === 'zener' ? 3.3 : undefined
     setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, kind: k, value } : c) }))
+  }
+
+  // SCH-8: choose the ADALP2000 transistor part (sets the NPN/PNP or N/P-channel model body).
+  function setSelPart(part: string) {
+    if (!sel) return
+    snapshot()
+    setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, part } : c) }))
   }
 
   // A pin is powered if a wire reaches it or another part's terminal sits on it.
@@ -688,6 +702,16 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                 </select>
               </div>
             )}
+            {(sel.kind === 'bjt' || sel.kind === 'mosfet') && (
+              <div className="control-row-inline">
+                <label>Part</label>
+                <select value={sel.part ?? ''} onChange={(e) => setSelPart(e.target.value)} style={{ width: 150 }}>
+                  {Object.entries(TRANSISTOR_PARTS)
+                    .filter(([, p]) => sel.kind === 'bjt' ? (p.type === 'npn' || p.type === 'pnp') : (p.type === 'nmos' || p.type === 'pmos'))
+                    .map(([name, p]) => <option key={name} value={name}>{name} ({p.type.toUpperCase()})</option>)}
+                </select>
+              </div>
+            )}
             {UNIT[sel.kind] && (
               <div className="control-row-inline">
                 <label>Value ({UNIT[sel.kind]})</label>
@@ -854,6 +878,55 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
         <line x1={cx + 5} y1={y + 9} x2={cx + 9} y2={y + 9} stroke={stroke} strokeWidth={sw} />
         <line x1={cx + 5} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
         {upright(cx, y - 15, <text x={cx} y={y - 15} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{c.id}</text>)}
+      </g>
+    )
+  } else if (c.kind === 'bjt') {
+    // terminals: collector (2,0) top-right, base (0,1) left, emitter (2,2) bottom-right.
+    const npn = (c.part ? TRANSISTOR_PARTS[c.part]?.type : 'npn') !== 'pnp'
+    const bx = ax + 18 // base bar x
+    inner = (
+      <g>
+        <line x1={ax} y1={ay + G(1)} x2={bx} y2={ay + G(1)} stroke={stroke} strokeWidth={sw} />
+        <line x1={bx} y1={ay + 12} x2={bx} y2={ay + 36} stroke={stroke} strokeWidth={sw} />
+        <line x1={bx} y1={ay + 18} x2={ax + G(2)} y2={ay} stroke={stroke} strokeWidth={sw} />
+        <line x1={bx} y1={ay + 30} x2={ax + G(2)} y2={ay + G(2)} stroke={stroke} strokeWidth={sw} />
+        {/* emitter arrow: NPN points out toward the emitter; PNP points in toward the base */}
+        <polygon points={npn
+          ? `${ax + 42},${ay + 44} ${ax + 34},${ay + 45} ${ax + 39},${ay + 37}`
+          : `${ax + 28},${ay + 36} ${ax + 32},${ay + 43} ${ax + 36},${ay + 36}`}
+          fill={stroke} stroke={stroke} strokeWidth={1} strokeLinejoin="round" />
+        {upright(ax + G(1), ay - 5, <text x={ax + G(1)} y={ay - 5} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{c.id}</text>)}
+        {upright(ax + G(1), ay + G(2) + 13, <text x={ax + G(1)} y={ay + G(2) + 13} fill="var(--text-primary)" fontSize={8} textAnchor="middle">{c.part ?? 'BJT'}</text>)}
+      </g>
+    )
+  } else if (c.kind === 'mosfet') {
+    // terminals: drain (2,0) top-right, gate (0,1) left, source (2,2) bottom-right.
+    const nch = (c.part ? TRANSISTOR_PARTS[c.part]?.type : 'nmos') !== 'pmos'
+    const gp = ax + 12 // gate plate x
+    const chx = ax + 18 // channel x
+    inner = (
+      <g>
+        <line x1={ax} y1={ay + G(1)} x2={gp} y2={ay + G(1)} stroke={stroke} strokeWidth={sw} />
+        <line x1={gp} y1={ay + 11} x2={gp} y2={ay + 37} stroke={stroke} strokeWidth={sw} />
+        {/* enhancement channel: three broken bars */}
+        <line x1={chx} y1={ay + 11} x2={chx} y2={ay + 19} stroke={stroke} strokeWidth={sw} />
+        <line x1={chx} y1={ay + 20} x2={chx} y2={ay + 28} stroke={stroke} strokeWidth={sw} />
+        <line x1={chx} y1={ay + 29} x2={chx} y2={ay + 37} stroke={stroke} strokeWidth={sw} />
+        {/* drain (top-right) */}
+        <line x1={chx} y1={ay + 15} x2={ax + 34} y2={ay + 15} stroke={stroke} strokeWidth={sw} />
+        <line x1={ax + 34} y1={ay + 15} x2={ax + 34} y2={ay} stroke={stroke} strokeWidth={sw} />
+        <line x1={ax + 34} y1={ay} x2={ax + G(2)} y2={ay} stroke={stroke} strokeWidth={sw} />
+        {/* source (bottom-right) */}
+        <line x1={chx} y1={ay + 33} x2={ax + 34} y2={ay + 33} stroke={stroke} strokeWidth={sw} />
+        <line x1={ax + 34} y1={ay + 33} x2={ax + 34} y2={ay + G(2)} stroke={stroke} strokeWidth={sw} />
+        <line x1={ax + 34} y1={ay + G(2)} x2={ax + G(2)} y2={ay + G(2)} stroke={stroke} strokeWidth={sw} />
+        {/* channel-type arrow on the source stub: NMOS points in toward the channel, PMOS out */}
+        <polygon points={nch
+          ? `${chx + 3},${ay + 33} ${chx + 9},${ay + 30} ${chx + 9},${ay + 36}`
+          : `${ax + 31},${ay + 33} ${ax + 25},${ay + 30} ${ax + 25},${ay + 36}`}
+          fill={stroke} stroke={stroke} strokeWidth={1} strokeLinejoin="round" />
+        {upright(ax + G(1), ay - 5, <text x={ax + G(1)} y={ay - 5} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{c.id}</text>)}
+        {upright(ax + G(1), ay + G(2) + 13, <text x={ax + G(1)} y={ay + G(2) + 13} fill="var(--text-primary)" fontSize={8} textAnchor="middle">{c.part ?? 'MOSFET'}</text>)}
       </g>
     )
   } else if (c.kind === 'vsource') {

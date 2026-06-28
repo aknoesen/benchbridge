@@ -3,6 +3,7 @@
 // model; `toCircuit()` is the seam consumed by the Network Analyzer / scope loop (SCH-2/LOOP-1).
 
 import type { Circuit, Component as SpiceComponent } from './netlist'
+import { TRANSISTOR_PARTS } from './netlist'
 
 export type SchKind =
   | 'resistor'
@@ -11,6 +12,8 @@ export type SchKind =
   | 'diode' // junction diode; terminal 'a' = anode, 'c' = cathode (bar end)
   | 'led' // LED; value = forward voltage Vf (V)
   | 'zener' // Zener diode; value = reverse breakdown voltage BV (V)
+  | 'bjt' // bipolar transistor (SCH-8); `part` picks NPN/PNP + model. Terminals c/b/e.
+  | 'mosfet' // MOSFET (SCH-8); `part` picks N/P channel + model. Terminals d/g/s.
   | 'vsource' // generator input source; terminal 'a' = +, 'b' = -
   | 'opamp'
   | 'lmc662' // LMC662 dual op-amp as an 8-pin DIP (two LMC662 sections + V+/V- rails)
@@ -36,6 +39,7 @@ export interface SchComponent {
   rotation?: number // 0..3 → 0/90/180/270 degrees clockwise (default 0)
   value?: number // ohms / farads / henries (vsource uses AC 1)
   opModel?: 'ideal' | 'lmc662' // for kind 'opamp': ideal VCVS or the LMC662 behavioural model
+  part?: string // for kind 'bjt' / 'mosfet': the ADALP2000 part name (key into TRANSISTOR_PARTS)
 }
 
 export interface Wire {
@@ -76,6 +80,20 @@ export function baseTerminals(kind: SchKind, opModel?: 'ideal' | 'lmc662'): SchT
       return [
         { name: 'a', gx: 0, gy: 0 }, // anode (triangle side)
         { name: 'c', gx: 2, gy: 0 }, // cathode (bar side)
+      ]
+    case 'bjt':
+      // base on the flat side (left), collector top-right, emitter bottom-right.
+      return [
+        { name: 'c', gx: 2, gy: 0 }, // collector
+        { name: 'b', gx: 0, gy: 1 }, // base
+        { name: 'e', gx: 2, gy: 2 }, // emitter
+      ]
+    case 'mosfet':
+      // gate on the left, drain top-right, source bottom-right (bulk tied to source in sim).
+      return [
+        { name: 'd', gx: 2, gy: 0 }, // drain
+        { name: 'g', gx: 0, gy: 1 }, // gate
+        { name: 's', gx: 2, gy: 2 }, // source
       ]
     case 'opamp':
       // The op-amp is always a real LMC662 (no package-less "ideal" variant). Its schematic symbol
@@ -405,7 +423,7 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
       : net
 
   const comps: SpiceComponent[] = []
-  let rc = 1, cc = 1, lc = 1, vc = 1, ec = 1, sc = 1, aw = 1, ic = 1, dd = 1
+  let rc = 1, cc = 1, lc = 1, vc = 1, ec = 1, sc = 1, aw = 1, ic = 1, dd = 1, qc = 1, mc = 1
   for (const c of s.components) {
     const ts = terminalsOf(c)
     if (c.kind === 'resistor' || c.kind === 'capacitor' || c.kind === 'inductor' || c.kind === 'vsource') {
@@ -426,6 +444,25 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
         p = { bv: c.value ?? 3.3 } // silicon forward (~0.7 V); reverse breaks down at −BV
       }
       comps.push({ kind: 'diode', id: String(dd++), nodes: [na, nk], ...p })
+    } else if (c.kind === 'bjt') {
+      // Resolve the kit part (NPN/PNP + .model body) from its name; default to a generic NPN.
+      const tn = new Map(ts.map((x) => [x.name, rename(netOf(x.gx, x.gy))]))
+      const part = c.part ? TRANSISTOR_PARTS[c.part] : undefined
+      const polarity = part?.type === 'pnp' ? 'pnp' : 'npn'
+      comps.push({
+        kind: 'bjt', id: String(qc++),
+        nodes: [tn.get('c')!, tn.get('b')!, tn.get('e')!],
+        polarity, ...(part ? { model: part.model } : {}),
+      })
+    } else if (c.kind === 'mosfet') {
+      const tn = new Map(ts.map((x) => [x.name, rename(netOf(x.gx, x.gy))]))
+      const part = c.part ? TRANSISTOR_PARTS[c.part] : undefined
+      const channel = part?.type === 'pmos' ? 'pmos' : 'nmos'
+      comps.push({
+        kind: 'mosfet', id: String(mc++),
+        nodes: [tn.get('d')!, tn.get('g')!, tn.get('s')!],
+        channel, ...(part ? { model: part.model } : {}),
+      })
     } else if (c.kind === 'awg1' || c.kind === 'awg2') {
       // Generator output through the M2K AWG output impedance: an ideal source then a 49.9 Ohm
       // series resistor (R132 after the AD8000 buffer) into the wired node. Loading the generator

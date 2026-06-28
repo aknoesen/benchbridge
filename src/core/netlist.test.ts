@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { Simulation } from 'eecircuit-engine'
-import { buildNetlist, makeInputSource, type Circuit } from './netlist'
+import { buildNetlist, makeInputSource, TRANSISTOR_PARTS, type Circuit } from './netlist'
 
 // RC low-pass: fc = 1/(2*pi*R*C) = 1/(2*pi*1k*159.155n) ≈ 1000 Hz.
 const rc: Circuit = {
@@ -68,5 +68,51 @@ describe('buildNetlist', () => {
     expect(cutoff).not.toBeNull()
     expect(cutoff as number).toBeGreaterThan(900)
     expect(cutoff as number).toBeLessThan(1100)
+  }, 30000)
+})
+
+describe('transistors (SCH-8)', () => {
+  it('emits a BJT Q line + NPN .model card with the part body', () => {
+    const c: Circuit = { title: 't', components: [
+      { kind: 'bjt', id: '1', nodes: ['c', 'b', 'e'], polarity: 'npn', model: TRANSISTOR_PARTS['2N3904'].model },
+      { kind: 'ground', id: '0', node: '0' },
+    ] }
+    const nl = buildNetlist(c, { kind: 'op' })
+    expect(nl).toContain('Q1 c b e QM1')          // collector base emitter <model>
+    expect(nl).toMatch(/\.model QM1 NPN\(.*BF=300.*\)/)
+  })
+
+  it('emits a PNP .model for a pnp part, and a generic body when none given', () => {
+    const c: Circuit = { title: 't', components: [
+      { kind: 'bjt', id: '2', nodes: ['c', 'b', 'e'], polarity: 'pnp' },
+      { kind: 'ground', id: '0', node: '0' },
+    ] }
+    expect(buildNetlist(c, { kind: 'op' })).toMatch(/\.model QM2 PNP\(BF=100/)
+  })
+
+  it('emits a MOSFET M line with bulk tied to source + an NMOS .model', () => {
+    const c: Circuit = { title: 't', components: [
+      { kind: 'mosfet', id: '1', nodes: ['d', 'g', 's'], channel: 'nmos', model: TRANSISTOR_PARTS['ZVN2110A'].model },
+      { kind: 'ground', id: '0', node: '0' },
+    ] }
+    const nl = buildNetlist(c, { kind: 'op' })
+    expect(nl).toContain('M1 d g s s MM1')        // drain gate source bulk(=source) <model>
+    expect(nl).toMatch(/\.model MM1 NMOS\(.*VTO=1\.5.*\)/)
+  })
+
+  it('ngspice accepts the transistor model cards (an NMOS .op solves)', async () => {
+    // Gate at +5 V (on); drain fed from +5 V through 1k; source to ground.
+    const c: Circuit = { title: 'nmos op', components: [
+      { kind: 'dcrail', id: 'g', node: 'gate', volts: 5 },
+      { kind: 'dcrail', id: 'd', node: 'vdd', volts: 5 },
+      { kind: 'resistor', id: '1', nodes: ['vdd', 'drain'], ohms: 1000 },
+      { kind: 'mosfet', id: '1', nodes: ['drain', 'gate', '0'], channel: 'nmos', model: TRANSISTOR_PARTS['ZVN2110A'].model },
+      { kind: 'ground', id: '0', node: '0' },
+    ] }
+    const sim = new Simulation()
+    await sim.start()
+    sim.setNetList(buildNetlist(c, { kind: 'op' }))
+    const r = await sim.runSim()
+    expect(r.variableNames.some((nm) => nm.toLowerCase().includes('drain'))).toBe(true)
   }, 30000)
 })

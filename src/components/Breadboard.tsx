@@ -7,6 +7,7 @@ import {
   buildHoles, boardNets, boardWidth, boardHeight, PAD, PITCH, CHANNEL_SLOT,
   schematicExpectation, checkEquivalence, type BoardLayout, type CheckResult,
   dipPinHoles, dipCols, holeKey, DIP_TOP_ROW, DIP_BOT_ROW,
+  to92PinHoles, to92Legend, TO92_ROW,
   TERMINALS, type Terminal, POWER_WIRES, PORT_TERMINAL, unboardable,
 } from '../core/breadboard'
 import { type Schematic, type SchKind } from '../core/schematic'
@@ -20,6 +21,7 @@ type Tool =
   | { kind: 'jumper' }
   | { kind: 'placePart'; id: string; partKind: SchKind }
   | { kind: 'placeDip'; id: string; partKind: SchKind }
+  | { kind: 'placeTransistor'; id: string; partKind: SchKind }
 
 const NET_COLORS = ['#f0a030', '#40c0e0', '#44dd88', '#e06fd0', '#d0d040', '#7a8cff', '#ff8855', '#55ddcc']
 // A ¼ W axial resistor's body is ~0.25"; with its leads bent down it spans about 5 holes (0.5") and
@@ -31,6 +33,8 @@ const LMC662_FN = ['OUT A', '−IN A', '+IN A', 'V−', '+IN B', '−IN B', 'OUT
 const INA125_FN = ['V+', 'SLEEP', 'V−', 'VREFOUT', 'IAREF', 'VIN−', 'VIN+', 'RG', 'RG', 'VO', 'Sense', 'VREFCOM', 'VREFBG', 'VREF2.5', 'VREF5', 'VREF10']
 const DIP_FN: Record<string, string[]> = { lmc662: LMC662_FN, ina125: INA125_FN }
 const DIP_NAME: Record<string, string> = { lmc662: 'LMC662', ina125: 'INA125' }
+// TO-92 discrete transistors (SCH-8). Leg order matches to92Legend / the schematic terminal order.
+const TR_NAME: Record<string, string> = { bjt: 'BJT', mosfet: 'MOSFET' }
 // 0-based pin indices of the V+/V− pins per DIP (for colouring the power pins).
 const DIP_RAILS: Record<string, { vpos: number; vneg: number }> = { lmc662: { vpos: 7, vneg: 3 }, ina125: { vpos: 0, vneg: 2 } }
 
@@ -87,6 +91,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
     for (const p of board.parts) { used.add(nets.get(p.aHole)!); used.add(nets.get(p.bHole)!) }
     for (const j of board.jumpers) { used.add(nets.get(j.a)!); used.add(nets.get(j.b)!) }
     for (const d of (board.dips ?? [])) for (const k of (dipPinHoles(d.kind, d.col) ?? [])) used.add(nets.get(k)!)
+    for (const t of (board.transistors ?? [])) for (const k of (to92PinHoles(t.col) ?? [])) used.add(nets.get(k)!)
     const m = new Map<string, string>()
     let i = 0
     for (const n of used) { if (n) { m.set(n, NET_COLORS[i % NET_COLORS.length]); i++ } }
@@ -119,6 +124,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
   const SUPPLY_HOLE: Record<string, string> = { pos: '#5a2a2a', neg: '#23304a', gnd: '#3a3a3a' }
   const placedPart = new Map(board.parts.map((p) => [p.id, p]))
   const placedDip = new Map((board.dips ?? []).map((d) => [d.id, d]))
+  const placedTr = new Map((board.transistors ?? []).map((t) => [t.id, t]))
   // Components with no board footprint (op-amps/in-amps) → this circuit can't be transferred.
   const blockers = useMemo(() => unboardable(schematic), [schematic])
   const boardable = blockers.length === 0
@@ -172,6 +178,18 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
       }
       const dip = { id: tool.id, kind: tool.partKind, col: h.col }
       setBoard((b) => ({ ...b, dips: [...(b.dips ?? []).filter((d) => d.id !== tool.id), dip] }))
+      setTool({ kind: 'select' })
+      return
+    }
+    if (tool.kind === 'placeTransistor') {
+      const h = holeByKey.get(key)!
+      // Anchor is the left leg: a term-row hole with two more isolated columns to its right.
+      if (h.row !== TO92_ROW || !to92PinHoles(h.col)) {
+        setCheck({ ok: false, message: `Click a hole in row ${TO92_ROW} (left leg); the TO-92 needs 3 adjacent columns.` })
+        return
+      }
+      const tr = { id: tool.id, kind: tool.partKind, col: h.col }
+      setBoard((b) => ({ ...b, transistors: [...(b.transistors ?? []).filter((t) => t.id !== tool.id), tr] }))
       setTool({ kind: 'select' })
       return
     }
@@ -235,7 +253,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
         if (isLab) {
           snapshotSchematic?.()
           setSchematic({ components: s.components, wires: s.wires })
-          setBoard({ parts: b.parts, jumpers: b.jumpers, ports: Array.isArray(b.ports) ? b.ports : [], dips: Array.isArray(b.dips) ? b.dips : [] })
+          setBoard({ parts: b.parts, jumpers: b.jumpers, ports: Array.isArray(b.ports) ? b.ports : [], dips: Array.isArray(b.dips) ? b.dips : [], transistors: Array.isArray(b.transistors) ? b.transistors : [] })
           const g = d.generators
           if (g && g.w1 && g.w2 && onLoadGenerators) onLoadGenerators(g.w1, g.w2)
           setTool({ kind: 'select' }); setPending(null)
@@ -244,7 +262,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
           // A plain circuit file: load the circuit and start the board empty so the student places it.
           snapshotSchematic?.()
           setSchematic({ components: d.components, wires: d.wires })
-          setBoard({ parts: [], jumpers: [], ports: [], dips: [] })
+          setBoard({ parts: [], jumpers: [], ports: [], dips: [], transistors: [] })
           setTool({ kind: 'select' }); setPending(null)
           setCheck({ ok: true, message: `loaded circuit ${f.name} — board starts empty, place the parts` })
         } else {
@@ -408,6 +426,38 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                 </g>
               )
             })}
+            {(board.transistors ?? []).map((t) => {
+              const pins = to92PinHoles(t.col); if (!pins) return null
+              const legs = pins.map((k) => pos(k))
+              const labels = to92Legend(t.kind)
+              const cx = legs[1].x
+              const legTopY = legs[0].y - 13       // where the legs disappear into the body
+              const bodyBot = legTopY, bodyTop = bodyBot - 24
+              const halfW = (legs[2].x - legs[0].x) / 2 + 7
+              return (
+                <g key={t.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
+                  onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, transistors: (bb.transistors ?? []).filter((x) => x.id !== t.id) })); setCheck(null) } }}>
+                  {/* legs: one short lead from each hole up to the package face */}
+                  {legs.map((g, i) => {
+                    const net = nets.get(pins[i])!
+                    const col = (showNets && activeColor.get(net)) || '#cfcfcf'
+                    return (
+                      <g key={i}>
+                        <line x1={g.x} y1={g.y} x2={g.x} y2={legTopY} stroke="#9aa0a6" strokeWidth={1.5} />
+                        <circle cx={g.x} cy={g.y} r={3.2} fill={col} stroke="#000" strokeWidth={0.5}>
+                          <title>{`${t.id} ${labels[i]}`}</title>
+                        </circle>
+                        <text x={g.x} y={g.y + 12} fontSize={9} fontWeight={800} fill="#9aa0a6" textAnchor="middle">{labels[i]}</text>
+                      </g>
+                    )
+                  })}
+                  {/* TO-92 package: flat front (bottom edge), rounded back (top) — datasheet face order */}
+                  <path d={`M ${cx - halfW} ${bodyBot} L ${cx + halfW} ${bodyBot} L ${cx + halfW} ${bodyTop + 7} A ${halfW} 7 0 0 0 ${cx - halfW} ${bodyTop + 7} Z`}
+                    fill="#1b1b1f" stroke="#888" strokeWidth={1} />
+                  <text x={cx} y={(bodyBot + bodyTop) / 2 + 5} fontSize={8} fill="#cfcfcf" textAnchor="middle">{t.id} · {TR_NAME[t.kind] ?? t.kind}</text>
+                </g>
+              )
+            })}
             {TERMINALS.map((t) => {
               const x = termX(t), y = termY(t)
               const net = nets.get(t.key)
@@ -447,7 +497,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
             This circuit can't be transferred to a breadboard: {blockers.map((b) => `${b.id} (${b.kind})`).join(', ')} {blockers.length === 1 ? 'has' : 'have'} no board footprint yet. The breadboard currently supports passive and 2-terminal parts; op-amp / in-amp boarding is still to come.
           </div>
         )}
-        {exp.parts.length === 0 && exp.dips.length === 0 ? (
+        {exp.parts.length === 0 && exp.dips.length === 0 && exp.transistors.length === 0 ? (
           <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Draw a circuit in the Circuit tab above.</div>
         ) : (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -461,6 +511,12 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
               <button key={d.id} style={chip(placedDip.has(d.id), tool.kind === 'placeDip' && tool.id === d.id)}
                 onClick={() => { setTool({ kind: 'placeDip', id: d.id, partKind: d.kind }); setPending(null); setCheck(null) }}>
                 {placedDip.has(d.id) ? '✓ ' : ''}{d.id} (DIP)
+              </button>
+            ))}
+            {exp.transistors.map((t) => (
+              <button key={t.id} style={chip(placedTr.has(t.id), tool.kind === 'placeTransistor' && tool.id === t.id)}
+                onClick={() => { setTool({ kind: 'placeTransistor', id: t.id, partKind: t.kind }); setPending(null); setCheck(null) }}>
+                {placedTr.has(t.id) ? '✓ ' : ''}{t.id} (TO-92)
               </button>
             ))}
           </div>
@@ -549,6 +605,32 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
           </>
         )}
 
+        {exp.transistors.length > 0 && (
+          <>
+            <div className="section-title">TO-92 pinout</div>
+            <svg viewBox="0 0 200 96" preserveAspectRatio="xMidYMid meet" role="img" aria-label="TO-92 transistor pinout"
+              style={{ display: 'block', width: '100%', height: 92, flexShrink: 0, margin: '4px 0' }}>
+              {/* package face: flat front, rounded back — same orientation as the chip on the board */}
+              <path d="M 70 30 L 130 30 L 130 22 A 30 12 0 0 0 70 22 Z" fill="#1b1b1f" stroke="#888" strokeWidth={1.5} />
+              {(to92Legend(exp.transistors[0].kind)).map((lbl, i) => {
+                const x = 80 + i * 20
+                return (
+                  <g key={i}>
+                    <line x1={x} y1={30} x2={x} y2={56} stroke="#9aa0a6" strokeWidth={1.5} />
+                    <circle cx={x} cy={56} r={3} fill="#cfcfcf" />
+                    <text x={x} y={72} fontSize={11} fontWeight={800} fill="#cfcfcf" textAnchor="middle">{lbl}</text>
+                  </g>
+                )
+              })}
+            </svg>
+            <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: 2 }}>
+              Legs in package-face order: <b>{to92Legend(exp.transistors[0].kind).join(' – ')}</b>
+              {exp.transistors[0].kind === 'mosfet' ? ' (drain, gate, source).' : ' (collector, base, emitter).'} Click a hole to drop
+              the left leg; the three legs fill adjacent columns in that order. No supply pins — a discrete transistor needs no rail wiring.
+            </div>
+          </>
+        )}
+
         <div className="section-title">M2K terminals</div>
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
           The M2K connections are the fixed strips above and below the board — always there, like the
@@ -571,12 +653,13 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
         <div className="wave-selector">
           <button className={tool.kind === 'select' ? 'active' : ''} onClick={() => { setTool({ kind: 'select' }); setPending(null) }}>Select</button>
           <button className={tool.kind === 'jumper' ? 'active' : ''} onClick={() => { setTool({ kind: 'jumper' }); setPending(null) }}>Jumper</button>
-          <button onClick={() => { setBoard({ parts: [], jumpers: [], ports: [], dips: [] }); setCheck(null); setPending(null) }}>Clear</button>
+          <button onClick={() => { setBoard({ parts: [], jumpers: [], ports: [], dips: [], transistors: [] }); setCheck(null); setPending(null) }}>Clear</button>
         </div>
 
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.6 }}>
           {tool.kind === 'placePart' ? `Placing ${tool.id}: click two holes for its legs.`
             : tool.kind === 'placeDip' ? `Placing ${tool.id}: click a hole in row ${DIP_TOP_ROW} (top-left pin); the chip drops across the channel.`
+            : tool.kind === 'placeTransistor' ? `Placing ${tool.id}: click a hole in row ${TO92_ROW} (left leg); the TO-92's 3 legs drop into adjacent columns.`
             : tool.kind === 'jumper' ? 'Jumper: click two points — a hole or an M2K terminal — to wire them together.'
             : 'Select: click a placed part or jumper to remove it.'}
         </div>
