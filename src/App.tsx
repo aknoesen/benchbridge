@@ -334,6 +334,18 @@ export default function App() {
     try { localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ active, presetId })) } catch { /* quota */ }
   }, [active, presetId])
 
+  // Plotly charts (responsive:true) only re-fit on a window 'resize' event. Switching layout
+  // (preset ↔ single) changes a panel's width via React state with no resize event, so a chart can
+  // stay at its old split-view width — the "single view only shows part" bug. Fire a resize after
+  // the new layout has painted so every visible chart re-fits its container.
+  useEffect(() => {
+    let inner = 0
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => window.dispatchEvent(new Event('resize')))
+    })
+    return () => { cancelAnimationFrame(outer); cancelAnimationFrame(inner) }
+  }, [active, presetId])
+
   const preset = presetId ? PRESETS.find((p) => p.id === presetId) ?? null : null
   const panels: ActiveInstrument[] = preset ? preset.panels : [active]
   const arrange: Arrange = preset ? preset.arrange : 'single'

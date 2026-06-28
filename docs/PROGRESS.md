@@ -36,6 +36,26 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-27 — Fix: single view shows a half-width plot after leaving a split layout — DONE
+
+**By:** Cowork session (andre)
+**Commit:** uncommitted
+
+**What I did:**
+- Bug (andre): pick a Layouts preset (split), then go back to a single instrument → the plot only
+  fills part of the panel. Cause: Plotly charts use `responsive: true`, which re-fits only on a
+  window `resize` event. Switching layout resizes the container via React state with no resize event,
+  so the chart keeps its old split-view width.
+- Fix in `App.tsx`: a `useEffect` on `[active, presetId]` dispatches `window.dispatchEvent(new
+  Event('resize'))` after a double rAF (so the new layout has painted). All responsive Plotly charts
+  then re-fit. SVG views (schematic/board) already scale, so they were unaffected.
+
+**Verification (Definition of Done):**
+- tsc --noEmit clean: yes. 12-bit floor untouched: yes.
+- Logic: covers every layout transition (single↔preset, preset↔preset) since both deps drive it.
+
+---
+
 ### 2026-06-27 — EDIT-2: touch-connections auto-wire on move + junction dots — DONE
 
 **By:** Cowork session (andre)
