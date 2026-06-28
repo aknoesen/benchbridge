@@ -6,22 +6,6 @@ Informal jot list from demos and usage. Items here may graduate into ROADMAP pha
 
 ## 2026-06-26
 
-### LTSpice as a native SPICE engine (ADI API reportedly forthcoming)
-Per andre: Analog Devices is reportedly close to disclosing an API to drive **LTSpice**
-programmatically. LTSpice is ADI's own simulator and ships ADI's device-model library. Implication
-for Track G-B (native bridge): the `SpiceEngine` adapter can use LTSpice instead of ngspice, which
-buys real ADI-part fidelity (actual op-amps, in-amps, converters) and an all-ADI stack
-(LTSpice → iio-emu → Scopy → ADALM2000). The browser twin stays on ngspice-WASM, because only
-WebAssembly runs client-side with zero install. Captured in the Track G spec under "Engine choice."
-
-### iio-emu / real-Scopy integration → now Track G (spec written)
-After the AD meeting: AD's **iio-emu** (libiio/IIOD emulation server, ADIBSD) can drive **real
-Scopy** from files. The win: real Scopy → student's drawn circuit (ngspice via a bridge) → real
-Scopy, using AD's own software, no hardware. Plus AD's `adalm2000.xml` is the authoritative M2K
-device model to align our numbers to. Captured as **Track G** (`docs/specs/iio-scopy.md`): G-A
-fidelity alignment (cheap, browser, next), G-B SPICE-in-the-loop with real Scopy (native showcase),
-G-C browser-speaks-IIO (parked). Complementary native path, not a pivot.
-
 ### Two DACs — expose W2 as its own generator instrument
 The real M2K has **two arbitrary-waveform outputs, W1 and W2** (two DACs). The twin currently
 exposes only **W1** as a Signal Generator instrument (`params`). W2 exists in the model as the

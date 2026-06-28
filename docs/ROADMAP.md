@@ -41,9 +41,23 @@ Spec: `docs/specs/schematic-ngspice.md`
 | SCH-6 | Op-amp is LMC662-only (no package-less ideal): 3-pin schematic symbol, auto ±5 V in sim, boards as an 8-pin DIP whose V+/V− the Check requires on the rails. Replaces SCH-5's picker. | SCH-5, F-5 | DONE |
 | SCH-7 | INA125 instrumentation amp as the only in-amp (dropped ideal/3-op-amp): structural model (external R_G sets G = 4 + 60 kΩ/R_G, validated G=10); boards as a 16-pin DIP with pinout legend; rail-power Check (V+ pin1 / V− pin3). See `docs/specs/ina125.md`. | SCH-6, F-5 | DONE |
 | SCH-7b | INA125 auxiliary-pin straps from Lab 8 Fig 1: board Check enforces the datasheet-mandated chip wiring (SLEEP→V+, VREFout→VREF2.5, IAref→GND, Sense→Vo, VREFcom→GND) via a generic per-DIP `straps` mechanism; legend lists the required strapping. | SCH-7 | DONE |
+| SCH-8 | **Transistor models** — BJT (NPN/PNP → ngspice `Q` + `.model`), JFET (N/P → `J`), MOSFET (N/P → `M`, level-1 or a part model). Adds a new 3-terminal discrete-symbol class to the schematic, a TO-92 / 3-lead breadboard footprint, and a part library matching the **ADALP2000 kit**: `2N3904`/`2N3903` (NPN), `2N3906` (PNP), `ZVN2110A`/`ZVN3310A` (N-MOSFET), `ZVP2110A` (P-MOSFET). For the later analog/electronics courses, **not EEC1**. Mirrors the diode path (SCH/diode). | SCH-1, SPICE-2 | TODO |
+| SCH-9 | **Op-amp / amplifier library from the ADALP2000 kit.** Extend the op-amp from LMC662-only to a selectable set of the kit's parts, each a *behavioral macro of a real part* (GBW, slew, supply range, input type, rail-to-rail or not) with its own DIP footprint — **not** a package-less generic "ideal". Op-amps: `ADTL082` (JFET dual), `AD8542` (CMOS RRIO dual), `OP27`/`OP37` (precision bipolar; OP37 decompensated), `OP97` (precision µpower), `OP482`/`OP484` (JFET/RRIO quad). Plus `AD8226` as a second instrumentation amp alongside the INA125, and `AD8561` as a comparator. Selectable like the diode kinds. | SCH-6, SCH-7 | TODO |
+| SCH-10 | **Passives as pick-and-place kit values.** Today R/C/L take any value; add a quick-pick palette of the **ADALP2000 kit's stocked values** so students design with what they physically have. Keep free numeric entry, but add the palette and an optional "nearest kit value" snap/flag (a computed 3.7 kΩ flags to the stocked 4.7 kΩ). Also add the kit's **potentiometers** (5/10/50 kΩ), the **thermistor**, and a **polarized electrolytic** cap variant (the kit's ≥1 µF caps are polarized). Full value list + dielectric/polarity notes in `docs/specs/adalp2000-kit.md`. | SCH-1 | TODO |
+| SWEEP-1 | (Enables SCH-8 showcase) **Stepped/parametric DC sweep** for characteristic-curve families (Ic vs Vce stepped by Ib; MOSFET transfer/output curves). Today's I-V uses a single XY sweep; a family of curves needs a second, stepped source — a new analysis mode beyond `.tran`/`.ac`/`.op`. | SCH-8, OSC-5 | TODO |
 | KICAD-1 | (Stretch) KiCad netlist import | LOOP-1 | TODO |
 
 Notes:
+- **Parts library should track the ADALP2000 kit** (SCH-8 / SCH-9). The physical analog parts kit
+  that ships with the M2K is the authoritative list, so a student's on-screen parts match the parts
+  in their hand. Active analog parts in the kit:
+  op-amps ADTL082 / AD8542 / OP27 / OP37 / OP97 / OP482 / OP484, in-amps AD8226 (+ the INA125 from
+  Lab 8), comparator AD8561, transistors 2N3904/2N3903/2N3906 + ZVN2110A/ZVN3310A/ZVP2110A, diodes
+  1N914/1N4001 + Zeners (1N4735 etc.). The kit's existing diode/Zener parts already map onto the
+  built diode/zener kinds. Specialized kit parts (AD584 ref, LT3080/LT3092 regulators, AD592, AD654,
+  AD5626/AD7920, charge pumps, timers) are out of scope for the circuit twin. Full kit BOM (exact
+  R/C/L values, polarity/dielectric notes, the actives list) lives in `docs/specs/adalp2000-kit.md`.
+  Source: `wiki.analog.com/university/tools/adalp2000/parts-index`.
 - **Track A and Track B can run in parallel** up to the point LOOP-1 needs both
   `OSC-2` (a second channel to show circuit output) and `SCH-2` (a netlist to simulate).
 - `SPICE-1` and `SCH-1` have no dependency on each other and can be done in either order.
@@ -150,26 +164,6 @@ Decisions (locked with andre, 2026-06-26):
 - Prioritised **next** ahead of OSC-3/LOOP-2 at andre's direction — it bridges the Lab 1/2 gap
   (ideal schematic → physical bench). None of Track F touches `core/signal.ts`.
 
-## Track G — iio-emu / real-Scopy integration (andre, 2026-06-26, post-AD meeting)
-
-Spec: `docs/specs/iio-scopy.md`
-
-| Phase | Title | Depends on | Status |
-|-------|-------|-----------|--------|
-| G-A | Fidelity alignment: match the twin's params/names to AD's `adalm2000.xml` + ADC/DAC source | — | DONE |
-| G-B | SPICE-in-the-loop with **real Scopy** via iio-emu generic mode (bridge: TX file → ngspice → RX file) | G-A, SCH-2 | TODO |
-| G-C | (Long horizon, parked) browser twin speaks IIO via a libiio-over-WebSocket bridge | G-B | TODO |
-
-Notes:
-- **Complementary native path, not a pivot.** The browser twin stays the zero-install student tool;
-  Track G adds a lab/pro mode + the AD-facing showcase (real Scopy displaying a SPICE-simulated circuit).
-- **G-A is cheap and browser-only** — pull AD's authoritative M2K numbers (sample rate, 12-bit
-  scaling, ±range, channel names/scan formats) from `iiod/context/adalm2000/adalm2000.xml` +
-  `m2k_adc.cpp`/`m2k_dac.cpp` and reconcile with the twin's constants. Do it next; high credibility.
-- **G-B is the headline demo** but native/install-heavy (iio-emu + Scopy + a bridge running ngspice);
-  schedule deliberately, de-risk with a plain loopback first.
-- ADIBSD-licensed (permissive). None of Track G touches `core/signal.ts`.
-
 ## Track H — Onboarding / in-app Quickstart  ← requested (andre, 2026-06-27)
 
 Spec: `docs/specs/quickstart.md`
@@ -199,6 +193,24 @@ Notes:
 - **Delivery:** a Markdown/HTML doc rendered in-app (a `Quickstart` panel like `About`, or a
   modal off the Welcome screen). Keep it course-agnostic enough for any first-time user, with the
   EEC1 lab arc as the worked example. None of this touches `core/signal.ts`.
+
+## Track I — ADC/DAC fidelity & sampling control  ← planned (andre, 2026-06-28)
+
+The twin currently models **ADC** quantization (synthetic Gaussian noise in `computeSpectrum`) but
+the generator/**DAC** path is ideal, and the ADC sample rate is fixed at 100 kSa/s (displayed, not
+settable). These two items close that gap so students can run sampling-rate and quantization
+experiments. Both touch `core/signal.ts`, so the 12-bit canary must be re-verified after each.
+
+| ID | Deliverable | Depends on | Status |
+|----|-------------|-----------|--------|
+| SIG-1 | **Settable ADC sample rate.** A user control for the acquisition Fs (drives the Spectrum and the scope capture path), enabling aliasing (sub-Nyquist), oversampling noise-reduction, and the Fs/N/bin-width relationship. Keep zero-leakage framing: `snapDuration` already rounds to whole periods, but verify exact harmonic-bin landing at each offered rate. | — | TODO |
+| SIG-2 | **Optional DAC quantization** on the generator (W1/W2), modelling the M2K's 12-bit AWG DAC. **Default OFF** so the ADC bit-depth Learning Mode stays clean (an always-on DAC floor would muddy the ADC canary). When on, teaches "both ends quantize": DAC out, ADC in, sample rate the knob between. | SIG-1 | TODO |
+
+Notes:
+- The pedagogical pairing: SIG-2 (DAC out) + ADC quantization (in) + SIG-1 (sample rate between) is a
+  complete digitization story for EEC1's sampling/quantization labs.
+- **Canary:** with no circuit and the default rate, the 12-bit ADC floor must still sit at −104 dBFS.
+  SIG-2 must be verified OFF-by-default; SIG-1 must not reintroduce inter-harmonic leakage.
 
 ## Recommended session sequence
 

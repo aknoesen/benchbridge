@@ -1244,12 +1244,11 @@ only).
 
 **State for the next session:**
 - The twin is now demonstrably faithful to ADI's reference M2K model (documented in
-  `docs/reference/m2k-spec.md`), which backs the credibility claim in the Mark Thoren memo and
-  `POSITIONING.md`.
+  `docs/reference/m2k-spec.md`).
 - Noted fidelity enhancement: model the M2K's **two** scope ranges (±2.5 V high / ±25 V low) with a
   range selector so dBFS follows the range; the AWG can now drive the full ±5 V (viewed on ±25 V on
   real hardware).
-- Remaining Track G: G-B (native real-Scopy bridge). Elsewhere: OSC-3, LOOP-2, F-3, Track E.
+- Other open items: OSC-3, LOOP-2, F-3, Track E.
 
 ### 2026-06-26 — F-2: transfer schematic → breadboard + verification loop — DONE
 

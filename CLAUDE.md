@@ -253,10 +253,12 @@ twin offers is buildable; `docs/ROADMAP.md` is the phase-by-phase status of reco
    exercises (find harmonic content, measure −3 dB bandwidth, etc.).
 2. **Lab prelab integration** — `<!-- TWIN: -->` markers in the EEC1 lab instructions hook the
    twin into prelab sections.
-3. **Oversampling control** — noise reduction through faster sampling (Lab 3 sampling-rate point).
+3. **ADC/DAC fidelity & sampling control** (ROADMAP Track I) — a settable ADC sample rate (aliasing /
+   oversampling / Fs-N-bin-width, the Lab 3 sampling-rate point) and an *optional, default-off* DAC
+   quantization model on W1/W2 (the M2K's 12-bit AWG). Both touch `core/signal.ts`; re-verify the
+   12-bit canary, and keep DAC quantization off by default so the ADC Learning Mode stays clean.
 4. **KiCad netlist import** (ROADMAP `KICAD-1`).
 5. **True dockable panels + saveable workspaces** (ROADMAP Track E, beyond the E-1 preset layouts).
-6. **Real-Scopy / iio-emu integration** (ROADMAP Track G) — SPICE-in-the-loop with the real Scopy.
 
 ## Things NOT to change without understanding the math
 

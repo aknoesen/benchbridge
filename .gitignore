@@ -35,7 +35,9 @@ Video/
 *.mov
 desktop.ini
 
-# Stray local files — a one-off circuit folder and scratch verification scripts, not part of the app
+# Local strategy/vision material — never pushed to the public repo
+planning/
+ts, not part of the app
 Mk2 Digital Twin/
 _*.mts
 .synctest.txt
