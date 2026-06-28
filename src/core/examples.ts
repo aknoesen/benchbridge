@@ -67,7 +67,7 @@ function nonInvertingAmp(): Schematic {
       { id: 'U1', kind: 'opamp', gx: 10, gy: 4 },
       { id: 'Rf', kind: 'resistor', gx: 12, gy: 6, value: 10000 },
       { id: 'Rg', kind: 'resistor', gx: 10, gy: 6, rotation: 1, value: 10000 },
-      { id: 'G1', kind: 'ground', gx: 10, gy: 8 },
+      { id: 'G1', kind: 'ground', gx: 10, gy: 10 },
       { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },
       { id: 'P2', kind: 'scope2', gx: 6, gy: 2 },   // 2+ on the input (CH2 = drive)
     ],
@@ -77,6 +77,7 @@ function nonInvertingAmp(): Schematic {
       { x1: 10, y1: 6, x2: 12, y2: 6 }, // inN -> Rf.a (Rg.a shares inN at 10,6)
       { x1: 14, y1: 6, x2: 14, y2: 5 }, // Rf.b -> out
       { x1: 14, y1: 5, x2: 16, y2: 5 }, // out -> 1+
+      { x1: 10, y1: 8, x2: 10, y2: 10 },// Rg.b -> ground (explicit, so moves follow)
     ],
   }
 }
@@ -91,18 +92,22 @@ export const EXAMPLES: Example[] = [
     // Voltmeter. CH1 (scope1) = midpoint (2.5 V), CH2 (scope2) = applied V+ (5 V). 2 V/div frames both.
     ch1Vdiv: 2, ch2Vdiv: 2,
     schematic: {
+      // Every connection is an explicit wire (not a coincidence of two legs at one grid point), so a
+      // student can drag any part and its wires follow — R1 and R2 behave the same.
       components: [
         { id: 'VP', kind: 'vplus', gx: 2, gy: 4 },
-        { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 10000 },
-        { id: 'R2', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 10000 },
-        { id: 'G1', kind: 'ground', gx: 6, gy: 6 },
-        { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },   // 1+ on the midpoint
+        { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 10000 },              // a=(4,4) b=(6,4)
+        { id: 'R2', kind: 'resistor', gx: 8, gy: 4, rotation: 1, value: 10000 }, // a=(8,4) b=(8,6)
+        { id: 'G1', kind: 'ground', gx: 8, gy: 8 },
+        { id: 'P1', kind: 'scope1', gx: 10, gy: 4 },  // 1+ on the midpoint
         { id: 'P2', kind: 'scope2', gx: 2, gy: 2 },   // 2+ on the applied V+
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },   // V+ -> R1.a (applied)
         { x1: 2, y1: 4, x2: 2, y2: 2 },   // V+ -> 2+
-        { x1: 6, y1: 4, x2: 8, y2: 4 },   // midpoint -> 1+
+        { x1: 6, y1: 4, x2: 8, y2: 4 },   // R1.b -> R2.a (the midpoint link)
+        { x1: 8, y1: 4, x2: 10, y2: 4 },  // midpoint -> 1+
+        { x1: 8, y1: 6, x2: 8, y2: 8 },   // R2.b -> ground
       ],
     },
   },
@@ -115,12 +120,13 @@ export const EXAMPLES: Example[] = [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
         { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 1600 },
         { id: 'C1', kind: 'capacitor', gx: 6, gy: 4, rotation: 1, value: 1e-7 },
-        { id: 'G1', kind: 'ground', gx: 6, gy: 6 },
+        { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },
         { x1: 6, y1: 4, x2: 8, y2: 4 },
+        { x1: 6, y1: 6, x2: 6, y2: 8 },   // shunt leg -> ground (explicit, so moves follow)
       ],
     },
   },
@@ -133,12 +139,13 @@ export const EXAMPLES: Example[] = [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
         { id: 'C1', kind: 'capacitor', gx: 4, gy: 4, value: 1e-7 },
         { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 1600 },
-        { id: 'G1', kind: 'ground', gx: 6, gy: 6 },
+        { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },
         { x1: 6, y1: 4, x2: 8, y2: 4 },
+        { x1: 6, y1: 6, x2: 6, y2: 8 },   // shunt leg -> ground (explicit, so moves follow)
       ],
     },
   },
@@ -151,12 +158,13 @@ export const EXAMPLES: Example[] = [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
         { id: 'L1', kind: 'inductor', gx: 4, gy: 4, value: 1e-2 },
         { id: 'C1', kind: 'capacitor', gx: 6, gy: 4, rotation: 1, value: 1e-6 },
-        { id: 'G1', kind: 'ground', gx: 6, gy: 6 },
+        { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },
         { x1: 6, y1: 4, x2: 8, y2: 4 },
+        { x1: 6, y1: 6, x2: 6, y2: 8 },   // shunt leg -> ground (explicit, so moves follow)
       ],
     },
   },
@@ -169,12 +177,13 @@ export const EXAMPLES: Example[] = [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
         { id: 'C1', kind: 'capacitor', gx: 4, gy: 4, value: 1e-6 },
         { id: 'L1', kind: 'inductor', gx: 6, gy: 4, rotation: 1, value: 1e-2 },
-        { id: 'G1', kind: 'ground', gx: 6, gy: 6 },
+        { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },
         { x1: 6, y1: 4, x2: 8, y2: 4 },
+        { x1: 6, y1: 6, x2: 6, y2: 8 },   // shunt leg -> ground (explicit, so moves follow)
       ],
     },
   },
@@ -197,15 +206,17 @@ export const EXAMPLES: Example[] = [
     schematic: {
       components: [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
-        { id: 'L1', kind: 'inductor', gx: 4, gy: 4, value: 0.1 },
-        { id: 'C1', kind: 'capacitor', gx: 6, gy: 4, value: 1e-7 },
-        { id: 'R1', kind: 'resistor', gx: 8, gy: 4, rotation: 1, value: 100 },
-        { id: 'G1', kind: 'ground', gx: 8, gy: 6 },
-        { id: 'P1', kind: 'scope1', gx: 10, gy: 4 },
+        { id: 'L1', kind: 'inductor', gx: 4, gy: 4, value: 0.1 },           // a=(4,4) b=(6,4)
+        { id: 'C1', kind: 'capacitor', gx: 8, gy: 4, value: 1e-7 },         // a=(8,4) b=(10,4)
+        { id: 'R1', kind: 'resistor', gx: 10, gy: 4, rotation: 1, value: 100 }, // a=(10,4) b=(10,6)
+        { id: 'G1', kind: 'ground', gx: 10, gy: 8 },
+        { id: 'P1', kind: 'scope1', gx: 12, gy: 4 },
       ],
       wires: [
-        { x1: 2, y1: 4, x2: 4, y2: 4 },   // W1 -> L.a
-        { x1: 8, y1: 4, x2: 10, y2: 4 },  // node (across R) -> 1+
+        { x1: 2, y1: 4, x2: 4, y2: 4 },    // W1 -> L.a
+        { x1: 6, y1: 4, x2: 8, y2: 4 },    // L.b -> C.a (series link, explicit)
+        { x1: 10, y1: 4, x2: 12, y2: 4 },  // node (across R) -> 1+
+        { x1: 10, y1: 6, x2: 10, y2: 8 },  // R.b -> ground (explicit, so moves follow)
       ],
     },
   },
@@ -335,7 +346,7 @@ export const EXAMPLES: Example[] = [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
         { id: 'D1', kind: 'diode', gx: 4, gy: 4 },               // anode (4,4) → cathode (6,4)
         { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 220 }, // sense R to ground
-        { id: 'G1', kind: 'ground', gx: 6, gy: 6 },
+        { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'S1', kind: 'scope1', gx: 4, gy: 2 },              // 1+ on the anode
         { id: 'A1', kind: 'adc1n', gx: 8, gy: 4 },               // 1- on the cathode → CH1 = V across diode
         { id: 'S2', kind: 'scope2', gx: 6, gy: 2 },              // 2+ on the cathode → CH2 = I·Rsense
@@ -345,6 +356,7 @@ export const EXAMPLES: Example[] = [
         { x1: 4, y1: 4, x2: 4, y2: 2 },  // anode -> 1+
         { x1: 6, y1: 4, x2: 8, y2: 4 },  // cathode -> 1-
         { x1: 6, y1: 4, x2: 6, y2: 2 },  // cathode -> 2+
+        { x1: 6, y1: 6, x2: 6, y2: 8 },  // sense R -> ground (explicit, so moves follow)
       ],
     },
   },
@@ -358,7 +370,7 @@ export const EXAMPLES: Example[] = [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
         { id: 'Z1', kind: 'zener', gx: 4, gy: 4, value: 3.3 },
         { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 220 },
-        { id: 'G1', kind: 'ground', gx: 6, gy: 6 },
+        { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'S1', kind: 'scope1', gx: 4, gy: 2 },   // 1+ anode
         { id: 'A1', kind: 'adc1n', gx: 8, gy: 4 },    // 1- cathode → CH1 = V across Zener
         { id: 'S2', kind: 'scope2', gx: 6, gy: 2 },   // 2+ cathode → CH2 = I·Rsense
@@ -368,6 +380,7 @@ export const EXAMPLES: Example[] = [
         { x1: 4, y1: 4, x2: 4, y2: 2 },
         { x1: 6, y1: 4, x2: 8, y2: 4 },
         { x1: 6, y1: 4, x2: 6, y2: 2 },
+        { x1: 6, y1: 6, x2: 6, y2: 8 },  // sense R -> ground (explicit, so moves follow)
       ],
     },
   },

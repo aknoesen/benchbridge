@@ -36,6 +36,35 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-27 — Fix: examples broke connections when a part was dragged — DONE
+
+**By:** Cowork session (andre)
+**Commit:** uncommitted
+
+**What I did:**
+- Bug (andre): load the voltage divider, drag R2 → it disconnects; dragging R1 keeps its wires.
+  Root cause: EDIT-1's move only carries *explicit* wire endpoints sitting on a moved part's
+  terminals. Connections made by **coincidence** (two legs sharing a grid point with no wire) snap on
+  move. R1 had wires on both legs; R2's links (R1.b↔R2.a, R2.b↔ground) were coincidence-only.
+- Wrote a coincidence audit (`terminalsOf` + wire endpoints) and found the same fragile pattern in 8
+  more examples (mostly a shunt leg sitting directly on the ground symbol; plus the rlc series L–C
+  junction). Fixed every one by spreading the parts a slot apart and adding an explicit wire (moved
+  the ground down a row, added "leg → ground" wires; relaid the divider and rlc-bandpass).
+- Now every example connection is an explicit wire, so dragging any part keeps its connections.
+
+**Verification (Definition of Done):**
+- Coincidence audit: 0 fragile connections remain (was 9 examples).
+- `computeNets` on the relaid divider and rlc-bandpass: nets unchanged (divider = V+/midpoint/gnd;
+  rlc = series L-C-R, output across R). Electrically identical.
+- tsc --noEmit clean: yes. 12-bit floor untouched: yes.
+
+**State for the next session:**
+- Authoring rule: never rely on two component terminals coinciding at one grid point — always join
+  them with an explicit wire (and keep a 1-cell gap), or the connection breaks when a student drags
+  the part. The audit script logic lives in this entry if it needs to be re-run.
+
+---
+
 ### 2026-06-27 — Prelab image export: schematic + board → PNG — DONE
 
 **By:** Cowork session (andre)
