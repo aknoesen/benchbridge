@@ -10,6 +10,20 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Next session: start here (updated 2026-06-28)
 
+**SCH-10 (passives as kit values) is DONE.** A new pure/tested `core/kit.ts` holds the verified
+ADALP2000 catalogs (R/C/L/pots) with `kitValues` / `isKitValue` / `nearestKitValue` / `formatValue`;
+the schematic inspector's passive Value field is now a **kit dropdown** with a back-compat "not in
+your parts kit" badge + one-click **snap to nearest** (off-kit values are never mutated on load).
+`examples.ts` was audited so every passive is a kit value, **except** `rlc-bandpass`, kept
+deliberately off-kit (100 mH inductor > kit's 10 mH max) as the warning demonstrator. No
+`potentiometer` schematic component exists, so the picker covers R/C/L only (the pot catalog is
+carried in kit.ts for a future phase). Next ROADMAP `TODO` is **KICAD-1** (stretch: KiCad netlist
+import). Full detail in the top log entry below.
+
+---
+
+### Earlier handoff (still relevant)
+
 **SWEEP-1 (hardware-faithful curve tracer) is DONE.** A new **Curve Tracer** instrument
 (`components/CurveTracer.tsx` + `core/curvetracer.ts`) traces BJT/MOSFET output-characteristic
 families by N stepped `.tran` passes (W1 sweeps Vds/Vce, W2 steps Vgs / Vbb→Ib, current via a sense
@@ -50,6 +64,65 @@ the top log entry below.
 ---
 
 ## Log
+
+### 2026-06-28 — SCH-10 passives as ADALP2000 kit values — DONE
+
+**By:** Claude Code session
+**Commit:** uncommitted
+
+**What I did:**
+- `core/kit.ts` (new, pure/tested): the verified ADALP2000 catalogs as typed constants in SI base
+  units — resistors (20 × 1/4 W, 1.1 Ω…5 MΩ), capacitors (13, 39 pF…220 µF), inductors (5 Coilcraft
+  RFB0807, 1 µH…10 mH with part numbers), potentiometers (5/10/50 kΩ). Helpers: `kitValues(kind)`,
+  `isKitValue(kind,value)` (0.5% relative tolerance), `nearestKitValue(kind,value)` (snap on LOG
+  distance so cross-decade is correct), `formatValue(kind,value)` (single source of engineering-unit
+  rendering; catalog labels are generated from it). The 6.2 Ω 10 W power resistor is exported
+  separately (`POWER_RESISTOR`) and kept OUT of the pick list / isKitValue / nearestKitValue so a
+  1/4 W resistor is never auto-snapped to it.
+- `core/kit.test.ts` (new, 10 tests): catalog exactness (values/counts/part numbers), power-resistor
+  exclusion, `isKitValue` member-vs-near-miss + tolerance band, `nearestKitValue` cross-decade snaps
+  (1.2 kΩ→1 kΩ, 3 kΩ→2.2 kΩ, 1.3 kΩ→1.5 kΩ, 100 mH→10 mH), `formatValue` units (pF/nF/µF, Ω/kΩ/MΩ,
+  µH/mH), and that every catalog label equals `formatValue`.
+- `components/SchematicEditor.tsx` (the passive inspector): the R/C/L Value field is now a dropdown
+  populated from `kitValues`. A loaded off-kit value is NOT mutated — it shows as a flagged
+  `<value> — not in kit` option plus a "⚠ not in your parts kit" badge and a "Snap to <nearest>"
+  button (snapshots for undo, then sets the kit value). LED/Zener/dcrail keep the free numeric input
+  (not kit passives). The JSON data model is unchanged (still SI base units).
+- `core/examples.ts`: audited every passive to a kit value — fixed `rc-lp`/`rc-hp` (1.6 kΩ→1.5 kΩ),
+  `inv-amp` (Rf 22 kΩ→20 kΩ, renamed ×−2.2→×−2), `integrator` (Rf 22 kΩ→20 kΩ, ~70→~80 Hz corner),
+  `diode-iv`/`zener-iv` sense R (220 Ω→470 Ω; sense voltage = Vin−Vf is independent of R, so the I-V
+  curve is unchanged). Kept `rlc-bandpass` deliberately off-kit (100 mH inductor, above the kit's
+  10 mH max) as the warning demonstrator and noted it in the blurb. The mounted
+  `inverting-amp-LMC662.json` already complied (1 kΩ / 10 kΩ), unchanged.
+
+**Verification (Definition of Done):**
+- build clean: YES — `npm run build` (`tsc && vite build`) clean.
+- tests: `npm test -- --run` → **110 passed** (9 files; +10 new kit tests).
+- live app (dev server + Chrome): R1 (100 Ω) inspector shows the 20-value kit dropdown with "100 Ω"
+  selected, no 6.2 Ω entry, no badge; loading `rlc-bandpass` flags L1 "⚠ not in your parts kit" with
+  "Snap to 10 mH" → clicking it set L1 to 0.01 H, badge cleared, canvas relabelled "10mH"; `inv-amp`
+  loaded with Rin 10 kΩ / Rf 20 kΩ; **no console errors**.
+- 12-bit canary: confirmed in the running Spectrum Analyzer — floor line at **−104.29 dBFS**
+  (identical to SWEEP-1). `core/signal.ts` and the FFT path were not touched.
+
+**Files outside the suggested allowed set:** none beyond what the spec already listed. The "passive
+inspector component" is `components/SchematicEditor.tsx` (it hosts the property panel) — within scope.
+
+**State for the next session:**
+- `formatValue` in `core/kit.ts` is now a second engineering-unit formatter alongside `fmtEng` in
+  `core/units.ts`; kit labels use the former (with the "µ"/space/unit style the spec wanted), the
+  canvas part labels still use `fmtEng`. Fine as-is; could be unified later if desired.
+- The ROADMAP SCH-10 row also mentioned pot/thermistor/electrolytic *components* and a "nearest kit
+  value" snap on free entry. Per the provided `SCH-10-spec.md` (value availability for R/C/L/pot
+  only), this phase delivered the catalog + snap + kit picker. Adding actual potentiometer /
+  thermistor / polarized-electrolytic schematic components needs `schematic.ts` (terminals, toCircuit,
+  symbols) and is a separate phase, not done here. The pot catalog is ready in kit.ts for it.
+- Next ROADMAP `TODO`: **KICAD-1** (stretch, KiCad netlist import).
+
+**Open questions / flags for andre:**
+- `rlc-bandpass` is intentionally the one off-kit example (100 mH inductor) so the "not in your parts
+  kit" warning is demonstrable from a shipped example. Say if you'd rather make it kit-buildable
+  (would change its Q/framing) or drop the example.
 
 ### 2026-06-28 — SWEEP-1 parametric curve tracer (W1 sweep + W2 step + scope XY) — DONE
 

@@ -45,7 +45,7 @@ function invertingAmp(): Schematic {
       { id: 'W1', kind: 'awg1', gx: 2, gy: 6 },
       { id: 'Rin', kind: 'resistor', gx: 4, gy: 6, value: 10000 },
       { id: 'U1', kind: 'opamp', gx: 10, gy: 4 },
-      { id: 'Rf', kind: 'resistor', gx: 10, gy: 8, value: 22000 },
+      { id: 'Rf', kind: 'resistor', gx: 10, gy: 8, value: 20000 },
       { id: 'G1', kind: 'ground', gx: 8, gy: 4 },
       { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },
       { id: 'P2', kind: 'scope2', gx: 2, gy: 8 },   // 2+ on the input (CH2 = drive)
@@ -121,7 +121,7 @@ export const EXAMPLES: Example[] = [
     schematic: {
       components: [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
-        { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 1600 },
+        { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 1500 },
         { id: 'C1', kind: 'capacitor', gx: 6, gy: 4, rotation: 1, value: 1e-7 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
@@ -141,7 +141,7 @@ export const EXAMPLES: Example[] = [
       components: [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
         { id: 'C1', kind: 'capacitor', gx: 4, gy: 4, value: 1e-7 },
-        { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 1600 },
+        { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 1500 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
       ],
@@ -191,8 +191,8 @@ export const EXAMPLES: Example[] = [
     },
   },
   {
-    id: 'inv-amp', name: 'Inverting amp ×−2.2 (LMC662)', group: 'Amplifiers',
-    blurb: 'LMC662 op-amp on ±5 V rails. Gain −Rf/Rin = −2.2 (CH2 in, CH1 out — note the inversion). Buildable on the breadboard as an 8-pin DIP.',
+    id: 'inv-amp', name: 'Inverting amp ×−2 (LMC662)', group: 'Amplifiers',
+    blurb: 'LMC662 op-amp on ±5 V rails. Gain −Rf/Rin = −2 (Rf 20 kΩ, Rin 10 kΩ — both kit values; CH2 in, CH1 out, note the inversion). Buildable on the breadboard as an 8-pin DIP.',
     w1: sine(1000), ch1Vdiv: 1, ch2Vdiv: 1,
     schematic: invertingAmp(),
   },
@@ -204,7 +204,7 @@ export const EXAMPLES: Example[] = [
   },
   {
     id: 'rlc-bandpass', name: 'RLC band-pass (~1.6 kHz)', group: 'Passive',
-    blurb: 'Series L-C with output across R. Peaks at resonance (Q ≈ 7).',
+    blurb: 'Series L-C with output across R. Peaks at resonance (Q ≈ 10). Note: the 100 mH inductor is above the kit\'s 10 mH max, so the inspector flags it "not in your parts kit" — a simulation-only demo (everything else loads as kit values).',
     w1: sine(1600), ch1Vdiv: 0.2,
     schematic: {
       components: [
@@ -225,9 +225,9 @@ export const EXAMPLES: Example[] = [
   },
   {
     id: 'integrator', name: 'Integrator (LMC662)', group: 'Amplifiers',
-    blurb: 'LMC662 op-amp on ±5 V rails. Inverting integrator (Rf bounds DC gain, ~70 Hz corner). Drive well above the corner and a triangle integrates to a parabolic wave (CH2 in, CH1 out). Buildable on the breadboard as an 8-pin DIP.',
-    // Drive at 1 kHz, ~14× above the ~70 Hz corner, so it integrates cleanly: output extrema land on
-    // the input zero-crossings. (τ = RfCf = 2.2 ms stays under the sim window, so it settles with no
+    blurb: 'LMC662 op-amp on ±5 V rails. Inverting integrator (Rf bounds DC gain, ~80 Hz corner). Drive well above the corner and a triangle integrates to a parabolic wave (CH2 in, CH1 out). Buildable on the breadboard as an 8-pin DIP.',
+    // Drive at 1 kHz, ~12× above the ~80 Hz corner, so it integrates cleanly: output extrema land on
+    // the input zero-crossings. (τ = RfCf = 2 ms stays under the sim window, so it settles with no
     // offset drift.) CH1 = output (~0.5 Vpp, 100 mV/div), CH2 = input (4 Vpp, 1 V/div).
     w1: { waveType: 'triangle', frequency: 1000, amplitude: 2, offset: 0, dutyCycle: 50, samplingRate: 100000, duration: 0.016 },
     ch1Vdiv: 0.1, ch2Vdiv: 1,
@@ -237,7 +237,7 @@ export const EXAMPLES: Example[] = [
         { id: 'Rin', kind: 'resistor', gx: 4, gy: 6, value: 10000 },
         { id: 'U1', kind: 'opamp', gx: 10, gy: 4 },
         { id: 'Cf', kind: 'capacitor', gx: 10, gy: 8, value: 1e-7 },
-        { id: 'Rf', kind: 'resistor', gx: 10, gy: 10, value: 22000 },
+        { id: 'Rf', kind: 'resistor', gx: 10, gy: 10, value: 20000 },
         { id: 'G1', kind: 'ground', gx: 8, gy: 4 },
         { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },
         { id: 'P2', kind: 'scope2', gx: 2, gy: 8 },
@@ -348,7 +348,7 @@ export const EXAMPLES: Example[] = [
       components: [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
         { id: 'D1', kind: 'diode', gx: 4, gy: 4 },               // anode (4,4) → cathode (6,4)
-        { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 220 }, // sense R to ground
+        { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 470 }, // sense R to ground
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'S1', kind: 'scope1', gx: 4, gy: 2 },              // 1+ on the anode
         { id: 'A1', kind: 'adc1n', gx: 8, gy: 4 },               // 1- on the cathode → CH1 = V across diode
@@ -372,7 +372,7 @@ export const EXAMPLES: Example[] = [
       components: [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
         { id: 'Z1', kind: 'zener', gx: 4, gy: 4, value: 3.3 },
-        { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 220 },
+        { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 470 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'S1', kind: 'scope1', gx: 4, gy: 2 },   // 1+ anode
         { id: 'A1', kind: 'adc1n', gx: 8, gy: 4 },    // 1- cathode → CH1 = V across Zener

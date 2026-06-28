@@ -10,6 +10,7 @@ import { buildNetlist, TRANSISTOR_PARTS } from '../core/netlist'
 import { EXAMPLES } from '../core/examples'
 import { createSpiceEngine, type SpiceEngine, transferFunction } from '../core/spice'
 import { UNIT, TUNE_RANGE, fmtEng, parseEng, tunePos, tuneValue } from '../core/units'
+import { kitValues, isKitValue, nearestKitValue, formatValue, type PassiveKind } from '../core/kit'
 import { exportSvgToPng } from './exportImage'
 import './Instrument.css'
 
@@ -44,6 +45,10 @@ const TOOLS: { tool: Tool; label: string }[] = [
 
 // UNIT, TUNE_RANGE, fmtEng, parseEng, tunePos, tuneValue now live in core/units.ts (shared
 // with the Network Analyzer tune knobs). DEFAULT_VALUE stays here — it is editor-only.
+// SCH-10: passive kinds whose value is picked from the ADALP2000 kit catalog (PassiveKind names
+// match these SchKinds). No 'potentiometer' SchKind exists yet, so the picker covers R/C/L only.
+const KIT_PASSIVE = new Set<SchKind>(['resistor', 'capacitor', 'inductor'])
+
 const DEFAULT_VALUE: Partial<Record<SchKind, number>> = {
   resistor: 1000, capacitor: 100e-9, inductor: 1e-3, dcrail: 5, vplus: 5, vminus: -5,
   led: 2.0, zener: 3.3,
@@ -715,7 +720,41 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                 </select>
               </div>
             )}
-            {UNIT[sel.kind] && (
+            {KIT_PASSIVE.has(sel.kind) ? (() => {
+              // SCH-10 kit picker: a value can only be one the student physically has. A loaded
+              // off-kit value (legacy file / live-tuned) is NOT mutated — it shows flagged with a
+              // one-click snap to the nearest kit value.
+              const pk = sel.kind as PassiveKind
+              const v = sel.value ?? 0
+              const onKit = isKitValue(pk, v)
+              const near = nearestKitValue(pk, v)
+              return (
+                <>
+                  <div className="control-row-inline" title="Pick a value from your ADALP2000 parts kit">
+                    <label>Value</label>
+                    <select value={onKit ? String(near.value) : '__off'}
+                      onChange={(e) => { if (e.target.value !== '__off') { snapshot(); setSelValueNum(Number(e.target.value)) } }}
+                      style={{ width: 150 }}>
+                      {!onKit && <option value="__off">{formatValue(pk, v)} — not in kit</option>}
+                      {kitValues(pk).map((p) => (
+                        <option key={p.value} value={String(p.value)}>{p.label}{p.partNumber ? ` (${p.partNumber})` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {!onKit && (
+                    <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, color: '#ffaa55', border: '1px solid #ffaa55' }}>
+                        ⚠ not in your parts kit
+                      </span>
+                      <button className="run-btn" title={`Snap to the nearest kit value (${near.label})`}
+                        onClick={() => { snapshot(); setSelValueNum(near.value) }}>
+                        Snap to {near.label}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )
+            })() : UNIT[sel.kind] ? (
               <div className="control-row-inline">
                 <label>Value ({UNIT[sel.kind]})</label>
                 <input type="text" defaultValue={fmtEng(sel.value ?? 0)} key={sel.id + ':' + (sel.value ?? 0)}
@@ -723,7 +762,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                   onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                   style={{ width: 80 }} />
               </div>
-            )}
+            ) : null}
             {TUNE_RANGE[sel.kind] && (() => {
               const [lo, hi] = TUNE_RANGE[sel.kind]!
               return (
