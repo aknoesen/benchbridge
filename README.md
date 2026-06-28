@@ -75,4 +75,4 @@ See `CLAUDE.md` for the signal-math constitution and `docs/` for the engineering
 
 ## License
 
-MIT. See `LICENSE`.
+Apache-2.0. See `LICENSE`.

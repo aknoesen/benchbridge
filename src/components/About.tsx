@@ -1,4 +1,4 @@
-// About panel — app identity, MIT license, and third-party open-source credits.
+// About panel — app identity, Apache-2.0 license, and third-party open-source credits.
 import './Instrument.css'
 
 const REPO = 'https://github.com/aknoesen/BridgeM2K'
@@ -26,7 +26,7 @@ export default function About() {
 
           <h3 style={{ marginBottom: 4 }}>License</h3>
           <p style={{ marginTop: 0 }}>
-            BridgeM2K is open source under the <b>MIT License</b>. © 2026 aknoesen.{' '}
+            BridgeM2K is open source under the <b>Apache License 2.0</b>. © 2026 André Knoesen.{' '}
             <a href={REPO} target="_blank" rel="noopener noreferrer" style={link}>Source on GitHub</a>.
           </p>
 

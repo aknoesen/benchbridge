@@ -1,0 +1,10 @@
+BridgeM2K
+Copyright 2026 André Knoesen
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party components are distributed under their own permissive licenses:
+- eecircuit-engine (ngspice-WASM wrapper) — MIT
+- ngspice (via eecircuit-engine) — BSD
+- Plotly.js — MIT
+- React, Vite — MIT

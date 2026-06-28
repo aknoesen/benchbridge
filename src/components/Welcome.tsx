@@ -48,7 +48,7 @@ export default function Welcome({ onEnter, onQuickstart }: Props) {
       </button>
 
       <div style={{ position: 'absolute', bottom: 18, fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>
-        Open source · MIT License ·{' '}
+        Open source · Apache-2.0 ·{' '}
         <a href="https://github.com/aknoesen/BridgeM2K" target="_blank" rel="noopener noreferrer" style={{ color: AGGIE_GOLD }}>GitHub</a>
       </div>
 
