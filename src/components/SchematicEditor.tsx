@@ -610,6 +610,25 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
               ))}
             </g>
           ))}
+
+          {/* junction dots — a filled dot where two pins butt together (a touch-connection) or three
+              or more pins/wires meet, so "these are electrically connected here" is always visible. */}
+          {(() => {
+            const cnt = new Map<string, { t: number; w: number; x: number; y: number }>()
+            const bump = (x: number, y: number, k: 't' | 'w') => {
+              const e = cnt.get(`${x},${y}`) ?? { t: 0, w: 0, x, y }
+              e[k]++; cnt.set(`${x},${y}`, e)
+            }
+            for (const c of sch.components) for (const t of terminalsOf(c)) bump(t.gx, t.gy, 't')
+            for (const w of sch.wires) { bump(w.x1, w.y1, 'w'); bump(w.x2, w.y2, 'w') }
+            const dots: ReactElement[] = []
+            for (const e of cnt.values()) {
+              if (e.t >= 2 || e.t + e.w >= 3) {
+                dots.push(<circle key={`j${e.x},${e.y}`} cx={px(e.x)} cy={px(e.y)} r={4} fill="var(--wire-color)" pointerEvents="none" />)
+              }
+            }
+            return dots
+          })()}
         </svg>
       </div>
 

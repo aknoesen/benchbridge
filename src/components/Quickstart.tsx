@@ -305,7 +305,10 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
               <span style={stepNum}>1</span>
               <div style={{ flex: 1 }}>
                 <b>Draw &amp; simulate.</b> Open the Circuit editor, build (or load an example), and the
-                instruments read it live.
+                instruments read it live. Parts connect where their pins meet a wire or another pin —
+                a small <b>dot</b> marks every connected node, so you can see what's joined. Tip: when
+                two pins should connect, run a <b>wire</b> between them (drag a part and its wires
+                follow); just touching also connects, and dragging the part later keeps that link.
                 <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('schematic')}>Open Circuit editor →</button></div>
               </div>
             </div>

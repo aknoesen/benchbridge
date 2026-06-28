@@ -207,6 +207,34 @@ export function attachedWireEnds(s: Schematic, c: SchComponent): WireEndRef[] {
   return out
 }
 
+// Touch-connections (two terminals sharing a grid point with no wire) would silently break when a
+// part is dragged away. For each terminal of the moved set whose OLD position is also occupied by a
+// *stationary* component terminal, return a new wire bridging that point to the terminal's new
+// location — so the connection rubber-bands into a real, visible wire instead of snapping.
+export function bridgeWiresForMove(
+  s: Schematic, movedIds: Set<string>, dgx: number, dgy: number,
+): Wire[] {
+  if (dgx === 0 && dgy === 0) return []
+  const stationary = new Set<string>()
+  for (const c of s.components) {
+    if (movedIds.has(c.id)) continue
+    for (const t of terminalsOf(c)) stationary.add(key(t.gx, t.gy))
+  }
+  const bridges: Wire[] = []
+  const seen = new Set<string>()
+  for (const c of s.components) {
+    if (!movedIds.has(c.id)) continue
+    for (const t of terminalsOf(c)) {
+      const p = key(t.gx, t.gy)
+      if (stationary.has(p) && !seen.has(p)) {
+        seen.add(p)
+        bridges.push({ x1: t.gx, y1: t.gy, x2: t.gx + dgx, y2: t.gy + dgy })
+      }
+    }
+  }
+  return bridges
+}
+
 // Move component `id` to (gx,gy), carrying the given attached wire endpoints by the same delta.
 export function moveComponentWithWires(
   s: Schematic, id: string, gx: number, gy: number, attached: WireEndRef[],
@@ -216,14 +244,18 @@ export function moveComponentWithWires(
   const dgx = gx - c.gx, dgy = gy - c.gy
   if (dgx === 0 && dgy === 0) return s
   const m = new Set(attached.map((a) => `${a.index}:${a.end}`))
+  const bridges = bridgeWiresForMove(s, new Set([id]), dgx, dgy)
   return {
     components: s.components.map((x) => (x.id === id ? { ...x, gx, gy } : x)),
-    wires: s.wires.map((w, i) => {
-      let nw = w
-      if (m.has(`${i}:1`)) nw = { ...nw, x1: nw.x1 + dgx, y1: nw.y1 + dgy }
-      if (m.has(`${i}:2`)) nw = { ...nw, x2: nw.x2 + dgx, y2: nw.y2 + dgy }
-      return nw
-    }),
+    wires: [
+      ...s.wires.map((w, i) => {
+        let nw = w
+        if (m.has(`${i}:1`)) nw = { ...nw, x1: nw.x1 + dgx, y1: nw.y1 + dgy }
+        if (m.has(`${i}:2`)) nw = { ...nw, x2: nw.x2 + dgx, y2: nw.y2 + dgy }
+        return nw
+      }),
+      ...bridges,
+    ],
   }
 }
 
@@ -241,14 +273,17 @@ export function moveComponentsBy(s: Schematic, ids: Set<string>, ddx: number, dd
   }
   return {
     components: s.components.map((c) => (moved.has(c.id) ? { ...c, gx: c.gx + ddx, gy: c.gy + ddy } : c)),
-    wires: s.wires.map((w) => {
-      const e1 = selCoords.has(key(w.x1, w.y1))
-      const e2 = selCoords.has(key(w.x2, w.y2))
-      return {
-        x1: e1 ? w.x1 + ddx : w.x1, y1: e1 ? w.y1 + ddy : w.y1,
-        x2: e2 ? w.x2 + ddx : w.x2, y2: e2 ? w.y2 + ddy : w.y2,
-      }
-    }),
+    wires: [
+      ...s.wires.map((w) => {
+        const e1 = selCoords.has(key(w.x1, w.y1))
+        const e2 = selCoords.has(key(w.x2, w.y2))
+        return {
+          x1: e1 ? w.x1 + ddx : w.x1, y1: e1 ? w.y1 + ddy : w.y1,
+          x2: e2 ? w.x2 + ddx : w.x2, y2: e2 ? w.y2 + ddy : w.y2,
+        }
+      }),
+      ...bridgeWiresForMove(s, moved, ddx, ddy),
+    ],
   }
 }
 
@@ -269,14 +304,17 @@ export function moveSelectionBy(
   }
   return {
     components: s.components.map((c) => (moved.has(c.id) ? { ...c, gx: c.gx + ddx, gy: c.gy + ddy } : c)),
-    wires: s.wires.map((w, i) => {
-      const m1 = selCoords.has(key(w.x1, w.y1)) || wireEnds.has(`${i}:1`)
-      const m2 = selCoords.has(key(w.x2, w.y2)) || wireEnds.has(`${i}:2`)
-      return {
-        x1: m1 ? w.x1 + ddx : w.x1, y1: m1 ? w.y1 + ddy : w.y1,
-        x2: m2 ? w.x2 + ddx : w.x2, y2: m2 ? w.y2 + ddy : w.y2,
-      }
-    }),
+    wires: [
+      ...s.wires.map((w, i) => {
+        const m1 = selCoords.has(key(w.x1, w.y1)) || wireEnds.has(`${i}:1`)
+        const m2 = selCoords.has(key(w.x2, w.y2)) || wireEnds.has(`${i}:2`)
+        return {
+          x1: m1 ? w.x1 + ddx : w.x1, y1: m1 ? w.y1 + ddy : w.y1,
+          x2: m2 ? w.x2 + ddx : w.x2, y2: m2 ? w.y2 + ddy : w.y2,
+        }
+      }),
+      ...bridgeWiresForMove(s, moved, ddx, ddy),
+    ],
   }
 }
 

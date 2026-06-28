@@ -36,6 +36,37 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-27 — EDIT-2: touch-connections auto-wire on move + junction dots — DONE
+
+**By:** Cowork session (andre)
+**Commit:** uncommitted
+
+**What I did (chosen approach #1 of the design options):** make touch-to-connect safe and visible so
+students never hit the silent-disconnect trap.
+- `schematic.ts`: new `bridgeWiresForMove(s, movedIds, dgx, dgy)` — for each moved terminal whose old
+  point also holds a *stationary* component terminal, emit a wire bridging that point to the new
+  location. Called from `moveComponentWithWires`, `moveComponentsBy`, `moveSelectionBy`. Net effect:
+  dragging a part rubber-bands any touch-connection into a real, visible wire instead of snapping it.
+- `SchematicEditor.tsx`: junction dots — a filled dot wherever 2+ pins butt together or 3+ pins/wires
+  meet, so "connected here" is always visible (standard schematic convention; teaches the node model).
+- `Quickstart.tsx`: short note that a dot marks a connected node and that wires (or touching) connect,
+  and dragging keeps the link.
+- Tests: added a `schematic.test.ts` block (touch-connection preserved on drag; group bridge only to
+  stationary terminals; zero-move adds nothing). Verified via tsx (4/4).
+
+**Verification (Definition of Done):**
+- tsc --noEmit clean: yes
+- bridge logic tested; existing moveComponentsBy/moveSelectionBy tests still hold (no stationary
+  foreign terminals in those → no spurious bridges): yes
+- 12-bit floor untouched (no core/signal.ts): yes
+
+**State for the next session:**
+- Touch-connection is now a first-class, safe workflow: it shows a junction dot and survives moves.
+  To disconnect, delete the bridging wire. Rotation (`rotateComponentWithWires`) does NOT yet bridge
+  touch-connections — left as-is (rare; parts are usually rotated before wiring). Add later if needed.
+
+---
+
 ### 2026-06-27 — Fix: examples broke connections when a part was dragged — DONE
 
 **By:** Cowork session (andre)

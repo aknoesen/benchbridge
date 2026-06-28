@@ -283,3 +283,35 @@ describe('moveSelectionBy (box group move incl. loose wires)', () => {
     expect(out.components[0].gy).toBe(5)
   })
 })
+
+import { moveComponentWithWires, attachedWireEnds, computeNets, bridgeWiresForMove } from './schematic'
+describe('touch-connections rubber-band into a wire on move (no silent break)', () => {
+  // R1.b and R2.a touch at (6,2) with NO wire between them.
+  const base: Schematic = {
+    components: [
+      { id: 'R1', kind: 'resistor', gx: 2, gy: 2, value: 1 }, // a=(2,2) b=(4,2)
+      { id: 'R2', kind: 'resistor', gx: 4, gy: 2, value: 1 }, // a=(4,2) b=(6,2)
+      { id: 'R3', kind: 'resistor', gx: 6, gy: 2, value: 1 }, // a=(6,2) b=(8,2) — touches R2.b
+    ],
+    wires: [],
+  }
+  const net = (s: Schematic, x: number, y: number) => computeNets(s).get(`${x},${y}`)
+
+  it('dragging R3 keeps it tied to R2 via an auto-inserted wire', () => {
+    const att = attachedWireEnds(base, base.components.find((c) => c.id === 'R3')!)
+    const out = moveComponentWithWires(base, 'R3', 6, 8, att) // drag down by 6
+    expect(out.wires.length).toBe(1) // one bridge wire appeared
+    expect(net(out, 6, 2)).toBe(net(out, 6, 8)) // R2.b still connected to R3.a's new spot
+  })
+
+  it('bridgeWiresForMove only bridges to stationary (non-moved) terminals', () => {
+    // Moving R2 and R3 together: their shared (6,2) touch is internal, but R2.a@(4,2) touches the
+    // stationary R1.b → exactly one bridge.
+    const b = bridgeWiresForMove(base, new Set(['R2', 'R3']), 0, 6)
+    expect(b).toEqual([{ x1: 4, y1: 2, x2: 4, y2: 8 }])
+  })
+
+  it('a zero move adds no wire', () => {
+    expect(bridgeWiresForMove(base, new Set(['R3']), 0, 0)).toEqual([])
+  })
+})
