@@ -246,7 +246,15 @@ export interface SchematicExpectation {
   parts: { id: string; kind: SchKind; a: string; b: string }[]
   // pinNets is indexed by DIP pin (pin1 = index 0). `undefined` = an unused pin (no constraint).
   // rails (when set) names the V+/V- pin indices the Check requires on the supply rails.
-  dips: { id: string; kind: SchKind; pinNets: (string | undefined)[]; rails?: { vpos: number; vneg: number } }[]
+  // straps (when set) are fixed chip-level connections the Check requires regardless of the
+  // schematic — a pin tied to a supply rail or to another pin (datasheet-mandated wiring such as
+  // the INA125's reference and sense straps). `pin`/`to` are 0-based pin indices; `to` may also be
+  // a rail name. `label` is the student-facing hint shown when the strap is missing.
+  dips: {
+    id: string; kind: SchKind; pinNets: (string | undefined)[]
+    rails?: { vpos: number; vneg: number }
+    straps?: { pin: number; to: number | 'V+' | 'V-' | 'GND'; label: string }[]
+  }[]
   ports: { name: string; net: string }[]
 }
 export function schematicExpectation(s: Schematic): SchematicExpectation {
@@ -269,17 +277,29 @@ export function schematicExpectation(s: Schematic): SchematicExpectation {
       const pinNets = [byName.get('out'), byName.get('inN'), byName.get('inP'), undefined, undefined, undefined, undefined, undefined]
       dips.push({ id: c.id, kind: 'lmc662', pinNets, rails: { vpos: 7, vneg: 3 } })
     } else if (c.kind === 'ina125') {
-      // INA125 → 16-pin DIP. Map the in-amp's used pins to the datasheet pinout (1-based):
-      // 5 IAREF, 6 VIN−, 7 VIN+, 8 RG, 9 RG, 10 VO; V+ (1) / V− (3) via the rails. Others unused.
+      // INA125 → 16-pin DIP. Map the in-amp's signal pins to the datasheet pinout (1-based):
+      // 6 VIN−, 7 VIN+, 8 RG, 9 RG, 10 VO; V+ (1) / V− (3) via the rails. The reference (IAref,
+      // VREFcom), sense, and sleep pins are not part of the abstract schematic symbol — they are
+      // fixed chip-level wiring (see Fig 1 / datasheet) enforced via `straps` so the student wires
+      // every pin the real INA125 needs to function. Other pins are unused.
       const byName = new Map(ts.map((t) => [t.name, netOf(t.gx, t.gy)]))
       const pinNets: (string | undefined)[] = new Array(16).fill(undefined)
-      pinNets[4] = byName.get('iaref') // pin 5
       pinNets[5] = byName.get('inN')   // pin 6
       pinNets[6] = byName.get('inP')   // pin 7
       pinNets[7] = byName.get('rg1')   // pin 8
       pinNets[8] = byName.get('rg2')   // pin 9
       pinNets[9] = byName.get('out')   // pin 10
-      dips.push({ id: c.id, kind: 'ina125', pinNets, rails: { vpos: 0, vneg: 2 } }) // V+ pin1, V− pin3
+      dips.push({
+        id: c.id, kind: 'ina125', pinNets,
+        rails: { vpos: 0, vneg: 2 },     // V+ pin1, V− pin3
+        straps: [
+          { pin: 1, to: 'V+', label: 'SLEEP (pin 2) → V+ rail (else the device stays in shutdown)' },
+          { pin: 3, to: 13, label: 'VREFout (pin 4) → VREF2.5 (pin 14) — strap the on-chip reference' },
+          { pin: 4, to: 'GND', label: 'IAref (pin 5) → GND (sets the output reference)' },
+          { pin: 10, to: 9, label: 'Sense (pin 11) → Vo (pin 10) — close the output-buffer feedback' },
+          { pin: 11, to: 'GND', label: 'VREFcom (pin 12) → GND' },
+        ],
+      })
     } else {
       const name = PORT_NAME[c.kind]
       if (name && !ports.has(name)) ports.set(name, netOf(ts[0].gx, ts[0].gy))
@@ -335,6 +355,17 @@ export function checkEquivalence(s: Schematic, board: BoardLayout, holes: Hole[]
       const vp = d.rails.vpos, vn = d.rails.vneg
       if (bn(holesForDip[vp] ?? '?') !== bn(PORT_TERMINAL['V+'])) return { ok: false, message: `Wire ${d.id} pin ${vp + 1} (V+) to the V+ rail.` }
       if (bn(holesForDip[vn] ?? '?') !== bn(PORT_TERMINAL['V-'])) return { ok: false, message: `Wire ${d.id} pin ${vn + 1} (V−) to the V− rail.` }
+    }
+    // Datasheet-mandated chip wiring (e.g. INA125 reference/sense/sleep straps). Each pin must
+    // share a node with its target — another pin, or a supply rail.
+    if (d.straps) {
+      for (const sp of d.straps) {
+        const pinNet = bn(holesForDip[sp.pin] ?? '?')
+        const target = typeof sp.to === 'number'
+          ? bn(holesForDip[sp.to] ?? '?')
+          : bn(PORT_TERMINAL[sp.to] ?? '?')
+        if (pinNet !== target) return { ok: false, message: `Wire ${d.id}: ${sp.label}.` }
+      }
     }
   }
   for (const p of exp.ports) {

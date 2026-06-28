@@ -36,6 +36,45 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-27 — SCH-7b INA125 auxiliary-pin straps (Lab 8 Fig 1) — DONE
+
+**By:** Cowork session (andre)
+**Commit:** uncommitted
+
+**What I did:**
+- Read Lab 8 Fig 1 (`INA125_complete-1.png`) directly. Confirmed the datasheet-mandated chip wiring
+  the real INA125 needs to function: SLEEP(2)→V+, VREFout(4)→VREF2.5(14), IAref(5)→GND,
+  Sense(11)→Vo(10), VREFcom(12)→GND (plus V+/V− on the rails).
+- `breadboard.ts`: added an optional `straps` field to the DIP expectation (pin → another pin or a
+  supply rail, with a student-facing label). The INA125 expectation now emits those five straps;
+  IAref moved off the schematic pinNets onto a strap (so the abstract symbol need not expose it).
+  `checkEquivalence` verifies each strap after the rails check and returns a per-strap hint.
+- `Breadboard.tsx`: INA125 pinout legend now splits **Signal** wiring from **Required strapping**
+  (gold heading) and notes the Check enforces each one.
+- Tests: added an INA125 strap block to `breadboard.test.ts` (full-strap pass + missing
+  Sense/VREFout/SLEEP flags). Verified via standalone tsx run — 5/5 pass.
+- Fixed a stale pin number in `docs/specs/ina125.md` (VREFCOM is pin 12, not 11) and documented the
+  strap table.
+
+**Verification (Definition of Done):**
+- tsc --noEmit clean (rename-busted the mounted files first): yes
+- vitest can't run in this sandbox (rolldown native binding missing) — ran the equivalence assertions
+  via `npx tsx`: full strap ok; each missing strap flagged with the right message.
+- 12-bit floor untouched (no `core/signal.ts` change): yes
+
+**State for the next session:**
+- Board Check now requires the full INA125 strapping, matching Lab 8 Prelab Deliverable #5 ("label/
+  wire every pin"). The schematic symbol stays abstract (functional pins only); the physical-build
+  realism lives on the board.
+- The strap mechanism is generic — any future DIP can declare `straps` the same way.
+
+**Open questions / flags for andre:**
+- Bridge excitation: Fig 1 drives the Wheatstone bridge from the VREF2.5 node. The app models the
+  source/divider abstractly, so the bridge itself isn't required on the board Check — only the chip
+  straps. Say if you want a bridge-excitation example added.
+
+---
+
 ### 2026-06-27 — SCH-7 INA125 instrumentation amp (only in-amp) — DONE
 
 **By:** Cowork session (andre)

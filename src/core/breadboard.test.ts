@@ -133,3 +133,48 @@ describe('breadboard DIP placement (F-3)', () => {
     expect(r.message.toLowerCase()).toContain('connects them')
   })
 })
+
+describe('breadboard INA125 auxiliary straps (SCH-7, Lab 8 Fig 1)', () => {
+  const holes = buildHoles()
+  const sch: Schematic = { components: [{ id: 'U1', kind: 'ina125', gx: 10, gy: 4 }], wires: [] }
+  // DIP at col 5: pin1=f5,2=f6,3=f7,4=f8,5=f9 … 10=e11,11=e10,12=e9,14=e7. Rails on TN(V+)/BP(V−),
+  // GND on the TP/BN outer rails (all pre-wired).
+  const wired = (): BoardLayout => ({
+    parts: [], ports: [],
+    dips: [{ id: 'U1', kind: 'ina125', col: 5 }],
+    jumpers: [
+      { a: 'f5', b: 'TN5' },  // pin 1  V+      → V+ rail
+      { a: 'f7', b: 'BP7' },  // pin 3  V−      → V− rail
+      { a: 'f6', b: 'TN6' },  // pin 2  SLEEP   → V+
+      { a: 'f8', b: 'e7' },   // pin 4  VREFout → pin 14 VREF2.5
+      { a: 'f9', b: 'TP9' },  // pin 5  IAref   → GND
+      { a: 'e10', b: 'e11' }, // pin 11 Sense   → pin 10 Vo
+      { a: 'e9', b: 'BN9' },  // pin 12 VREFcom → GND
+    ],
+  })
+
+  it('a fully strapped INA125 passes the Check', () => {
+    expect(checkEquivalence(sch, wired(), holes).ok).toBe(true)
+  })
+
+  it('flags a missing Sense→Vo strap', () => {
+    const b = wired(); b.jumpers = b.jumpers.filter((j) => j.a !== 'e10')
+    const r = checkEquivalence(sch, b, holes)
+    expect(r.ok).toBe(false)
+    expect(r.message).toContain('Sense')
+  })
+
+  it('flags a missing VREFout→VREF2.5 strap', () => {
+    const b = wired(); b.jumpers = b.jumpers.filter((j) => j.a !== 'f8')
+    const r = checkEquivalence(sch, b, holes)
+    expect(r.ok).toBe(false)
+    expect(r.message).toContain('VREF2.5')
+  })
+
+  it('flags a missing SLEEP→V+ strap', () => {
+    const b = wired(); b.jumpers = b.jumpers.filter((j) => j.a !== 'f6')
+    const r = checkEquivalence(sch, b, holes)
+    expect(r.ok).toBe(false)
+    expect(r.message).toContain('SLEEP')
+  })
+})

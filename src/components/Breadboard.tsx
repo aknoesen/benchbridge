@@ -515,8 +515,14 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
               })}
             </svg>
             <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: 4 }}>
-              Wire <b>VIN+</b> (7), <b>VIN−</b> (6), <b>VO</b> (10), <b>IAREF</b> (5)→GND, external <b>R_G</b> across
-              <b> 8–9</b> (sets gain), and power <b style={{ color: '#e04040' }}>V+</b> (1) / <b style={{ color: '#4a9eff' }}>V−</b> (3).
+              <b>Signal:</b> wire <b>VIN+</b> (7), <b>VIN−</b> (6), <b>VO</b> (10), and external <b>R_G</b> across
+              <b> 8–9</b> (sets gain). <b>Power:</b> <b style={{ color: '#e04040' }}>V+</b> (1) /
+              <b style={{ color: '#4a9eff' }}>V−</b> (3) to the rails.
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: 4 }}>
+              <b style={{ color: 'var(--ch1-color)' }}>Required strapping</b> (the chip won't work without it — see Lab 8 Fig 1):
+              <b> SLEEP</b> (2)→V+, <b>VREFout</b> (4)→<b>VREF2.5</b> (14), <b>IAref</b> (5)→GND,
+              <b> Sense</b> (11)→<b>VO</b> (10), <b>VREFcom</b> (12)→GND. The board <b>Check</b> enforces each one.
             </div>
           </>
         )}

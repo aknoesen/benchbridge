@@ -51,9 +51,9 @@ editor opens on the Select tool), so "load X, open Y, read Z" is reliable.
   user is on another panel (its steps send you elsewhere), so the way back is always obvious
   (`.nav-hint` in `App.css`, `quickstartSeen` in `App.tsx`).
 
-## QS-2 — guided instrument sequence (next, planned with andre 2026-06-27)
+## QS-2 — guided instrument sequence (BUILT 2026-06-27)
 
-Continue the same load-then-look flow through the natural lab order after the Voltmeter:
+Continues the same load-then-look flow through the natural lab order after the Voltmeter:
 
 1. **Signal Generator + Oscilloscope.** Drive W1, view it on the scope in normal **time-base (YT)**
    first. Then introduce **XY mode** — the **Zener I-V** example is the showcase (sweep, see the
