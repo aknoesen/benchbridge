@@ -36,6 +36,30 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-27 — Export PNG on every instrument (gen/scope/spectrum/network/voltmeter) — DONE
+
+**By:** Cowork session (andre)
+**Commit:** uncommitted
+
+**What I did:** added a top-header "Export PNG" button (same style as the circuit/board Save) to all
+instruments, all routed through the shared native Save dialog (`savePngBlob`, now exported).
+- `exportImage.ts`: added `exportPlotlyToPng(gd, filename)` (Plotly.toImage at 2x on the dark
+  --bg-display, WYSIWYG) and `exportPlotlyPairToPng(gds, filename)` (stacks magnitude+phase into one
+  PNG). Exposed `savePngBlob`. (`setBackground` is a real Plotly option missing from the typings →
+  small `ToImgOpts` cast.)
+- Buttons: SignalGenerator → `signal-generator.png`, Oscilloscope → `oscilloscope.png`,
+  SpectrumAnalyzer → `spectrum.png`, NetworkAnalyzer → `bode.png` (mag+phase stacked).
+- Voltmeter has no plot, so it draws its two readings onto a white canvas and saves `voltmeter.png`
+  via `savePngBlob`.
+
+**Verification (Definition of Done):**
+- tsc --noEmit clean: yes. 12-bit floor untouched: yes.
+- Background choice: instrument plots export on their own dark background (look like a scope screen);
+  the schematic/board stay white paper figures. Voltmeter readout is white. (Flag if you want the
+  plots on white too — needs a Plotly light-theme recolor, not just a bg swap.)
+
+---
+
 ### 2026-06-27 — Fix: single view shows a half-width plot after leaving a split layout — DONE
 
 **By:** Cowork session (andre)

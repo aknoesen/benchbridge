@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { SignalParams } from '../core/signal'
 import { createSpiceEngine, SpiceEngine, hasNode, differentialVoltage } from '../core/spice'
 import { buildNetlist, applyGeneratorParams, applySupplyRails, type Circuit, type SupplySettings } from '../core/netlist'
+import { savePngBlob } from './exportImage'
 import './Instrument.css'
 
 interface Props {
@@ -77,6 +78,37 @@ export default function Voltmeter({ circuit, probes, w1, w2, psu, compact }: Pro
     return rounded.toFixed(res < 0.01 ? 3 : 2) + ' V'
   }
 
+  // The voltmeter is an HTML readout (no plot), so draw the two readings onto a white canvas and
+  // save it through the same dialog the plots/diagrams use.
+  function exportPng() {
+    const rows = [
+      { label: 'Channel 1  (1+ − 1−)', value: fmt(ch1), color: CH1_COLOR },
+      { label: 'Channel 2  (2+ − 2−)', value: fmt(ch2), color: CH2_COLOR },
+    ]
+    const s = 2, W = 460, rowH = 92, pad = 24, H = pad * 2 + 24 + rows.length * rowH + 18
+    const canvas = document.createElement('canvas')
+    canvas.width = W * s; canvas.height = H * s
+    const ctx = canvas.getContext('2d'); if (!ctx) return
+    ctx.scale(s, s)
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H)
+    ctx.textBaseline = 'alphabetic'
+    ctx.fillStyle = '#222'; ctx.font = '600 16px sans-serif'
+    ctx.fillText('Voltmeter — DC', pad, pad + 6)
+    let y = pad + 28
+    for (const r of rows) {
+      ctx.fillStyle = '#f4f4f4'; ctx.fillRect(pad, y, W - pad * 2, rowH - 16)
+      ctx.strokeStyle = '#dcdcdc'; ctx.strokeRect(pad, y, W - pad * 2, rowH - 16)
+      ctx.fillStyle = r.color; ctx.font = '600 13px sans-serif'
+      ctx.fillText(r.label, pad + 16, y + 26)
+      ctx.fillStyle = '#111'; ctx.font = '30px monospace'
+      ctx.fillText(r.value, pad + 16, y + 60)
+      y += rowH
+    }
+    ctx.fillStyle = '#888'; ctx.font = '11px monospace'
+    ctx.fillText(status, pad, y + 4)
+    canvas.toBlob((b) => { if (b) void savePngBlob(b, 'voltmeter.png') }, 'image/png')
+  }
+
   const reading = (label: string, v: number | null, color: string) => (
     <div style={{ background: 'var(--bg-display)', border: '1px solid var(--border)', borderRadius: 4, padding: '14px 18px', marginBottom: 12 }}>
       <div style={{ fontSize: 12, color, fontWeight: 600, marginBottom: 4 }}>{label}</div>
@@ -93,6 +125,7 @@ export default function Voltmeter({ circuit, probes, w1, w2, psu, compact }: Pro
             <button className={`run-btn ${busy ? '' : 'active'}`} onClick={() => void measure()} disabled={busy}>
               {busy ? 'Measuring…' : '▶ Measure'}
             </button>
+            <button className="run-btn" title="Save the readings as a PNG" onClick={exportPng}>Export PNG</button>
           </div>
         </div>
         <div style={{ padding: 20, overflow: 'auto' }}>

@@ -10,6 +10,12 @@
 // lightness inverted (near-black background → white, light-grey text/wires → dark ink, hues kept),
 // the grid pattern is dropped, and the canvas is filled white. That reads cleanly on a white
 // Gradescope/Word page, where the unmodified light-on-dark palette would wash out.
+//
+// Instrument plots (scope/spectrum/generator/network) are Plotly graphs, not our SVGs, so they use
+// `exportPlotlyToPng` / `exportPlotlyPairToPng` below — rasterized via Plotly.toImage on their own
+// dark background (WYSIWYG, like a scope screen), then saved through the same Save dialog.
+
+import Plotly from 'plotly.js-dist-min'
 
 const PAINT_PROPS = [
   'fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-opacity',
@@ -83,7 +89,7 @@ function triggerDownload(href: string, filename: string) {
 
 // Save a PNG blob the way the circuit/lab saves work: the native Save dialog (name + folder) when the
 // browser supports it (Chrome/Edge), else a name prompt + download to the default folder.
-async function savePng(blob: Blob, suggestedName: string) {
+export async function savePngBlob(blob: Blob, suggestedName: string) {
   const sfp = (window as unknown as {
     showSaveFilePicker?: (o: {
       suggestedName?: string
@@ -157,8 +163,47 @@ export async function exportSvgToPng(svg: SVGSVGElement, filename: string, opts:
     ctx.drawImage(img, 0, 0, w, h)
     const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/png'))
     if (!blob) throw new Error('Could not encode the PNG.')
-    await savePng(blob, filename)
+    await savePngBlob(blob, filename)
   } finally {
     URL.revokeObjectURL(url)
   }
+}
+
+const displayBg = () =>
+  getComputedStyle(document.documentElement).getPropertyValue('--bg-display').trim() || '#0d0d0d'
+
+// Plotly's `setBackground` is a real toImage option but missing from the bundled typings.
+type ToImgOpts = Plotly.ToImgopts & { setBackground?: string }
+const toImg = (gd: HTMLElement, scale: number, w: number, h: number) =>
+  Plotly.toImage(gd, { format: 'png', scale, width: gd.clientWidth || w, height: gd.clientHeight || h, setBackground: displayBg() } as ToImgOpts)
+
+// Save one Plotly chart (scope / spectrum / generator) as a PNG on its own dark background.
+export async function exportPlotlyToPng(gd: HTMLElement, filename: string, scale = 2): Promise<void> {
+  const blob = await (await fetch(await toImg(gd, scale, 800, 400))).blob()
+  await savePngBlob(blob, filename)
+}
+
+// Save several Plotly charts stacked vertically as one PNG (e.g. the Network Analyzer's
+// magnitude + phase Bode plots in a single image).
+export async function exportPlotlyPairToPng(gds: HTMLElement[], filename: string, scale = 2): Promise<void> {
+  const bg = displayBg()
+  const imgs = await Promise.all(gds.filter(Boolean).map(async (gd) => {
+    const dataUrl = await toImg(gd, scale, 800, 300)
+    const im = new Image()
+    await new Promise<void>((res, rej) => { im.onload = () => res(); im.onerror = () => rej(new Error('render failed')); im.src = dataUrl })
+    return im
+  }))
+  if (!imgs.length) throw new Error('Nothing to export yet.')
+  const w = Math.max(...imgs.map((i) => i.width))
+  const h = imgs.reduce((s, i) => s + i.height, 0)
+  const canvas = document.createElement('canvas')
+  canvas.width = w; canvas.height = h
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas unavailable.')
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h)
+  let y = 0
+  for (const im of imgs) { ctx.drawImage(im, 0, y); y += im.height }
+  const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/png'))
+  if (!blob) throw new Error('Could not encode the PNG.')
+  await savePngBlob(blob, filename)
 }

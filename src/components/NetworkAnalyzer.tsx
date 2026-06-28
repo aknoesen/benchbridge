@@ -9,6 +9,7 @@ import { createSpiceEngine, SpiceEngine, transferFunction, analyzeBode, type Bod
 import { buildNetlist, type Circuit } from '../core/netlist'
 import { type SchKind } from '../core/schematic'
 import { UNIT, TUNE_RANGE, fmtEng, tunePos, tuneValue } from '../core/units'
+import { exportPlotlyPairToPng } from './exportImage'
 import './Instrument.css'
 
 // A component the student can tune live from the Bode panel (R/C/L of the drawn circuit).
@@ -232,6 +233,10 @@ export default function NetworkAnalyzer({ circuit = DEFAULT_CIRCUIT, dutName, pr
           <div className="display-controls">
             <button className={`run-btn ${busy ? '' : 'active'}`} onClick={() => void runSweep()} disabled={busy}>
               {busy ? 'Sweeping…' : '▶ Run sweep'}
+            </button>
+            <button className="run-btn" title="Save the Bode plot (magnitude + phase) as a PNG"
+              onClick={() => { const gs = [magRef.current, phaseRef.current].filter((g): g is HTMLDivElement => !!g); if (gs.length) exportPlotlyPairToPng(gs, 'bode.png').catch(() => {}) }}>
+              Export PNG
             </button>
           </div>
         </div>

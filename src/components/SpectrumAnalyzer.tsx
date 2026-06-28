@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Plotly from 'plotly.js-dist-min'
 import { SignalParams, computeSpectrum, theoreticalHarmonics, WindowType } from '../core/signal'
+import { exportPlotlyToPng } from './exportImage'
 import './Instrument.css'
 
 type Samples = { t: Float64Array; x: Float64Array }
@@ -250,6 +251,10 @@ export default function SpectrumAnalyzer({
           <div className="display-controls">
             <button className={`run-btn ${running ? 'active' : ''}`} onClick={onRunToggle}>
               {running ? '⏹ Stop' : '▶ Run'}
+            </button>
+            <button className="run-btn" title="Save this plot as a PNG"
+              onClick={() => { if (plotRef.current) exportPlotlyToPng(plotRef.current, 'spectrum.png').catch(() => {}) }}>
+              Export PNG
             </button>
           </div>
         </div>

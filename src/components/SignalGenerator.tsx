@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Plotly from 'plotly.js-dist-min'
 import { SignalParams, WaveType } from '../core/signal'
+import { exportPlotlyToPng } from './exportImage'
 import './Instrument.css'
 
 interface Props {
@@ -108,6 +109,10 @@ export default function SignalGenerator({ params, params2, signal, signal2, runn
           <div className="display-controls">
             <button className={`run-btn ${running ? 'active' : ''}`} onClick={onRunToggle}>
               {running ? '⏹ Stop' : '▶ Run'}
+            </button>
+            <button className="run-btn" title="Save this plot as a PNG"
+              onClick={() => { if (plotRef.current) exportPlotlyToPng(plotRef.current, 'signal-generator.png').catch(() => {}) }}>
+              Export PNG
             </button>
           </div>
         </div>

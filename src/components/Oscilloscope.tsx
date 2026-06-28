@@ -3,6 +3,7 @@ import Plotly from 'plotly.js-dist-min'
 import { SignalParams, generateSignal } from '../core/signal'
 import { captureWindow, measureTrace, SCOPE_H_DIVS, SCOPE_V_DIVS, type ScopeMeasurements } from '../core/scope'
 import { findEdgeTrigger, findEdgeTriggers, applyHoldoff, findPulseTrigger, nextTriggerState, type Slope, type TriggerMode, type PulsePolarity, type WidthMode } from '../core/trigger'
+import { exportPlotlyToPng } from './exportImage'
 import './Instrument.css'
 
 interface Samples { t: Float64Array; x: Float64Array }
@@ -316,6 +317,10 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
             </button>
             <button className={`run-btn ${running ? 'active' : ''}`} onClick={onRunToggle}>
               {running ? '⏹ Stop' : '▶ Run'}
+            </button>
+            <button className="run-btn" title="Save this plot as a PNG"
+              onClick={() => { if (plotRef.current) exportPlotlyToPng(plotRef.current, 'oscilloscope.png').catch(() => {}) }}>
+              Export PNG
             </button>
           </div>
         </div>
