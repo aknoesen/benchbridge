@@ -307,19 +307,21 @@ export const EXAMPLES: Example[] = [
     schematic: {
       components: [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
-        { id: 'U1', kind: 'ina125', gx: 8, gy: 4 },
-        { id: 'RG', kind: 'resistor', gx: 10, gy: 8, value: 10000 }, // R_G across the RG pins (8,8)-(12,8)
-        { id: 'G1', kind: 'ground', gx: 8, gy: 8 },                  // VIN− to ground
-        { id: 'G2', kind: 'ground', gx: 11, gy: 10 },               // IAREF to ground
-        { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },
+        { id: 'U1', kind: 'ina125', gx: 8, gy: 4 },           // pins: VIN+ (8,4) VIN− (8,6) VO (15,5) RG (10,8)(12,8) IAREF (14,8)
+        { id: 'RG', kind: 'resistor', gx: 10, gy: 10, value: 10000 }, // R_G, wired to the RG pins
+        { id: 'G1', kind: 'ground', gx: 8, gy: 8 },           // VIN− to ground
+        { id: 'G2', kind: 'ground', gx: 14, gy: 10 },         // IAREF to ground
+        { id: 'P1', kind: 'scope1', gx: 17, gy: 5 },
         { id: 'P2', kind: 'scope2', gx: 2, gy: 2 },
       ],
       wires: [
         { x1: 2, y1: 4, x2: 8, y2: 4 },    // W1 -> VIN+
         { x1: 2, y1: 4, x2: 2, y2: 2 },    // input -> 2+
         { x1: 8, y1: 6, x2: 8, y2: 8 },    // VIN− -> ground
-        { x1: 14, y1: 5, x2: 16, y2: 5 },  // VO -> 1+
-        { x1: 11, y1: 8, x2: 11, y2: 10 }, // IAREF -> ground
+        { x1: 10, y1: 8, x2: 10, y2: 10 }, // RG pin 8 -> R_G.a
+        { x1: 12, y1: 8, x2: 12, y2: 10 }, // RG pin 9 -> R_G.b
+        { x1: 14, y1: 8, x2: 14, y2: 10 }, // IAREF -> ground
+        { x1: 15, y1: 5, x2: 17, y2: 5 },  // VO -> 1+
       ],
     },
   },

@@ -488,16 +488,32 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
         {exp.dips.some((d) => d.kind === 'ina125') && (
           <>
             <div className="section-title">INA125 pinout (16-pin)</div>
-            <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 4 }}>
-              Pin 1 at the notch (lower-left), counter-clockwise. Hover a pin on the board for its name.
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1px 10px', fontSize: 10 }}>
-              {INA125_FN.map((fn, i) => (
-                <span key={i} style={{ color: i === 0 ? '#e04040' : i === 2 ? '#4a9eff' : 'var(--text-secondary)' }}>
-                  <b>{i + 1}</b> {fn}
-                </span>
-              ))}
-            </div>
+            <svg viewBox="0 0 200 232" preserveAspectRatio="xMidYMid meet" role="img" aria-label="INA125 16-pin DIP pinout"
+              style={{ display: 'block', width: '100%', height: 224, flexShrink: 0, margin: '2px 0' }}>
+              <rect x={72} y={16} width={56} height={204} rx={4} fill="#1b1b1f" stroke="#888" strokeWidth={1.5} />
+              <path d={`M ${86} 16 a 14 7 0 0 0 28 0`} fill="#0c0d0f" stroke="#888" strokeWidth={1.5} />
+              {/* left column pins 1..8 (top→bottom); right column pins 16..9 */}
+              {([[1, 'V+', 'pos'], [2, 'SLEEP', ''], [3, 'V−', 'neg'], [4, 'VREFOUT', ''], [5, 'IAREF', ''], [6, 'VIN−', ''], [7, 'VIN+', ''], [8, 'RG', '']] as const).map(([p, fn, c], i) => {
+                const y = 38 + i * 24, col = c === 'pos' ? '#e04040' : c === 'neg' ? '#4a9eff' : '#cfcfcf'
+                return (
+                  <g key={p}>
+                    <line x1={60} y1={y} x2={72} y2={y} stroke="#888" strokeWidth={1.5} />
+                    <text x={84} y={y + 3} fontSize={9} fontWeight={700} fill={col} textAnchor="end">{p}</text>
+                    <text x={56} y={y + 3} fontSize={9} fill="var(--text-secondary)" textAnchor="end">{fn}</text>
+                  </g>
+                )
+              })}
+              {([[16, 'VREF10', ''], [15, 'VREF5', ''], [14, 'VREF2.5', ''], [13, 'VREFBG', ''], [12, 'VREFCOM', ''], [11, 'Sense', ''], [10, 'VO', ''], [9, 'RG', '']] as const).map(([p, fn], i) => {
+                const y = 38 + i * 24
+                return (
+                  <g key={p}>
+                    <line x1={128} y1={y} x2={140} y2={y} stroke="#888" strokeWidth={1.5} />
+                    <text x={116} y={y + 3} fontSize={9} fontWeight={700} fill="#cfcfcf" textAnchor="start">{p}</text>
+                    <text x={144} y={y + 3} fontSize={9} fill="var(--text-secondary)" textAnchor="start">{fn}</text>
+                  </g>
+                )
+              })}
+            </svg>
             <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: 4 }}>
               Wire <b>VIN+</b> (7), <b>VIN−</b> (6), <b>VO</b> (10), <b>IAREF</b> (5)→GND, external <b>R_G</b> across
               <b> 8–9</b> (sets gain), and power <b style={{ color: '#e04040' }}>V+</b> (1) / <b style={{ color: '#4a9eff' }}>V−</b> (3).

@@ -104,10 +104,10 @@ export function baseTerminals(kind: SchKind, opModel?: 'ideal' | 'lmc662'): SchT
       return [
         { name: 'inP', gx: 0, gy: 0 },   // VIN+
         { name: 'inN', gx: 0, gy: 2 },   // VIN−
-        { name: 'out', gx: 6, gy: 1 },   // VO
+        { name: 'out', gx: 7, gy: 1 },   // VO
         { name: 'rg1', gx: 2, gy: 4 },   // RG (pin 8)
         { name: 'rg2', gx: 4, gy: 4 },   // RG (pin 9)
-        { name: 'iaref', gx: 3, gy: 4 }, // IAREF (between the RG pins, to GND)
+        { name: 'iaref', gx: 6, gy: 4 }, // IAREF — separated from the RG pair; tie to GND
       ]
     case 'ground':
     case 'probe':

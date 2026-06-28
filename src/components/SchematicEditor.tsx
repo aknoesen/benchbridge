@@ -857,25 +857,25 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
       </g>
     )
   } else if (c.kind === 'ina125') {
-    const xL = ax + G(1), xR = ax + G(5), yT = ay, yB = ay + G(2), yM = ay + G(1), yBot = ay + G(4)
+    const xL = ax + G(1), xR = ax + G(6), yT = ay, yB = ay + G(2), yM = ay + G(1), yBot = ay + G(4)
+    const top = yT - 12, bot = yB + 12
     inner = (
       <g>
-        {/* VIN+ / VIN− input stubs, VO output stub */}
+        {/* VIN+ / VIN− input stubs (left), VO output stub (right) */}
         <line x1={ax} y1={yT} x2={xL} y2={yT} stroke={stroke} strokeWidth={sw} />
         <line x1={ax} y1={yB} x2={xL} y2={yB} stroke={stroke} strokeWidth={sw} />
-        <line x1={xR} y1={yM} x2={ax + G(6)} y2={yM} stroke={stroke} strokeWidth={sw} />
-        <polygon points={`${xL},${yT - 12} ${xL},${yB + 12} ${xR},${yM}`} fill="var(--bg-panel)" stroke={stroke} strokeWidth={sw} />
-        {/* bottom stubs: RG (×2) and IAREF */}
-        <line x1={ax + G(2)} y1={yB + 6} x2={ax + G(2)} y2={yBot} stroke={stroke} strokeWidth={sw} />
-        <line x1={ax + G(4)} y1={yB + 6} x2={ax + G(4)} y2={yBot} stroke={stroke} strokeWidth={sw} />
-        <line x1={ax + G(3)} y1={yB + 4} x2={ax + G(3)} y2={yBot} stroke={stroke} strokeWidth={sw} />
-        {upright(xL + 12, yT + 4, <text x={xL + 12} y={yT + 4} fill="var(--text-primary)" fontSize={11} textAnchor="middle">+</text>)}
-        {upright(xL + 12, yB + 1, <text x={xL + 12} y={yB + 1} fill="var(--text-primary)" fontSize={13} textAnchor="middle">−</text>)}
-        {upright(ax + G(3), yM + 3, <text x={ax + G(3)} y={yM + 3} fill="var(--text-secondary)" fontSize={8} textAnchor="middle">INA125</text>)}
-        {upright(ax + G(2), yBot + 9, <text x={ax + G(2)} y={yBot + 9} fill="var(--text-secondary)" fontSize={7} textAnchor="middle">RG</text>)}
-        {upright(ax + G(4), yBot + 9, <text x={ax + G(4)} y={yBot + 9} fill="var(--text-secondary)" fontSize={7} textAnchor="middle">RG</text>)}
-        {upright(ax + G(3), yBot + 18, <text x={ax + G(3)} y={yBot + 18} fill="var(--text-secondary)" fontSize={7} textAnchor="middle">IAREF→GND</text>)}
-        {upright(ax + G(3), yT - 14, <text x={ax + G(3)} y={yT - 14} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
+        <line x1={xR} y1={yM} x2={ax + G(7)} y2={yM} stroke={stroke} strokeWidth={sw} />
+        <rect x={xL} y={top} width={xR - xL} height={bot - top} rx={3} fill="var(--bg-panel)" stroke={stroke} strokeWidth={sw} />
+        {/* bottom stubs: RG (×2, left/centre) and IAREF (right, separated) */}
+        <line x1={ax + G(2)} y1={bot} x2={ax + G(2)} y2={yBot} stroke={stroke} strokeWidth={sw} />
+        <line x1={ax + G(4)} y1={bot} x2={ax + G(4)} y2={yBot} stroke={stroke} strokeWidth={sw} />
+        <line x1={ax + G(6)} y1={bot} x2={ax + G(6)} y2={yBot} stroke={stroke} strokeWidth={sw} />
+        {upright(xL + 11, yT + 4, <text x={xL + 11} y={yT + 4} fill="var(--text-primary)" fontSize={11} textAnchor="middle">+</text>)}
+        {upright(xL + 11, yB + 1, <text x={xL + 11} y={yB + 1} fill="var(--text-primary)" fontSize={13} textAnchor="middle">−</text>)}
+        {upright(ax + G(3.5), yM + 3, <text x={ax + G(3.5)} y={yM + 3} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">INA125</text>)}
+        {upright(ax + G(3), yBot + 9, <text x={ax + G(3)} y={yBot + 9} fill="var(--text-secondary)" fontSize={7} textAnchor="middle">R_G</text>)}
+        {upright(ax + G(6), yBot + 9, <text x={ax + G(6)} y={yBot + 9} fill="var(--text-secondary)" fontSize={7} textAnchor="middle">IAREF→GND</text>)}
+        {upright(ax + G(3.5), top - 4, <text x={ax + G(3.5)} y={top - 4} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
       </g>
     )
   } else if (c.kind === 'opamp') {
