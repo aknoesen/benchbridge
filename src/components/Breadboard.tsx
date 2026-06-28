@@ -47,6 +47,8 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
   const [hoverNet, setHoverNet] = useState<string | null>(null)
   const [check, setCheck] = useState<CheckResult | null>(null)
   const [revealed, setRevealed] = useState(false)
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null) // for the jumper rubber-band
 
   const W = boardWidth(), H = boardHeight()
   const STRIP = 48                 // height of each fixed M2K terminal strip
@@ -135,6 +137,16 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
 
   function runCheck() { setCheck(checkEquivalence(schematic, board, holes)); if (mode === 'bench') setRevealed(true) }
 
+  // Track the pointer in SVG coordinates while a jumper is in progress, for the rubber-band preview.
+  function onSvgMove(e: React.MouseEvent<SVGSVGElement>) {
+    if (tool.kind !== 'jumper' || !pending) { if (cursor) setCursor(null); return }
+    const svg = svgRef.current
+    const ctm = svg?.getScreenCTM()
+    if (!ctm) return
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse())
+    setCursor({ x: p.x, y: p.y })
+  }
+
   // F-3 save/load: a "lab" bundle holds the circuit AND its board layout in one .json, so opening
   // it restores both and Check works immediately. Mirrors the Schematic editor's Save (SCH-3):
   // native Save dialog when available, else a download fallback.
@@ -219,7 +231,8 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
           </div>
         </div>
         <div className="plotly-display" style={{ overflow: 'auto', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 8 }}>
-          <svg viewBox={`0 0 ${W} ${H2}`} width={W} height={H2} style={{ maxWidth: '100%', height: 'auto' }}>
+          <svg ref={svgRef} viewBox={`0 0 ${W} ${H2}`} width={W} height={H2} style={{ maxWidth: '100%', height: 'auto' }}
+            onMouseMove={onSvgMove} onMouseLeave={() => cursor && setCursor(null)}>
             {/* fixed M2K adaptor-board connector strips, top & bottom */}
             <rect x={2} y={2} width={W - 4} height={STRIP - 8} rx={5} fill="#0f2c49" stroke="#1d4d7a" />
             <rect x={2} y={OY + H + 6} width={W - 4} height={STRIP - 8} rx={5} fill="#0f2c49" stroke="#1d4d7a" />
@@ -339,6 +352,12 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                 </g>
               )
             })}
+            {/* rubber-band: from the first jumper click to the pointer */}
+            {tool.kind === 'jumper' && pending && cursor && (
+              <line x1={pos(pending).x} y1={pos(pending).y} x2={cursor.x} y2={cursor.y}
+                stroke={wireColor(pending, pending)} strokeOpacity={0.8} strokeWidth={2.5}
+                strokeDasharray="5 4" strokeLinecap="round" style={{ pointerEvents: 'none' }} />
+            )}
           </svg>
         </div>
         {check && (
