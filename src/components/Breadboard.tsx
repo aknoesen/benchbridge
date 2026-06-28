@@ -7,7 +7,7 @@ import {
   buildHoles, boardNets, boardWidth, boardHeight, PAD, PITCH, CHANNEL_SLOT,
   schematicExpectation, checkEquivalence, type BoardLayout, type CheckResult,
   dipPinHoles, dipCols, holeKey, DIP_TOP_ROW, DIP_BOT_ROW,
-  TERMINALS, type Terminal, POWER_WIRES,
+  TERMINALS, type Terminal, POWER_WIRES, PORT_TERMINAL,
 } from '../core/breadboard'
 import { type Schematic, type SchKind } from '../core/schematic'
 import { type SignalParams } from '../core/signal'
@@ -88,6 +88,20 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
   }
   const placedPart = new Map(board.parts.map((p) => [p.id, p]))
   const placedDip = new Map((board.dips ?? []).map((d) => [d.id, d]))
+
+  // Non-blocking nudge: if a + input is wired into the circuit but its − partner is left floating,
+  // remind the student to tie it (GND for single-ended, the reference node for differential). The
+  // real M2K inputs float, so an un-wired − reads garbage — but differential is valid, so we warn
+  // rather than block.
+  const floatingMinus = useMemo(() => {
+    const wired = (k?: string) => !!k && board.jumpers.some((j) => j.a === k || j.b === k)
+    const out: string[] = []
+    for (const [plus, minus, label] of [['1+', '1-', '1−'], ['2+', '2-', '2−']] as const) {
+      if (wired(PORT_TERMINAL[plus]) && !wired(PORT_TERMINAL[minus]))
+        out.push(`${label} input is floating — tie it to GND for a single-ended measurement, or to your reference node for a differential one.`)
+    }
+    return out
+  }, [board.jumpers])
 
   function onNode(key: string, isTerminal = false) {
     setCheck(null)
@@ -332,6 +346,13 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
             <div className="marker-row">
               <span style={{ fontSize: 12, color: check.ok ? 'var(--theory-color)' : '#ffaa55' }}>{check.message}</span>
             </div>
+          </div>
+        )}
+        {floatingMinus.length > 0 && (
+          <div className="marker-table">
+            {floatingMinus.map((m, i) => (
+              <div className="marker-row" key={i}><span style={{ fontSize: 12, color: '#ffbf00' }}>⚠ {m}</span></div>
+            ))}
           </div>
         )}
       </div>
