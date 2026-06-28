@@ -425,7 +425,8 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
         {exp.dips.length > 0 && (
           <>
             <div className="section-title">LMC662 pinout</div>
-            <svg viewBox="0 0 240 150" style={{ width: '100%', height: 'auto', maxWidth: 280 }} role="img" aria-label="LMC662 8-pin DIP pinout">
+            <svg viewBox="0 0 240 150" preserveAspectRatio="xMidYMid meet" role="img"
+              aria-label="LMC662 8-pin DIP pinout" style={{ display: 'block', width: '100%', height: 132, flexShrink: 0, margin: '4px 0' }}>
               {/* top pins 8,7,6,5 (left→right); bottom pins 1,2,3,4 — matches the chip on the board */}
               {([['V+', 8], ['OUT B', 7], ['−IN B', 6], ['+IN B', 5]] as const).map(([fn, p], j) => {
                 const x = 54 + j * 44
