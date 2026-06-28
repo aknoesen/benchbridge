@@ -301,6 +301,29 @@ export const EXAMPLES: Example[] = [
     },
   },
   {
+    id: 'ina125-amp', name: 'INA125 in-amp ×10', group: 'Amplifiers',
+    blurb: 'INA125 instrumentation amp, gain 10 set by R_G = 10 kΩ (G = 4 + 60 kΩ/R_G). A tiny differential input becomes a big output (CH2 in, CH1 out). Builds on the breadboard as a 16-pin DIP.',
+    w1: sine(1000, 0.3), ch1Vdiv: 1, ch2Vdiv: 0.2,
+    schematic: {
+      components: [
+        { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
+        { id: 'U1', kind: 'ina125', gx: 8, gy: 4 },
+        { id: 'RG', kind: 'resistor', gx: 10, gy: 8, value: 10000 }, // R_G across the RG pins (8,8)-(12,8)
+        { id: 'G1', kind: 'ground', gx: 8, gy: 8 },                  // VIN− to ground
+        { id: 'G2', kind: 'ground', gx: 11, gy: 10 },               // IAREF to ground
+        { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },
+        { id: 'P2', kind: 'scope2', gx: 2, gy: 2 },
+      ],
+      wires: [
+        { x1: 2, y1: 4, x2: 8, y2: 4 },    // W1 -> VIN+
+        { x1: 2, y1: 4, x2: 2, y2: 2 },    // input -> 2+
+        { x1: 8, y1: 6, x2: 8, y2: 8 },    // VIN− -> ground
+        { x1: 14, y1: 5, x2: 16, y2: 5 },  // VO -> 1+
+        { x1: 11, y1: 8, x2: 11, y2: 10 }, // IAREF -> ground
+      ],
+    },
+  },
+  {
     id: 'diode-iv', name: 'Diode I-V curve (XY)', group: 'Passive',
     blurb: 'Switch the scope to XY mode to see the curve. CH1 (X) = voltage across the diode, CH2 (Y) = current (I·Rsense). W1 is preset to a triangle sweep.',
     w1: { waveType: 'triangle', frequency: 200, amplitude: 2, offset: 0, dutyCycle: 50, samplingRate: 100000, duration: 0.016 },

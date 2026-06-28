@@ -27,7 +27,7 @@ const TOOLS: { tool: Tool; label: string }[] = [
   { tool: 'led', label: 'LED' },
   { tool: 'zener', label: 'Zener' },
   { tool: 'opamp', label: 'Op-amp' },
-  { tool: 'inamp', label: 'In-amp' },
+  { tool: 'ina125', label: 'INA125' },
   { tool: 'awg1', label: 'W1' },
   { tool: 'awg2', label: 'W2' },
   { tool: 'scope1', label: '1+' },
@@ -42,7 +42,7 @@ const TOOLS: { tool: Tool; label: string }[] = [
 // UNIT, TUNE_RANGE, fmtEng, parseEng, tunePos, tuneValue now live in core/units.ts (shared
 // with the Network Analyzer tune knobs). DEFAULT_VALUE stays here — it is editor-only.
 const DEFAULT_VALUE: Partial<Record<SchKind, number>> = {
-  resistor: 1000, capacitor: 100e-9, inductor: 1e-3, dcrail: 5, vplus: 5, vminus: -5, inamp: 10, inamp3: 10,
+  resistor: 1000, capacitor: 100e-9, inductor: 1e-3, dcrail: 5, vplus: 5, vminus: -5,
   led: 2.0, zener: 3.3,
 }
 
@@ -51,7 +51,7 @@ const DEFAULT_VALUE: Partial<Record<SchKind, number>> = {
 // The Ref field in the Selected panel lets the student override any id (must stay unique).
 const REFDES: Partial<Record<SchKind, string>> = {
   resistor: 'R', capacitor: 'C', inductor: 'L', vsource: 'V',
-  opamp: 'U', lmc662: 'U', inamp: 'U', inamp3: 'U',
+  opamp: 'U', lmc662: 'U', ina125: 'U',
 }
 function refPrefix(k: SchKind): string {
   return REFDES[k] ?? k[0].toUpperCase()
@@ -100,7 +100,6 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   const [placeRotation, setPlaceRotation] = useState(0)
   // Place-time type selectors: when the Op-amp / In-amp tool is active a sub-selector below the
   // toolbar picks the exact part to drop. These map to (kind, opModel) at placement time.
-  const [inampType, setInampType] = useState<'inamp' | 'inamp3'>('inamp')
   const [simStatus, setSimStatus] = useState('')
   const [simBusy, setSimBusy] = useState(false)
   const engineRef = useRef<SpiceEngine | null>(null)
@@ -299,9 +298,8 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     }
     // place a component. The Op-amp / In-amp tools resolve to a specific kind+model via the
     // place-time sub-selector; everything else places its own kind directly.
-    let kind = tool as SchKind
-    if (tool === 'inamp') kind = inampType // 'inamp' (ideal) or 'inamp3' (3-op-amp)
-    // The op-amp tool places kind 'opamp' — always an LMC662 (power implied in sim, DIP on the board).
+    const kind = tool as SchKind
+    // Op-amp places kind 'opamp' (LMC662); INA125 places kind 'ina125'. Power implied in sim, DIP on board.
     const c: SchComponent = { id: newId(kind, sch.components), kind, gx, gy, rotation: placeRotation, value: DEFAULT_VALUE[kind] }
     snapshot()
     setSch((s) => ({ ...s, components: [...s.components, c] }))
@@ -459,14 +457,6 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   function setSelValueNum(v: number) {
     if (!sel) return
     setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, value: v } : c) }))
-  }
-
-  // In-amp type selector: ideal single-VCVS vs the textbook 3-op-amp topology. Same pinout,
-  // so this is a clean swap of the underlying kind.
-  function setSelInampType(k: 'inamp' | 'inamp3') {
-    if (!sel) return
-    snapshot()
-    setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, kind: k } : c) }))
   }
 
   // Convert a placed diode between plain / LED / Zener; reset value to the new type's sensible
@@ -631,15 +621,10 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
             LMC662 op-amp — power is implied in simulation; on the breadboard it's an 8-pin DIP whose V+/V− you wire.
           </div>
         )}
-        {tool === 'inamp' && (
-          <div style={{ marginTop: 6 }}>
-            <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 3 }}>In-amp type to place:</div>
-            <div className="wave-selector">
-              {([['inamp', 'Ideal'], ['inamp3', '3-op-amp']] as const).map(([v, lbl]) => (
-                <button key={v} className={inampType === v ? 'active' : ''} onClick={() => setInampType(v)}>{lbl}</button>
-              ))}
-            </div>
-            <div style={{ fontSize: 10, marginTop: 3, color: 'var(--theory-color)' }}>Simulation only — no supply needed</div>
+        {tool === 'ina125' && (
+          <div style={{ fontSize: 10, marginTop: 6, color: 'var(--text-secondary)' }}>
+            INA125 instrumentation amp. Gain = 4 + 60 kΩ/R_G — set it with an external resistor across the
+            RG pins. Power implied in sim; on the breadboard it's a 16-pin DIP whose V+/V− you wire.
           </div>
         )}
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.6 }}>
@@ -706,13 +691,10 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                 breadboard it's an 8-pin DIP whose V+/V− you wire to the rails.
               </div>
             )}
-            {(sel.kind === 'inamp' || sel.kind === 'inamp3') && (
-              <div className="control-row-inline">
-                <label>Type</label>
-                <select value={sel.kind} onChange={(e) => setSelInampType(e.target.value as 'inamp' | 'inamp3')} style={{ width: 150 }}>
-                  <option value="inamp">Ideal (simulation)</option>
-                  <option value="inamp3">3-op-amp (simulation)</option>
-                </select>
+            {sel.kind === 'ina125' && (
+              <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
+                INA125 in-amp. Gain = 4 + 60 kΩ/R_G (external R_G across the RG pins). Output referred to
+                IAREF (tie to GND). 16-pin DIP on the board; wire V+/V− to the rails.
               </div>
             )}
             {ampCategory(sel) && (() => {
@@ -874,21 +856,26 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
         {upright(cx, y + 18, <text x={cx} y={y + 18} fill="var(--text-primary)" fontSize={9} textAnchor="middle">{fmtEng(c.value ?? 0)}{UNIT[c.kind] ?? ''}</text>)}
       </g>
     )
-  } else if (c.kind === 'inamp' || c.kind === 'inamp3') {
-    const xL = ax + G(1), xR = ax + G(5), yT = ay, yB = ay + G(2), yM = ay + G(1)
-    const tag = c.kind === 'inamp3' ? '3-op' : 'INA'
+  } else if (c.kind === 'ina125') {
+    const xL = ax + G(1), xR = ax + G(5), yT = ay, yB = ay + G(2), yM = ay + G(1), yBot = ay + G(4)
     inner = (
       <g>
+        {/* VIN+ / VIN− input stubs, VO output stub */}
         <line x1={ax} y1={yT} x2={xL} y2={yT} stroke={stroke} strokeWidth={sw} />
         <line x1={ax} y1={yB} x2={xL} y2={yB} stroke={stroke} strokeWidth={sw} />
         <line x1={xR} y1={yM} x2={ax + G(6)} y2={yM} stroke={stroke} strokeWidth={sw} />
-        <line x1={ax + G(2)} y1={yB + 2} x2={ax + G(2)} y2={ay + G(3)} stroke={stroke} strokeWidth={sw} />
         <polygon points={`${xL},${yT - 12} ${xL},${yB + 12} ${xR},${yM}`} fill="var(--bg-panel)" stroke={stroke} strokeWidth={sw} />
+        {/* bottom stubs: RG (×2) and IAREF */}
+        <line x1={ax + G(2)} y1={yB + 6} x2={ax + G(2)} y2={yBot} stroke={stroke} strokeWidth={sw} />
+        <line x1={ax + G(4)} y1={yB + 6} x2={ax + G(4)} y2={yBot} stroke={stroke} strokeWidth={sw} />
+        <line x1={ax + G(3)} y1={yB + 4} x2={ax + G(3)} y2={yBot} stroke={stroke} strokeWidth={sw} />
         {upright(xL + 12, yT + 4, <text x={xL + 12} y={yT + 4} fill="var(--text-primary)" fontSize={11} textAnchor="middle">+</text>)}
         {upright(xL + 12, yB + 1, <text x={xL + 12} y={yB + 1} fill="var(--text-primary)" fontSize={13} textAnchor="middle">−</text>)}
-        {upright(ax + G(2.6), yM + 4, <text x={ax + G(2.6)} y={yM + 4} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{tag}</text>)}
-        {upright(ax + G(2), ay + G(3) + 10, <text x={ax + G(2)} y={ay + G(3) + 10} fill="var(--text-secondary)" fontSize={8} textAnchor="middle">REF</text>)}
-        {upright(ax + G(2.6), yT - 14, <text x={ax + G(2.6)} y={yT - 14} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
+        {upright(ax + G(3), yM + 3, <text x={ax + G(3)} y={yM + 3} fill="var(--text-secondary)" fontSize={8} textAnchor="middle">INA125</text>)}
+        {upright(ax + G(2), yBot + 9, <text x={ax + G(2)} y={yBot + 9} fill="var(--text-secondary)" fontSize={7} textAnchor="middle">RG</text>)}
+        {upright(ax + G(4), yBot + 9, <text x={ax + G(4)} y={yBot + 9} fill="var(--text-secondary)" fontSize={7} textAnchor="middle">RG</text>)}
+        {upright(ax + G(3), yBot + 9, <text x={ax + G(3)} y={yBot + 9} fill="var(--text-secondary)" fontSize={7} textAnchor="middle">REF</text>)}
+        {upright(ax + G(3), yT - 14, <text x={ax + G(3)} y={yT - 14} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
       </g>
     )
   } else if (c.kind === 'opamp') {

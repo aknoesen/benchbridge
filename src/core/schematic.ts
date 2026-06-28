@@ -14,8 +14,7 @@ export type SchKind =
   | 'vsource' // generator input source; terminal 'a' = +, 'b' = -
   | 'opamp'
   | 'lmc662' // LMC662 dual op-amp as an 8-pin DIP (two LMC662 sections + V+/V- rails)
-  | 'inamp' // ideal instrumentation amp (single VCVS); pins inP/inN/out/ref
-  | 'inamp3' // 3-op-amp instrumentation amp (teaches the internal topology)
+  | 'ina125' // INA125 instrumentation amp — the only in-amp. Structural model; gain set by external R_G.
   | 'ground'
   | 'probe' // (legacy) marks the output node ('out') — same as 'scope1'
   | 'dcrail' // DC supply rail (power for active parts); value = volts
@@ -99,13 +98,16 @@ export function baseTerminals(kind: SchKind, opModel?: 'ideal' | 'lmc662'): SchT
         { name: 'outB', gx: 4, gy: 1 },   // 7: OUT B
         { name: 'vpos', gx: 4, gy: 0 },   // 8: V+
       ]
-    case 'inamp':
-    case 'inamp3':
+    case 'ina125':
+      // INA125 schematic symbol pins (power implied; full 16-pin DIP on the board). RG1/RG2 take the
+      // external gain resistor; IAREF is the output reference (tie to GND).
       return [
-        { name: 'inP', gx: 0, gy: 0 },
-        { name: 'inN', gx: 0, gy: 2 },
-        { name: 'out', gx: 6, gy: 1 },
-        { name: 'ref', gx: 2, gy: 3 },
+        { name: 'inP', gx: 0, gy: 0 },   // VIN+
+        { name: 'inN', gx: 0, gy: 2 },   // VIN−
+        { name: 'out', gx: 6, gy: 1 },   // VO
+        { name: 'rg1', gx: 2, gy: 4 },   // RG (pin 8)
+        { name: 'rg2', gx: 4, gy: 4 },   // RG (pin 9)
+        { name: 'iaref', gx: 3, gy: 4 }, // IAREF (between the RG pins, to GND)
       ]
     case 'ground':
     case 'probe':
@@ -148,8 +150,7 @@ export function ampCategory(c: SchComponent): 'sim' | 'build' | null {
   switch (c.kind) {
     case 'opamp': return 'build'
     case 'lmc662': return 'build'
-    case 'inamp':
-    case 'inamp3': return 'sim'
+    case 'ina125': return 'build'
     default: return null
   }
 }
@@ -419,23 +420,27 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
       const k = ec++
       comps.push({ kind: 'opamp', id: `${k}A`, model: 'lmc662', nodes: { inP: net(2), inN: net(1), out: net(0), vpos, vneg } })
       comps.push({ kind: 'opamp', id: `${k}B`, model: 'lmc662', nodes: { inP: net(4), inN: net(5), out: net(6), vpos, vneg } })
-    } else if (c.kind === 'inamp' || c.kind === 'inamp3') {
-      // Friendly default: if REF is left unwired (only the in-amp touches that net), tie it to
-      // ground so a beginner circuit still solves instead of going singular.
-      const refRaw = netOf(ts[3].gx, ts[3].gy)
-      const refNet = (termCount.get(refRaw) ?? 0) >= 2 ? rename(refRaw) : '0'
-      comps.push({
-        kind: 'inamp',
-        id: String(ic++),
-        model: c.kind === 'inamp3' ? 'threeopamp' : 'ideal',
-        nodes: {
-          inP: rename(netOf(ts[0].gx, ts[0].gy)),
-          inN: rename(netOf(ts[1].gx, ts[1].gy)),
-          out: rename(netOf(ts[2].gx, ts[2].gy)),
-          ref: refNet,
-        },
-        gain: c.value ?? 10,
-      })
+    } else if (c.kind === 'ina125') {
+      // INA125 = structural 3-op-amp in-amp. The external R_G (a normal resistor across rg1/rg2) sets
+      // gain = 4 + 60kΩ/R_G via: first-stage feedback 7.5kΩ each, difference amp gain 4 (10k/40k).
+      // Validated in docs/specs/ina125.md. Internal op-amps reuse the LMC662 macro (auto ±5 V clip).
+      const tn = new Map(ts.map((x) => [x.name, rename(netOf(x.gx, x.gy))]))
+      const vinp = tn.get('inP')!, vinn = tn.get('inN')!, vo = tn.get('out')!
+      const rg1 = tn.get('rg1')!, rg2 = tn.get('rg2')!
+      // IAREF: tie to ground if left unwired (beginner-friendly), else use its node.
+      const irRaw = netOf(ts[5].gx, ts[5].gy)
+      const iaref = (termCount.get(irRaw) ?? 0) >= 2 ? rename(irRaw) : '0'
+      const k = ec++
+      const oa1 = `ina${k}_oa1`, oa2 = `ina${k}_oa2`, p3 = `ina${k}_p3`, n3 = `ina${k}_n3`
+      comps.push({ kind: 'opamp', id: `${k}A1`, model: 'lmc662', nodes: { inP: vinp, inN: rg1, out: oa1 } })
+      comps.push({ kind: 'opamp', id: `${k}A2`, model: 'lmc662', nodes: { inP: vinn, inN: rg2, out: oa2 } })
+      comps.push({ kind: 'resistor', id: `ina${k}R1a`, nodes: [oa1, rg1], ohms: 7500 })
+      comps.push({ kind: 'resistor', id: `ina${k}R1b`, nodes: [oa2, rg2], ohms: 7500 })
+      comps.push({ kind: 'opamp', id: `${k}A3`, model: 'lmc662', nodes: { inP: p3, inN: n3, out: vo } })
+      comps.push({ kind: 'resistor', id: `ina${k}R2i`, nodes: [oa2, n3], ohms: 10000 })
+      comps.push({ kind: 'resistor', id: `ina${k}R3i`, nodes: [n3, vo], ohms: 40000 })
+      comps.push({ kind: 'resistor', id: `ina${k}R2p`, nodes: [oa1, p3], ohms: 10000 })
+      comps.push({ kind: 'resistor', id: `ina${k}R3p`, nodes: [p3, iaref], ohms: 40000 })
     } else if (c.kind === 'dcrail' || c.kind === 'vplus' || c.kind === 'vminus') {
       const def = c.kind === 'vminus' ? -5 : 5
       comps.push({ kind: 'dcrail', id: `S${sc++}`, node: rename(netOf(ts[0].gx, ts[0].gy)), volts: c.value ?? def })

@@ -21,8 +21,13 @@ type Tool =
   | { kind: 'placeDip'; id: string; partKind: SchKind }
 
 const NET_COLORS = ['#f0a030', '#40c0e0', '#44dd88', '#e06fd0', '#d0d040', '#7a8cff', '#ff8855', '#55ddcc']
-// LMC662 8-pin DIP function per pin (1..8), in dipPinHoles order. Pin 1 sits at the notch.
+// DIP function per pin (1-based), in dipPinHoles order. Pin 1 sits at the notch.
 const LMC662_FN = ['OUT A', '−IN A', '+IN A', 'V−', '+IN B', '−IN B', 'OUT B', 'V+']
+const INA125_FN = ['V+', 'SLEEP', 'V−', 'VREFOUT', 'IAREF', 'VIN−', 'VIN+', 'RG', 'RG', 'VO', 'Sense', 'VREFCOM', 'VREFBG', 'VREF2.5', 'VREF5', 'VREF10']
+const DIP_FN: Record<string, string[]> = { lmc662: LMC662_FN, ina125: INA125_FN }
+const DIP_NAME: Record<string, string> = { lmc662: 'LMC662', ina125: 'INA125' }
+// 0-based pin indices of the V+/V− pins per DIP (for colouring the power pins).
+const DIP_RAILS: Record<string, { vpos: number; vneg: number }> = { lmc662: { vpos: 7, vneg: 3 }, ina125: { vpos: 0, vneg: 2 } }
 
 interface Props {
   schematic: Schematic
@@ -92,6 +97,18 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
     const jnet = nets.get(ak)
     return (showNets && jnet && activeColor.get(jnet)) || '#c9cdd2'
   }
+  // Which supply a node carries, by comparing its net to the V+/V−/GND terminal nets. Drives the
+  // bus-rail colour-coding (a rail is whatever it is wired to — by default V+, V−, or GND).
+  const supplyOf = (key: string): 'pos' | 'neg' | 'gnd' | null => {
+    const net = nets.get(key)
+    if (!net) return null
+    if (net === nets.get(PORT_TERMINAL['V+'])) return 'pos'
+    if (net === nets.get(PORT_TERMINAL['V-'])) return 'neg'
+    if (net === nets.get(PORT_TERMINAL['GND'])) return 'gnd'
+    return null
+  }
+  const SUPPLY_LINE: Record<string, string> = { pos: '#e04040', neg: '#4a9eff', gnd: '#c9cdd2' }
+  const SUPPLY_HOLE: Record<string, string> = { pos: '#5a2a2a', neg: '#23304a', gnd: '#3a3a3a' }
   const placedPart = new Map(board.parts.map((p) => [p.id, p]))
   const placedDip = new Map((board.dips ?? []).map((d) => [d.id, d]))
   // Components with no board footprint (op-amps/in-amps) → this circuit can't be transferred.
@@ -262,10 +279,13 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
             <rect x={2} y={OY + H + 6} width={W - 4} height={STRIP - 8} rx={5} fill="#0f2c49" stroke="#1d4d7a" />
             {/* board body */}
             <rect x={2} y={OY + 2} width={W - 4} height={H - 4} rx={8} fill="#15171a" stroke="#333" />
-            {[0, 1, 15, 16].map((s) => (
-              <line key={s} x1={PAD - 10} y1={railY(s)} x2={W - PAD + 10} y2={railY(s)}
-                stroke={s === 0 || s === 15 ? '#e04040' : '#4a9eff'} strokeOpacity={0.3} strokeWidth={2} />
-            ))}
+            {([[0, 'TP'], [1, 'TN'], [15, 'BP'], [16, 'BN']] as const).map(([s, row]) => {
+              const fn = supplyOf(holeKey(row, 1))
+              return (
+                <line key={s} x1={PAD - 10} y1={railY(s)} x2={W - PAD + 10} y2={railY(s)}
+                  stroke={fn ? SUPPLY_LINE[fn] : '#555'} strokeOpacity={0.55} strokeWidth={2.5} />
+              )
+            })}
             {/* function label on each rail (outer = GND, top inner = V+, bottom inner = V−) */}
             {([[0, 'GND', 'gnd'], [1, 'V+', 'pos'], [15, 'V−', 'neg'], [16, 'GND', 'gnd']] as const).map(([s, lbl, c]) => (
               <text key={'rl' + s} x={W - PAD + 12} y={railY(s) + 4} fontSize={13} fontWeight={800}
@@ -276,7 +296,8 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
               const net = nets.get(h.key)!
               const aCol = showNets ? activeColor.get(net) : undefined
               const hover = mode === 'practice' && hoverNet === net
-              const base = h.kind === 'railP' ? '#5a2a2a' : h.kind === 'railN' ? '#23304a' : '#2b2b2b'
+              const railFn = (h.kind === 'railP' || h.kind === 'railN') ? supplyOf(h.key) : null
+              const base = railFn ? SUPPLY_HOLE[railFn] : '#2b2b2b'
               const fill = hover ? '#ffffff' : (aCol ?? base)
               const r = (hover || pending === h.key) ? 4.4 : (aCol ? 3.6 : 3)
               const cy = h.y + OY
@@ -350,17 +371,18 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                     const col = (showNets && activeColor.get(net)) || '#cfcfcf'
                     const isBottom = i < n           // pins 1..n on the bottom row, n+1..2n on top
                     const numY = isBottom ? h.y + 12 : h.y - 7
-                    const numCol = i === 7 ? '#e04040' : i === 3 ? '#4a9eff' : '#9aa0a6' // V+ red, V− blue
+                    const rails = DIP_RAILS[d.kind]
+                    const numCol = rails && i === rails.vpos ? '#e04040' : rails && i === rails.vneg ? '#4a9eff' : '#9aa0a6'
                     return (
                       <g key={i}>
                         <circle cx={h.x} cy={h.y} r={3.2} fill={col} stroke="#000" strokeWidth={0.5}>
-                          <title>{`pin ${i + 1}: ${LMC662_FN[i]}`}</title>
+                          <title>{`pin ${i + 1}: ${(DIP_FN[d.kind] ?? [])[i] ?? ''}`}</title>
                         </circle>
                         <text x={h.x} y={numY} fontSize={9} fontWeight={800} fill={numCol} textAnchor="middle">{i + 1}</text>
                       </g>
                     )
                   })}
-                  <text x={(bx + bx + bw) / 2} y={by + bh / 2 + 3} fontSize={8} fill="#cfcfcf" textAnchor="middle">{d.id} · LMC662</text>
+                  <text x={(bx + bx + bw) / 2} y={by + bh / 2 + 3} fontSize={8} fill="#cfcfcf" textAnchor="middle">{d.id} · {DIP_NAME[d.kind] ?? d.kind}</text>
                 </g>
               )
             })}
@@ -422,7 +444,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
           </div>
         )}
 
-        {exp.dips.length > 0 && (
+        {exp.dips.some((d) => d.kind === 'lmc662') && (
           <>
             <div className="section-title">LMC662 pinout</div>
             <svg viewBox="0 0 240 150" preserveAspectRatio="xMidYMid meet" role="img"
@@ -459,6 +481,26 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
             <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: 2 }}>
               Notch / pin 1 at the lower-left — same orientation as the chip on the board. Your op-amp uses
               <b> section A</b>: +IN A (3), −IN A (2), OUT A (1); power <b style={{ color: '#e04040' }}>V+</b> (8) and <b style={{ color: '#4a9eff' }}>V−</b> (4).
+            </div>
+          </>
+        )}
+
+        {exp.dips.some((d) => d.kind === 'ina125') && (
+          <>
+            <div className="section-title">INA125 pinout (16-pin)</div>
+            <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 4 }}>
+              Pin 1 at the notch (lower-left), counter-clockwise. Hover a pin on the board for its name.
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1px 10px', fontSize: 10 }}>
+              {INA125_FN.map((fn, i) => (
+                <span key={i} style={{ color: i === 0 ? '#e04040' : i === 2 ? '#4a9eff' : 'var(--text-secondary)' }}>
+                  <b>{i + 1}</b> {fn}
+                </span>
+              ))}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: 4 }}>
+              Wire <b>VIN+</b> (7), <b>VIN−</b> (6), <b>VO</b> (10), <b>IAREF</b> (5)→GND, external <b>R_G</b> across
+              <b> 8–9</b> (sets gain), and power <b style={{ color: '#e04040' }}>V+</b> (1) / <b style={{ color: '#4a9eff' }}>V−</b> (3).
             </div>
           </>
         )}

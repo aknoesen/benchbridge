@@ -221,8 +221,7 @@ describe('op-amp is always a packaged LMC662', () => {
   it('every op-amp / amp is a buildable part', () => {
     expect(ampCategory({ id: 'a', kind: 'opamp', gx: 0, gy: 0 })).toBe('build')
     expect(ampCategory({ id: 'a', kind: 'lmc662', gx: 0, gy: 0 })).toBe('build')
-    expect(ampCategory({ id: 'a', kind: 'inamp', gx: 0, gy: 0 })).toBe('sim')
-    expect(ampCategory({ id: 'a', kind: 'inamp3', gx: 0, gy: 0 })).toBe('sim')
+    expect(ampCategory({ id: 'a', kind: 'ina125', gx: 0, gy: 0 })).toBe('build')
     expect(ampCategory({ id: 'a', kind: 'resistor', gx: 0, gy: 0 })).toBeNull()
   })
 })

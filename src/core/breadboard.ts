@@ -129,10 +129,9 @@ export const PORT_NAME: Partial<Record<SchKind, string>> = {
 // 2-pin parts a student places on the board (F-2): passives plus the 2-terminal semiconductors.
 export const PLACEABLE_KINDS = new Set<SchKind>(['resistor', 'capacitor', 'inductor', 'diode', 'led', 'zener'])
 
-// Kinds the board cannot lay out yet (multi-pin actives with no board footprint): the in-amps.
-// (Op-amps now board as an LMC662 DIP.) A circuit with any of these can't be transferred, so the
-// Board view says so rather than silently dropping them.
-export const UNBOARDABLE_KINDS = new Set<SchKind>(['inamp', 'inamp3'])
+// Kinds the board cannot lay out. Every part now has a package (op-amp → LMC662 DIP, in-amp →
+// INA125 DIP, 2-pin parts placeable), so this is empty; the machinery stays for any future part.
+export const UNBOARDABLE_KINDS = new Set<SchKind>()
 export function unboardable(s: Schematic): { id: string; kind: SchKind }[] {
   return s.components.filter((c) => UNBOARDABLE_KINDS.has(c.kind)).map((c) => ({ id: c.id, kind: c.kind }))
 }
@@ -213,9 +212,10 @@ export const DIP_KINDS = new Set<SchKind>(['lmc662'])
 export const DIP_TOP_ROW: Row = 'e' // top-bank row adjacent to the channel
 export const DIP_BOT_ROW: Row = 'f' // bottom-bank row adjacent to the channel
 
-// Columns a DIP spans (pins split evenly across the two rows). LMC662 = 8 pins → 4 columns.
+// Columns a DIP spans (pins split evenly across the two rows). LMC662 = 8 pins → 4 columns;
+// INA125 = 16 pins → 8 columns.
 export function dipCols(kind: SchKind): number {
-  return kind === 'lmc662' ? 4 : 0
+  return kind === 'lmc662' ? 4 : kind === 'ina125' ? 8 : 0
 }
 
 // Hole keys for a DIP whose top-left pin sits at (DIP_TOP_ROW, col), ordered to match the schematic
@@ -245,8 +245,8 @@ export const emptyBoard = (): BoardLayout => ({ parts: [], jumpers: [], ports: [
 export interface SchematicExpectation {
   parts: { id: string; kind: SchKind; a: string; b: string }[]
   // pinNets is indexed by DIP pin (pin1 = index 0). `undefined` = an unused pin (no constraint).
-  // needsRails: the part is powered, so the Check also requires its V+/V- pins on the supply rails.
-  dips: { id: string; kind: SchKind; pinNets: (string | undefined)[]; needsRails?: boolean }[]
+  // rails (when set) names the V+/V- pin indices the Check requires on the supply rails.
+  dips: { id: string; kind: SchKind; pinNets: (string | undefined)[]; rails?: { vpos: number; vneg: number } }[]
   ports: { name: string; net: string }[]
 }
 export function schematicExpectation(s: Schematic): SchematicExpectation {
@@ -264,10 +264,22 @@ export function schematicExpectation(s: Schematic): SchematicExpectation {
     } else if (c.kind === 'opamp') {
       // One LMC662 section on the schematic → an 8-pin DIP on the board. Map its signal pins to the
       // DIP pinout (1=OUTA,2=-A,3=+A,8=V+,4=V-); pins 5-7 (section B) are unused; V+/V- come via the
-      // rails (needsRails), not the schematic.
+      // rails, not the schematic.
       const byName = new Map(ts.map((t) => [t.name, netOf(t.gx, t.gy)]))
       const pinNets = [byName.get('out'), byName.get('inN'), byName.get('inP'), undefined, undefined, undefined, undefined, undefined]
-      dips.push({ id: c.id, kind: 'lmc662', pinNets, needsRails: true })
+      dips.push({ id: c.id, kind: 'lmc662', pinNets, rails: { vpos: 7, vneg: 3 } })
+    } else if (c.kind === 'ina125') {
+      // INA125 → 16-pin DIP. Map the in-amp's used pins to the datasheet pinout (1-based):
+      // 5 IAREF, 6 VIN−, 7 VIN+, 8 RG, 9 RG, 10 VO; V+ (1) / V− (3) via the rails. Others unused.
+      const byName = new Map(ts.map((t) => [t.name, netOf(t.gx, t.gy)]))
+      const pinNets: (string | undefined)[] = new Array(16).fill(undefined)
+      pinNets[4] = byName.get('iaref') // pin 5
+      pinNets[5] = byName.get('inN')   // pin 6
+      pinNets[6] = byName.get('inP')   // pin 7
+      pinNets[7] = byName.get('rg1')   // pin 8
+      pinNets[8] = byName.get('rg2')   // pin 9
+      pinNets[9] = byName.get('out')   // pin 10
+      dips.push({ id: c.id, kind: 'ina125', pinNets, rails: { vpos: 0, vneg: 2 } }) // V+ pin1, V− pin3
     } else {
       const name = PORT_NAME[c.kind]
       if (name && !ports.has(name)) ports.set(name, netOf(ts[0].gx, ts[0].gy))
@@ -318,10 +330,11 @@ export function checkEquivalence(s: Schematic, board: BoardLayout, holes: Hole[]
       schem.set(`${d.id}.p${k + 1}`, net)
       brd.set(`${d.id}.p${k + 1}`, bn(holesForDip[k] ?? `?${d.id}.${k}`))
     })
-    // A powered part must have its supply pins on the rails (LMC662: pin 8 = V+, pin 4 = V−).
-    if (d.needsRails) {
-      if (bn(holesForDip[7] ?? '?') !== bn(PORT_TERMINAL['V+'])) return { ok: false, message: `Wire ${d.id} pin 8 (V+) to the V+ rail.` }
-      if (bn(holesForDip[3] ?? '?') !== bn(PORT_TERMINAL['V-'])) return { ok: false, message: `Wire ${d.id} pin 4 (V−) to the V− rail.` }
+    // A powered part must have its supply pins on the rails.
+    if (d.rails) {
+      const vp = d.rails.vpos, vn = d.rails.vneg
+      if (bn(holesForDip[vp] ?? '?') !== bn(PORT_TERMINAL['V+'])) return { ok: false, message: `Wire ${d.id} pin ${vp + 1} (V+) to the V+ rail.` }
+      if (bn(holesForDip[vn] ?? '?') !== bn(PORT_TERMINAL['V-'])) return { ok: false, message: `Wire ${d.id} pin ${vn + 1} (V−) to the V− rail.` }
     }
   }
   for (const p of exp.ports) {

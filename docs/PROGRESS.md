@@ -36,6 +36,43 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Log
 
+### 2026-06-27 — SCH-7 INA125 instrumentation amp (only in-amp) — DONE
+
+**By:** Cowork session (andre)
+**Commit:** uncommitted
+
+**What I did:**
+- Replaced the package-less `inamp`/`inamp3` with a single real `ina125` kind (schematic.ts SchKind,
+  baseTerminals: VIN+/VIN−/VO/RG×2/IAREF; ampCategory 'build'). toCircuit expands an INA125 into a
+  **structural** 3-op-amp model reusing the op-amp + resistor emission: first-stage feedback 7.5 kΩ
+  each + diff amp 10k/40k ⇒ G = 4 + 60 kΩ/R_G, with the external R_G across the RG pins. Verified in
+  ngspice: G = 4 (open), 10 (10 kΩ), 50.15 (1.3 kΩ), 100 (625 Ω); the example sims at G=10 exactly.
+- Editor: INA125 toolbar tool + symbol render + selected-panel note; dropped the in-amp sub-selector
+  and `setSelInampType`. units.ts/DEFAULT_VALUE/REFDES updated.
+- Breadboard: INA125 boards as a **16-pin DIP** (`dipCols('ina125')=8`); schematicExpectation maps its
+  used pins to the datasheet pinout; Check requires V+ (pin1)/V− (pin3) on the rails (per-part `rails`
+  indices, replacing the hardcoded LMC662 pins). DIP render labels by kind; pinout legend gains an
+  INA125 16-pin reference. UNBOARDABLE_KINDS now empty (every part has a package).
+- Examples: `ina125-amp` (dual-supply ×10, R_G=10 kΩ, IAREF=GND, CH2 in / CH1 out).
+- Spec `docs/specs/ina125.md` (datasheet-verified pinout + validated model); ROADMAP SCH-7 → DONE.
+- Vestigial: the netlist `inamp` Circuit component/`inampLines` remain (never emitted now); could be
+  removed later. `opModel` field also vestigial.
+
+**Verification (Definition of Done):**
+- build clean: `tsc --noEmit` clean. `vite build` needs a local run (sandbox can't run rolldown).
+- 12-bit floor: untouched (no core/signal.ts change).
+- sim sanity: INA125 G matches 4+60k/R_G across decades; example G=10, no clip; boards as 16-pin DIP.
+
+**State for the next session:**
+- All amplifiers are now real packaged parts (LMC662, INA125). In-amp sub-selector gone.
+- Possible cleanup: remove the vestigial netlist `inamp` path and the `opModel` field.
+
+**Open questions / flags for andre:**
+- Confirm `npm run build` (Vite) clean locally. INA125 on-chip reference (VREF taps) not yet exposed
+  on the schematic symbol — add if a lab needs the bridge-excitation reference.
+
+---
+
 ### 2026-06-27 — SCH-6 op-amp is LMC662-only + boardable DIP — DONE
 
 **By:** Cowork session (andre)
