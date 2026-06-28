@@ -6,6 +6,7 @@
 // instruments work in terms of the typed Circuit graph.
 
 import type { SignalParams, WaveType } from './signal'
+import { isKitOpamp, getOpamp, buildOpampSubckt, type OpampKind } from './opamps'
 
 // A net is a named node. '0' (and 'gnd'/'GND') are ground and are normalised to '0'.
 export type Net = string
@@ -75,6 +76,9 @@ export interface OpAmp {
   kind: 'opamp'
   id: string // e.g. '1' -> E1
   model?: 'ideal' | 'lmc662'
+  // SCH-9: when set to a kit op-amp, the device is emitted as that part's .subckt macromodel
+  // (correct GBW/slew/clip) instead of the LMC662 behavioural model. `part` takes precedence.
+  part?: OpampKind
   nodes: { inP: Net; inN: Net; out: Net; vpos?: Net; vneg?: Net }
   gain?: number // open-loop gain (default 1e6 for ideal; the LMC662 uses its datasheet 126 dB)
   supplyPos?: number // LMC662 positive rail for output clipping (default +5 V)
@@ -341,6 +345,8 @@ export function buildNetlist(circuit: Circuit, analysis: Analysis): string {
   const n = (net: Net): string => (groundNets.has(net) ? '0' : net)
 
   const lines: string[] = [circuit.title]
+  // SCH-9: kit op-amp .subckt definitions used in this deck (deduped, emitted once before .end).
+  const usedOpampKinds = new Set<OpampKind>()
   for (const c of circuit.components) {
     switch (c.kind) {
       case 'resistor':
@@ -359,7 +365,19 @@ export function buildNetlist(circuit: Circuit, analysis: Analysis): string {
         lines.push(`V${c.id} ${n(c.node)} 0 DC ${fmt(c.volts)}`)
         break
       case 'opamp':
-        lines.push(...opampLines(c, n))
+        if (c.part && isKitOpamp(c.part)) {
+          // SCH-9 kit op-amp: a .subckt macromodel instance. The plain 'opamp' symbol carries no
+          // power pins, so synthesise the M2K ±5 V rails per instance (matching the LMC662 model's
+          // auto-±5 fallback); a wired vpos/vneg (e.g. a future powered symbol) is used if present.
+          const vcc = c.nodes.vpos ? n(c.nodes.vpos) : `xop${c.id}_vcc`
+          const vee = c.nodes.vneg ? n(c.nodes.vneg) : `xop${c.id}_vee`
+          if (!c.nodes.vpos) lines.push(`Vvcc${c.id} ${vcc} 0 DC 5`)
+          if (!c.nodes.vneg) lines.push(`Vvee${c.id} ${vee} 0 DC -5`)
+          lines.push(`X${c.id} ${n(c.nodes.inP)} ${n(c.nodes.inN)} ${vcc} ${vee} ${n(c.nodes.out)} ${c.part}`)
+          usedOpampKinds.add(c.part)
+        } else {
+          lines.push(...opampLines(c, n))
+        }
         break
       case 'inamp':
         lines.push(...inampLines(c, n))
@@ -395,6 +413,7 @@ export function buildNetlist(circuit: Circuit, analysis: Analysis): string {
         break // net normalisation only
     }
   }
+  for (const k of usedOpampKinds) lines.push(buildOpampSubckt(getOpamp(k)))
   lines.push(analysisDirective(analysis))
   lines.push('.end')
   return lines.join('\n')

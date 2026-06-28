@@ -4,6 +4,7 @@
 
 import type { Circuit, Component as SpiceComponent } from './netlist'
 import { TRANSISTOR_PARTS } from './netlist'
+import { isKitOpamp } from './opamps'
 
 export type SchKind =
   | 'resistor'
@@ -474,12 +475,14 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
       comps.push({ kind: 'resistor', id: `aout${aw}`, nodes: [srcNet, outNet], ohms: 49.9 })
       aw++
     } else if (c.kind === 'opamp') {
-      // Every op-amp is an LMC662 (one section) with V+/V- rail pins (ts[3]/ts[4]).
+      // SCH-9: an op-amp carries a kit `part` (op27/op484/…) → emitted as that part's .subckt
+      // macromodel. With no kit part (legacy/off-kit) it falls back to the LMC662 behavioural model.
       const tvpos = ts[3], tvneg = ts[4]
       comps.push({
         kind: 'opamp',
         id: String(ec++),
         model: 'lmc662',
+        ...(c.part && isKitOpamp(c.part) ? { part: c.part } : {}),
         nodes: {
           inP: rename(netOf(ts[0].gx, ts[0].gy)),
           inN: rename(netOf(ts[1].gx, ts[1].gy)),

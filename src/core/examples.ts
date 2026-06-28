@@ -1,6 +1,6 @@
 // Built-in example circuit library (loadable from the Schematic editor's Examples menu).
 // Each schematic is pre-wired with a W1 source, a 1+ (scope CH1) probe on the output, grounds,
-// and — for the LMC662 versions — V+/V- rails, so a student can load it and immediately run the
+// and — for the op-amp versions — V+/V- rails, so a student can load it and immediately run the
 // Network Analyzer (Bode) or the scope. Component values are chosen for clean, readable plots and
 // (for the amps) gains small enough not to clip at the default 1 V input.
 //
@@ -37,14 +37,14 @@ export interface Example {
 const sine = (frequency: number, amplitude = 1): SignalParams =>
   ({ waveType: 'sine', frequency, amplitude, offset: 0, dutyCycle: 50, samplingRate: 100000, duration: 0.016 })
 
-// --- shared amp skeletons (inverting / non-inverting) — always a real LMC662 with V+/V- rails -----
+// --- shared amp skeletons (inverting / non-inverting) — kit OP484 (rail-to-rail), auto ±5 V rails --
 
 function invertingAmp(): Schematic {
   return {
     components: [
       { id: 'W1', kind: 'awg1', gx: 2, gy: 6 },
       { id: 'Rin', kind: 'resistor', gx: 4, gy: 6, value: 10000 },
-      { id: 'U1', kind: 'opamp', gx: 10, gy: 4 },
+      { id: 'U1', kind: 'opamp', gx: 10, gy: 4, part: 'op484' },
       { id: 'Rf', kind: 'resistor', gx: 10, gy: 8, value: 20000 },
       { id: 'G1', kind: 'ground', gx: 8, gy: 4 },
       { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },
@@ -67,7 +67,7 @@ function nonInvertingAmp(): Schematic {
   return {
     components: [
       { id: 'W1', kind: 'awg1', gx: 6, gy: 4 },
-      { id: 'U1', kind: 'opamp', gx: 10, gy: 4 },
+      { id: 'U1', kind: 'opamp', gx: 10, gy: 4, part: 'op484' },
       { id: 'Rf', kind: 'resistor', gx: 12, gy: 6, value: 10000 },
       { id: 'Rg', kind: 'resistor', gx: 10, gy: 6, rotation: 1, value: 10000 },
       { id: 'G1', kind: 'ground', gx: 10, gy: 10 },
@@ -191,14 +191,14 @@ export const EXAMPLES: Example[] = [
     },
   },
   {
-    id: 'inv-amp', name: 'Inverting amp ×−2 (LMC662)', group: 'Amplifiers',
-    blurb: 'LMC662 op-amp on ±5 V rails. Gain −Rf/Rin = −2 (Rf 20 kΩ, Rin 10 kΩ — both kit values; CH2 in, CH1 out, note the inversion). Buildable on the breadboard as an 8-pin DIP.',
+    id: 'inv-amp', name: 'Inverting amp ×−2 (OP484)', group: 'Amplifiers',
+    blurb: 'Kit OP484 (rail-to-rail) op-amp on ±5 V rails. Gain −Rf/Rin = −2 (Rf 20 kΩ, Rin 10 kΩ — both kit values; CH2 in, CH1 out, note the inversion). Buildable on the breadboard as a DIP.',
     w1: sine(1000), ch1Vdiv: 1, ch2Vdiv: 1,
     schematic: invertingAmp(),
   },
   {
-    id: 'noninv-amp', name: 'Non-inverting amp ×2 (LMC662)', group: 'Amplifiers',
-    blurb: 'LMC662 op-amp on ±5 V rails. Gain 1 + Rf/Rg = 2 (CH2 in, CH1 out — same phase, 2× taller). Buildable on the breadboard as an 8-pin DIP.',
+    id: 'noninv-amp', name: 'Non-inverting amp ×2 (OP484)', group: 'Amplifiers',
+    blurb: 'Kit OP484 (rail-to-rail) op-amp on ±5 V rails. Gain 1 + Rf/Rg = 2 (CH2 in, CH1 out — same phase, 2× taller). Buildable on the breadboard as a DIP.',
     w1: sine(1000), ch1Vdiv: 1, ch2Vdiv: 1,
     schematic: nonInvertingAmp(),
   },
@@ -224,8 +224,8 @@ export const EXAMPLES: Example[] = [
     },
   },
   {
-    id: 'integrator', name: 'Integrator (LMC662)', group: 'Amplifiers',
-    blurb: 'LMC662 op-amp on ±5 V rails. Inverting integrator (Rf bounds DC gain, ~80 Hz corner). Drive well above the corner and a triangle integrates to a parabolic wave (CH2 in, CH1 out). Buildable on the breadboard as an 8-pin DIP.',
+    id: 'integrator', name: 'Integrator (OP484)', group: 'Amplifiers',
+    blurb: 'Kit OP484 (rail-to-rail) op-amp on ±5 V rails. Inverting integrator (Rf bounds DC gain, ~80 Hz corner). Drive well above the corner and a triangle integrates to a parabolic wave (CH2 in, CH1 out). Buildable on the breadboard as a DIP.',
     // Drive at 1 kHz, ~12× above the ~80 Hz corner, so it integrates cleanly: output extrema land on
     // the input zero-crossings. (τ = RfCf = 2 ms stays under the sim window, so it settles with no
     // offset drift.) CH1 = output (~0.5 Vpp, 100 mV/div), CH2 = input (4 Vpp, 1 V/div).
@@ -235,7 +235,7 @@ export const EXAMPLES: Example[] = [
       components: [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 6 },
         { id: 'Rin', kind: 'resistor', gx: 4, gy: 6, value: 10000 },
-        { id: 'U1', kind: 'opamp', gx: 10, gy: 4 },
+        { id: 'U1', kind: 'opamp', gx: 10, gy: 4, part: 'op484' },
         { id: 'Cf', kind: 'capacitor', gx: 10, gy: 8, value: 1e-7 },
         { id: 'Rf', kind: 'resistor', gx: 10, gy: 10, value: 20000 },
         { id: 'G1', kind: 'ground', gx: 8, gy: 4 },
@@ -257,9 +257,9 @@ export const EXAMPLES: Example[] = [
     },
   },
   {
-    id: 'differentiator', name: 'Differentiator (LMC662)', group: 'Amplifiers',
-    blurb: 'LMC662 op-amp on ±5 V rails. Inverting differentiator, +20 dB/decade (0 dB near 160 Hz): a triangle differentiates to a square (CH2 in, CH1 out). Buildable on the breadboard as an 8-pin DIP.',
-    // Triangle in -> square out (derivative of constant slopes). With the real LMC662 the square has
+    id: 'differentiator', name: 'Differentiator (OP484)', group: 'Amplifiers',
+    blurb: 'Kit OP484 (rail-to-rail) op-amp on ±5 V rails. Inverting differentiator, +20 dB/decade (0 dB near 160 Hz): a triangle differentiates to a square (CH2 in, CH1 out). Buildable on the breadboard as a DIP.',
+    // Triangle in -> square out (derivative of constant slopes). With the real OP484 the square has
     // some peaking at the corners (a practical differentiator), so the output runs a few volts.
     // CH1 = output (~±3 V, 1 V/div), CH2 = input (4 Vpp, 1 V/div).
     w1: { waveType: 'triangle', frequency: 200, amplitude: 2, offset: 0, dutyCycle: 50, samplingRate: 100000, duration: 0.016 },
@@ -268,7 +268,7 @@ export const EXAMPLES: Example[] = [
       components: [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 6 },
         { id: 'Cin', kind: 'capacitor', gx: 4, gy: 6, value: 1e-7 },
-        { id: 'U1', kind: 'opamp', gx: 10, gy: 4 },
+        { id: 'U1', kind: 'opamp', gx: 10, gy: 4, part: 'op484' },
         { id: 'Rf', kind: 'resistor', gx: 10, gy: 8, value: 10000 },
         { id: 'G1', kind: 'ground', gx: 8, gy: 4 },
         { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },
@@ -287,8 +287,8 @@ export const EXAMPLES: Example[] = [
     },
   },
   {
-    id: 'summing', name: 'Summing amp (LMC662)', group: 'Amplifiers',
-    blurb: 'LMC662 op-amp on ±5 V rails. Inverting summer: out = −(W1 + W2). Both generators are preset (1 kHz + 2 kHz); the scope shows the composite sum, and you can see/edit W1 and W2 in the Signal Generator. Buildable on the breadboard as an 8-pin DIP.',
+    id: 'summing', name: 'Summing amp (OP484)', group: 'Amplifiers',
+    blurb: 'Kit OP484 (rail-to-rail) op-amp on ±5 V rails. Inverting summer: out = −(W1 + W2). Both generators are preset (1 kHz + 2 kHz); the scope shows the composite sum, and you can see/edit W1 and W2 in the Signal Generator. Buildable on the breadboard as a DIP.',
     w1: sine(1000), w2: sine(2000), ch1Vdiv: 0.5,
     schematic: {
       components: [
@@ -296,7 +296,7 @@ export const EXAMPLES: Example[] = [
         { id: 'Ra', kind: 'resistor', gx: 6, gy: 6, value: 10000 },
         { id: 'W2', kind: 'awg2', gx: 2, gy: 8 },
         { id: 'Rb', kind: 'resistor', gx: 6, gy: 8, value: 10000 },
-        { id: 'U1', kind: 'opamp', gx: 10, gy: 4 },
+        { id: 'U1', kind: 'opamp', gx: 10, gy: 4, part: 'op484' },
         { id: 'Rf', kind: 'resistor', gx: 10, gy: 10, value: 10000 },
         { id: 'G1', kind: 'ground', gx: 8, gy: 4 },
         { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },

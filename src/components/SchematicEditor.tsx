@@ -3,7 +3,7 @@
 // toCircuit(). See docs/specs/schematic-ngspice.md (SCH-1).
 import { useMemo, useRef, useState, useEffect, type ReactElement, type Dispatch, type SetStateAction } from 'react'
 import {
-  Schematic, SchComponent, SchKind, terminalsOf, toCircuit, ampCategory,
+  Schematic, SchComponent, SchKind, terminalsOf, toCircuit, ampCategory, computeNets,
   attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentWithWires, type WireEndRef,
 } from '../core/schematic'
 import { buildNetlist, TRANSISTOR_PARTS } from '../core/netlist'
@@ -11,6 +11,7 @@ import { EXAMPLES } from '../core/examples'
 import { createSpiceEngine, type SpiceEngine, transferFunction } from '../core/spice'
 import { UNIT, TUNE_RANGE, fmtEng, parseEng, tunePos, tuneValue } from '../core/units'
 import { kitValues, isKitValue, nearestKitValue, formatValue, type PassiveKind } from '../core/kit'
+import { opampList, getOpamp, isKitOpamp } from '../core/opamps'
 import { exportSvgToPng } from './exportImage'
 import './Instrument.css'
 
@@ -54,9 +55,11 @@ const DEFAULT_VALUE: Partial<Record<SchKind, number>> = {
   led: 2.0, zener: 3.3,
 }
 
-// Default ADALP2000 part placed for a new transistor (overridable in the Selected panel).
+// Default ADALP2000 part placed for a new transistor / op-amp (overridable in the Selected panel).
+// op-amp defaults to a kit rail-to-rail part so new placements are kit; legacy circuits with no
+// part fall back to the LMC662 model and show the off-kit warning.
 const DEFAULT_PART: Partial<Record<SchKind, string>> = {
-  bjt: '2N3904', mosfet: 'ZVN2110A',
+  bjt: '2N3904', mosfet: 'ZVN2110A', opamp: 'op484',
 }
 
 // Reference designators (R1, C2, L1, U1 for op/in-amps, V1). A new part increments from the
@@ -490,6 +493,34 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, part } : c) }))
   }
 
+  // SCH-9: estimate an op-amp's closed-loop noise gain (1 + Rf/Rg) from the resistors on its inN
+  // node, so the inspector can fire the OP37 "min stable gain 5" warning. Returns null if the
+  // topology isn't a recognisable resistive-feedback amp. A direct out→inN short (unity buffer) → 1;
+  // feedback with no gain-setting leg (e.g. transimpedance) → Infinity (treated as ≥ stable).
+  function opampNoiseGain(op: SchComponent): number | null {
+    const nets = computeNets(sch)
+    const ts = terminalsOf(op)
+    const inN = ts.find((t) => t.name === 'inN'); const out = ts.find((t) => t.name === 'out')
+    if (!inN || !out) return null
+    const inNnet = nets.get(`${inN.gx},${inN.gy}`); const outnet = nets.get(`${out.gx},${out.gy}`)
+    if (!inNnet || !outnet) return null
+    if (inNnet === outnet) return 1 // out tied straight back to inN → unity-gain follower
+    let rf: number | null = null; let rg: number | null = null
+    for (const c of sch.components) {
+      if (c.kind !== 'resistor') continue
+      const rt = terminalsOf(c)
+      const a = nets.get(`${rt[0].gx},${rt[0].gy}`); const b = nets.get(`${rt[1].gx},${rt[1].gy}`)
+      if (a !== inNnet && b !== inNnet) continue
+      const other = a === inNnet ? b : a
+      const ohms = c.value ?? 0
+      if (other === outnet) rf = ohms                          // feedback resistor
+      else if (rg === null || ohms < rg) rg = ohms             // smallest gain-setting leg
+    }
+    if (rf === null) return null              // no resistive feedback recognised
+    if (rg === null) return Infinity          // feedback only (transimpedance) → high noise gain
+    return rg > 0 ? 1 + rf / rg : Infinity
+  }
+
   // A pin is powered if a wire reaches it or another part's terminal sits on it.
   function pinConnected(gx: number, gy: number, selfId: string): boolean {
     if (sch.wires.some((w) => (w.x1 === gx && w.y1 === gy) || (w.x2 === gx && w.y2 === gy))) return true
@@ -664,7 +695,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         </div>
         {tool === 'opamp' && (
           <div style={{ fontSize: 10, marginTop: 6, color: 'var(--text-secondary)' }}>
-            LMC662 op-amp — power is implied in simulation; on the breadboard it's an 8-pin DIP whose V+/V− you wire.
+            Op-amp — defaults to a kit part (OP484); pick the exact ADALP2000 op-amp in the Selected panel. Power implied in simulation; a DIP on the breadboard.
           </div>
         )}
         {tool === 'ina125' && (
@@ -775,12 +806,58 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                 </div>
               )
             })()}
-            {sel.kind === 'opamp' && (
-              <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
-                LMC662 op-amp. GBW 1.4 MHz, output clips at ±5 V. Power is implied in simulation; on the
-                breadboard it's an 8-pin DIP whose V+/V− you wire to the rails.
-              </div>
-            )}
+            {sel.kind === 'opamp' && (() => {
+              // SCH-9 kit op-amp picker. No kit `part` → legacy LMC662 model (off-kit) with a swap.
+              const kind = sel.part && isKitOpamp(sel.part) ? sel.part : null
+              const onKit = kind !== null
+              const part = kind ? getOpamp(kind) : null
+              const gain = opampNoiseGain(sel)
+              const op37LowGain = part?.kind === 'op37' && gain !== null && gain < 5
+              const overSupply = part ? 10 > part.supplyMax : false // M2K rails are ±5 (10 V total)
+              return (
+                <>
+                  <div className="control-row-inline" title="Pick an op-amp from your ADALP2000 parts kit">
+                    <label>Op-amp</label>
+                    <select value={kind ?? '__off'}
+                      onChange={(e) => { if (e.target.value !== '__off') setSelPart(e.target.value) }}
+                      style={{ width: 150 }}>
+                      {!onKit && <option value="__off">LMC662 — not in kit</option>}
+                      {opampList().map((p) => (
+                        <option key={p.kind} value={p.kind}>{p.name} ({p.package})</option>
+                      ))}
+                    </select>
+                  </div>
+                  {part && (
+                    <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
+                      {part.name}: GBW {fmtEng(part.gbwHz)}Hz, slew {part.slewRate} V/µs,
+                      {part.railToRailOut ? ' rail-to-rail output' : ` output to ~${part.outputHeadroom} V of each rail`}.
+                    </div>
+                  )}
+                  {!onKit && (
+                    <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, color: '#ffaa55', border: '1px solid #ffaa55' }}>
+                        ⚠ not in your parts kit
+                      </span>
+                      <button className="run-btn" title="Swap to the kit OP484 (rail-to-rail, ±5 V)"
+                        onClick={() => setSelPart('op484')}>Swap to OP484</button>
+                    </div>
+                  )}
+                  {op37LowGain && (
+                    <div style={{ fontSize: 10, color: '#ffaa55', marginTop: 4, lineHeight: 1.4 }}>
+                      ⚠ OP37 is decompensated — stable only at closed-loop gain ≥ 5 (this stage ≈ {gain === Infinity ? '∞' : gain.toFixed(1)}). Use OP27 for low gain.
+                    </div>
+                  )}
+                  {overSupply && (
+                    <div style={{ fontSize: 10, color: '#ffaa55', marginTop: 4, lineHeight: 1.4 }}>
+                      ⚠ {part!.name} is single-supply {part!.supplyMin}–{part!.supplyMax} V — the M2K's ±5 V rails (10 V) exceed its max.
+                    </div>
+                  )}
+                  <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.4 }}>
+                    Power is implied in simulation (auto ±5 V); on the breadboard it's a DIP whose V+/V− you wire to the rails.
+                  </div>
+                </>
+              )
+            })()}
             {sel.kind === 'ina125' && (
               <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
                 INA125 in-amp. Gain = 4 + 60 kΩ/R_G (external R_G across the RG pins). Output referred to
