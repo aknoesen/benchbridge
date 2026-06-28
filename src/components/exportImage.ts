@@ -81,12 +81,41 @@ function triggerDownload(href: string, filename: string) {
   a.remove()
 }
 
+// Save a PNG blob the way the circuit/lab saves work: the native Save dialog (name + folder) when the
+// browser supports it (Chrome/Edge), else a name prompt + download to the default folder.
+async function savePng(blob: Blob, suggestedName: string) {
+  const sfp = (window as unknown as {
+    showSaveFilePicker?: (o: {
+      suggestedName?: string
+      types?: { description?: string; accept: Record<string, string[]> }[]
+    }) => Promise<{ createWritable: () => Promise<{ write: (d: Blob) => Promise<void>; close: () => Promise<void> }> }>
+  }).showSaveFilePicker
+  if (typeof sfp === 'function') {
+    try {
+      const handle = await sfp({ suggestedName, types: [{ description: 'PNG image', accept: { 'image/png': ['.png'] } }] })
+      const w = await handle.createWritable(); await w.write(blob); await w.close()
+      return
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return // user cancelled
+      // any other error → fall through to the download fallback
+    }
+  }
+  let name = window.prompt('Save image as:', suggestedName)
+  if (name === null) return // cancelled
+  name = name.trim() || suggestedName
+  if (!name.toLowerCase().endsWith('.png')) name += '.png'
+  const url = URL.createObjectURL(blob)
+  triggerDownload(url, name)
+  URL.revokeObjectURL(url)
+}
+
 interface ExportOpts { scale?: number; light?: boolean }
 
 /**
- * Rasterize an on-screen SVG element to a PNG and download it.
+ * Rasterize an on-screen SVG element to a PNG and save it. Uses the native Save dialog (name +
+ * folder) when supported, else prompts for a name and downloads — same UX as the circuit/lab saves.
  * @param svg   the live <svg> (must be in the DOM so computed styles resolve)
- * @param filename  e.g. 'schematic.png'
+ * @param filename  suggested name, e.g. 'schematic.png'
  * @param opts.scale  pixel density multiplier (default 2)
  * @param opts.light  true → white background + dark-ink remap (default false = transparent)
  */
@@ -126,7 +155,9 @@ export async function exportSvgToPng(svg: SVGSVGElement, filename: string, opts:
     if (light) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height) }
     ctx.scale(scale, scale)
     ctx.drawImage(img, 0, 0, w, h)
-    triggerDownload(canvas.toDataURL('image/png'), filename)
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/png'))
+    if (!blob) throw new Error('Could not encode the PNG.')
+    await savePng(blob, filename)
   } finally {
     URL.revokeObjectURL(url)
   }
