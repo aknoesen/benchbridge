@@ -7,6 +7,12 @@ power supply, a schematic editor with in-browser NGSpice (WASM) simulation, and 
 transfer/verify view — plus an example-circuit library. The original pedagogy (ADC bit depth,
 spectral analysis, quantization noise) lives on in the Spectrum Analyzer's Learning Mode.
 
+**Scope — analog only.** This is an *analog* digital twin. It models the M2K's analog instruments
+(scope, signal generator, spectrum/network analyzers, voltmeter, power supply). The M2K's **digital**
+subsystems — the 16-channel logic analyzer, the pattern generator, and the digital I/O / bus
+(SPI/I²C/UART) tooling — are **deliberately not implemented** (EEC1 uses only the analog bench). Do
+not add digital-instrument features without an explicit decision to expand scope.
+
 ## Active development — read `docs/` before building new features
 
 The instruments above are built. Planning, phase status, and per-phase specs live in `docs/`.

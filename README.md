@@ -6,6 +6,8 @@ A browser-based digital twin of the [Analog Devices ADALM2000](https://www.analo
 
 Built for the EEC1 first-year ECE course at UC Davis. The twin teaches the ideal and parametric side of measurement so students arrive at the real bench already fluent in the instruments.
 
+> **Scope: this is an _analog_ digital twin.** It models the M2K's analog instruments — oscilloscope, signal generator, spectrum analyzer, network analyzer, voltmeter, and power supply. The M2K's **digital** subsystems — the 16-channel logic analyzer, the pattern generator, and the digital I/O / bus (SPI/I²C/UART) tools — are intentionally **out of scope and not implemented**. EEC1 uses only the analog bench, so the twin mirrors exactly that.
+
 ## Instruments
 
 - **Signal Generator** — two channels (W1/W2): sine, square (variable duty cycle), triangle, sawtooth; configurable frequency, amplitude, DC offset.
@@ -16,16 +18,16 @@ Built for the EEC1 first-year ECE course at UC Davis. The twin teaches the ideal
 
 ## Circuit editor + simulation
 
-- **Schematic editor** — place and wire R, C, L, diodes (plain / LED with settable Vf / Zener with settable breakdown), op-amps (ideal or LMC662 behavioural model), instrumentation amps, the LMC662 8-pin DIP, generator/scope/supply ports, and ground. Includes a Selected-panel type picker (op-amp model, in-amp type, diode kind), **undo/redo** (Ctrl+Z / Ctrl+Y), **copy/paste/cut** (Ctrl+C/V/X), box-select and group move, rotate, and **Save/Open** to `.json`.
+- **Schematic editor** — place and wire R, C, L, diodes (plain / LED with settable Vf / Zener with settable breakdown), the **LMC662** op-amp (behavioural model; boards as an 8-pin DIP), the **INA125** instrumentation amp (boards as a 16-pin DIP), generator/scope/supply ports, and ground. Every active part is a real, packaged device — there is no package-less "ideal" op-amp or in-amp. Includes a Selected-panel diode-kind picker, **undo/redo** (Ctrl+Z / Ctrl+Y), **copy/paste/cut** (Ctrl+C/V/X), box-select and group move, rotate, and **Save/Open** to `.json`.
 - **SPICE simulation** — [ngspice compiled to WebAssembly](https://www.npmjs.com/package/eecircuit-engine) runs in a Web Worker, so the generator → circuit → scope/Bode loop is fully in-browser. The generator drives the circuit input; the scope and spectrum read the circuit output node.
-- **Breadboard** — transfer a drawn schematic to a parametric solderless board (2-pin parts and the LMC662 DIP), run jumpers, and **Check** that the board is electrically equivalent to the schematic, with per-connection feedback. Practice mode colours nets live; Bench mode hides them until Check. Save/Open a "lab" bundle (schematic + board + generator settings) as one file.
+- **Breadboard** — transfer a drawn schematic to a parametric solderless board (2-pin parts, the LMC662 8-pin DIP, and the INA125 16-pin DIP), run jumpers, and **Check** that the board is electrically equivalent to the schematic, with per-connection feedback (including the INA125's required reference/sense/sleep straps). Practice mode colours nets live; Bench mode hides them until Check. Save/Open a "lab" bundle (schematic + board + generator settings) as one file.
 
 ## Example library
 
 An **Examples** menu in the Circuit editor loads ready-made circuits, each pre-wired with a source and probes and (where useful) a preset generator drive and scope mode:
 
 - Passive: voltage divider, RC low/high-pass, LC low/high-pass, RLC band-pass, and **Diode** and **Zener I-V curves** (load straight into XY mode with a triangle sweep).
-- Amplifiers: inverting and non-inverting (ideal and LMC662), op-amp integrator, differentiator, and a two-input summing amp.
+- Amplifiers: inverting, non-inverting, integrator, differentiator, and a two-input summing amp (all the **LMC662**), plus an **INA125** instrumentation-amp example (gain 10 set by an external R_G).
 
 ## Layouts
 

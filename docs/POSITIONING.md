@@ -60,6 +60,12 @@ a design choice, not a shortcoming. The twin teaches the ideal so that hardware 
 deviation from it. Being honest about this is part of the pedagogy, and it is exactly why the next
 rung matters.
 
+It is also an **analog** twin. It models the M2K's analog instruments — oscilloscope, signal
+generator, spectrum and network analyzers, voltmeter, power supply. The M2K's digital subsystems —
+the 16-channel logic analyzer, the pattern generator, and the digital I/O and bus (SPI/I²C/UART)
+decoders — are deliberately out of scope and not implemented, because the first year course uses only
+the analog bench. The twin mirrors the half of the instrument the students actually touch.
+
 ## The continuum: one circuit, three rungs
 
 The right way to see the two approaches is not as rivals but as a single learning progression, with
