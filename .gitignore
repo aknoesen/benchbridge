@@ -35,8 +35,6 @@ Video/
 *.mov
 desktop.ini
 
-# Local strategy/vision material — never pushed to the public repo
-planning/
 ts, not part of the app
 Mk2 Digital Twin/
 _*.mts
