@@ -72,6 +72,34 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
   const plotRef = useRef<HTMLDivElement>(null)
   const initialised = useRef(false)
   const frameRef = useRef(0) // free-running capture-phase counter
+  const drawingRef = useRef(false)        // re-entrancy guard so overlapping draws can't stack on Plotly
+  const lastModeRef = useRef<'yt' | 'xy' | null>(null) // last layout kind actually drawn
+
+  // Single point where the trace reaches Plotly. The render effect runs on every setting change AND
+  // (with a circuit) every animation tick, so three hardening rules apply:
+  //  (1) Serialize — never start a draw while one is in flight (Plotly is not reentrant).
+  //  (2) Re-init on a layout-kind switch (YT ↔ XY) — `Plotly.react`-ing a plot INTO or OUT OF the XY
+  //      mode's `scaleanchor` constraint makes Plotly loop/hang (the "blank screen toggling XY"
+  //      freeze). A full purge + newPlot for that transition sidesteps the constraint solver entirely.
+  //  (3) Never let a transient Plotly throw escape — before the per-panel ErrorBoundary this tore down
+  //      the whole app. On a bad frame we keep the previous trace and log the cause.
+  function drawPlot(el: HTMLDivElement, mode: 'yt' | 'xy', data: Plotly.Data[], layout: Partial<Plotly.Layout>, config: Partial<Plotly.Config>) {
+    if (drawingRef.current) return
+    drawingRef.current = true
+    try {
+      if (initialised.current && lastModeRef.current !== mode) {
+        Plotly.purge(el)               // YT↔XY: re-init instead of transitioning the scaleanchor
+        initialised.current = false
+      }
+      if (!initialised.current) { Plotly.newPlot(el, data, layout, config); initialised.current = true }
+      else Plotly.react(el, data, layout, config)
+      lastModeRef.current = mode
+    } catch (err) {
+      console.warn('[scope] Plotly draw skipped after an internal error (previous frame kept):', err)
+    } finally {
+      drawingRef.current = false
+    }
+  }
 
   const [timePerDiv, setTimePerDiv] = useState(0.001)
   const [ch1VoltsPerDiv, setCh1VoltsPerDiv] = useState(0.5)
@@ -228,8 +256,7 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
         x: xs, y: ys, type: 'scatter', mode: 'lines', line: { color: '#9b7fff', width: 2 }, hoverinfo: 'none' as const,
       }]
       const xyConfig: Partial<Plotly.Config> = { displayModeBar: false, responsive: true }
-      if (!initialised.current) { Plotly.newPlot(el, xyData, xyLayout, xyConfig); initialised.current = true }
-      else Plotly.react(el, xyData, xyLayout, xyConfig)
+      drawPlot(el, 'xy', xyData, xyLayout, xyConfig)
       return
     }
 
@@ -285,8 +312,7 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
       shapes,
     }
     const config: Partial<Plotly.Config> = { displayModeBar: false, responsive: true }
-    if (!initialised.current) { Plotly.newPlot(el, data, layout, config); initialised.current = true }
-    else Plotly.react(el, data, layout, config)
+    drawPlot(el, 'yt', data, layout, config)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ch1src, ch2src, srcFs, ch2Enabled, timePerDiv, ch1VoltsPerDiv, ch1Offset, ch2VoltsPerDiv, ch2Offset,
       trigSource, trigLevel, trigSlope, trigMode, singleArmed, running,
