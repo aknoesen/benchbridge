@@ -112,6 +112,21 @@ describe('degenerate frequency guard — blank-screen crash', () => {
     expect(safeFrequency(MIN_FREQUENCY)).toBe(MIN_FREQUENCY)
     expect(safeFrequency(50000)).toBe(50000)
   })
+
+  // A cleared Amplitude/Offset field (Number('') = NaN) or ±Infinity must not produce a NaN-filled
+  // buffer — that poisons every downstream trace and pushes NaN into Plotly (NaN peak annotation /
+  // axis range), the same blank-screen class as a bad frequency. generateSignal must stay finite.
+  for (const bad of [NaN, Infinity, -Infinity]) {
+    it(`amplitude=${bad} → finite buffer, no NaN`, () => {
+      const { x } = generateSignal(base({ amplitude: bad }))
+      expect(x.length).toBeGreaterThan(0)
+      expect(x.every((v) => Number.isFinite(v))).toBe(true)
+    })
+    it(`offset=${bad} → finite buffer, no NaN`, () => {
+      const { x } = generateSignal(base({ offset: bad }))
+      expect(x.every((v) => Number.isFinite(v))).toBe(true)
+    })
+  }
 })
 
 describe('SIG-1 — bin-width readout', () => {

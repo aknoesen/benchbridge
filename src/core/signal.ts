@@ -25,6 +25,14 @@ export function safeFrequency(frequency: number): number {
   return Number.isFinite(frequency) && frequency >= MIN_FREQUENCY ? frequency : MIN_FREQUENCY
 }
 
+// Coerce a possibly-empty/NaN numeric field to a finite value. A cleared Amplitude or Offset field
+// (Number('') = NaN, or ±Infinity) would otherwise make generateSignal emit a NaN-filled buffer that
+// poisons every downstream trace and pushes NaN coordinates into Plotly (a NaN axis range or peak
+// annotation) — the same blank-screen class as a degenerate frequency. Valid values pass through.
+function finiteOr(value: number, fallback: number): number {
+  return Number.isFinite(value) ? value : fallback
+}
+
 // Snap duration to a whole number of periods to avoid spectral leakage. Exported (SIG-1) so the
 // Spectrum readout and tests can compute N — the exact FFT length — identically to generateSignal.
 // This is plumbing, NOT the protected leakage math: N lands every component on an integer bin only
@@ -37,6 +45,12 @@ export function snapDuration(duration: number, frequency: number, samplingRate: 
 
 export function generateSignal(p: SignalParams): { t: Float64Array; x: Float64Array } {
   const f = safeFrequency(p.frequency)
+  // Guard the remaining numeric fields so the buffer is always finite (see finiteOr): a cleared
+  // Amplitude/Offset field must not NaN-poison the scope/spectrum traces. Valid values are unchanged,
+  // so the 12-bit canary (amplitude 1, offset 0, duty 50) is unaffected.
+  const amp = finiteOr(p.amplitude, 0)
+  const off = finiteOr(p.offset, 0)
+  const duty = Math.min(100, Math.max(0, finiteOr(p.dutyCycle, 50)))
   const N = snapDuration(p.duration, f, p.samplingRate)
   const t = new Float64Array(N)
   const x = new Float64Array(N)
@@ -48,19 +62,19 @@ export function generateSignal(p: SignalParams): { t: Float64Array; x: Float64Ar
 
     switch (p.waveType) {
       case 'sine':
-        x[i] = p.amplitude * Math.sin(2 * Math.PI * tau)
+        x[i] = amp * Math.sin(2 * Math.PI * tau)
         break
       case 'square':
-        x[i] = p.amplitude * (tau < p.dutyCycle / 100 ? 1 : -1)
+        x[i] = amp * (tau < duty / 100 ? 1 : -1)
         break
       case 'triangle':
-        x[i] = p.amplitude * (1 - 4 * Math.abs(tau - 0.5))
+        x[i] = amp * (1 - 4 * Math.abs(tau - 0.5))
         break
       case 'sawtooth':
-        x[i] = p.amplitude * (2 * tau - 1)
+        x[i] = amp * (2 * tau - 1)
         break
     }
-    x[i] += p.offset
+    x[i] += off
   }
   return { t, x }
 }
