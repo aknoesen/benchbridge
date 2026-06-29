@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  generateSignal, computeSpectrum, snapDuration,
+  generateSignal, computeSpectrum, snapDuration, safeFrequency, MIN_FREQUENCY,
   type SignalParams, type SpectrumResult,
 } from './signal'
 
@@ -84,6 +84,33 @@ describe('SIG-1 — aliasing folds onto an exact predicted bin', () => {
     expect(peakIdx).toBe(64)                          // 4000 / (10000/160 = 62.5) = 64, exact
     expect(res.freqAxis[peakIdx]).toBeCloseTo(4000, 3)
     expect(maxLeakageDbfs(res, [aliasHz], 2)).toBeLessThan(-60)
+  })
+})
+
+describe('degenerate frequency guard — blank-screen crash', () => {
+  // Each of these was a reported scope/spectrum "blank screen": clearing the W1/W2 field (NaN),
+  // typing 0 (→ N = round(Fs/0) = Infinity → new Float64Array(Infinity) throws), a sub-milli-Hz
+  // value (N in the tens of millions → OOM / multi-million-point FFT freeze), or a leading "-"
+  // (negative N → new Float64Array(-N) throws). The guard must clamp all of these to a bounded N.
+  const degenerate = [0, NaN, -1, -1000, 0.0005, 0.9, Infinity, -Infinity]
+  for (const f of degenerate) {
+    it(`frequency=${f} → bounded, finite N and finite samples, no throw`, () => {
+      const N = snapDuration(0.016, f, 200000) // 200 kSa/s = the largest preset → worst-case N
+      expect(Number.isFinite(N)).toBe(true)
+      expect(N).toBeGreaterThan(0)
+      expect(N).toBeLessThanOrEqual(200000) // bounded: clamped to MIN_FREQUENCY, never runaway
+
+      const p = base({ waveType: 'sine', frequency: f, samplingRate: 200000 })
+      const { x } = generateSignal(p)
+      expect(x.length).toBe(N)
+      expect(x.every((v) => Number.isFinite(v))).toBe(true) // not a NaN-filled buffer
+    })
+  }
+
+  it('valid frequencies pass through safeFrequency unchanged (canary frequency untouched)', () => {
+    expect(safeFrequency(1000)).toBe(1000)
+    expect(safeFrequency(MIN_FREQUENCY)).toBe(MIN_FREQUENCY)
+    expect(safeFrequency(50000)).toBe(50000)
   })
 })
 

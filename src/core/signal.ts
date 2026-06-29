@@ -12,24 +12,39 @@ export interface SignalParams {
   duration: number     // s
 }
 
+// The signal-generator frequency floor (Hz). A frequency at or below this — or non-finite, zero,
+// or negative — is degenerate input (the user clears the W1/W2 field, types "-", or a sub-milli-Hz
+// value) that would otherwise make snapDuration return a runaway-huge or non-finite N: a
+// multi-million-point per-frame Bluestein FFT that freezes the tab, or `new Float64Array(N)` throwing
+// a RangeError on Infinity/NaN/negative — the reported scope/spectrum "blank screen". Valid
+// frequencies (≥ this floor) are returned unchanged, so the protected leakage math and the 12-bit
+// canary are unaffected. Matches the W1/W2 Frequency input's declared min.
+export const MIN_FREQUENCY = 1
+
+export function safeFrequency(frequency: number): number {
+  return Number.isFinite(frequency) && frequency >= MIN_FREQUENCY ? frequency : MIN_FREQUENCY
+}
+
 // Snap duration to a whole number of periods to avoid spectral leakage. Exported (SIG-1) so the
 // Spectrum readout and tests can compute N — the exact FFT length — identically to generateSignal.
 // This is plumbing, NOT the protected leakage math: N lands every component on an integer bin only
 // when numPeriods·Fs/f is an integer (i.e. Fs/f is a ratio whose denominator divides numPeriods).
 export function snapDuration(duration: number, frequency: number, samplingRate: number) {
-  const numPeriods = Math.max(1, Math.round(duration * frequency))
-  return Math.round(numPeriods * samplingRate / frequency)
+  const f = safeFrequency(frequency)
+  const numPeriods = Math.max(1, Math.round(duration * f))
+  return Math.round(numPeriods * samplingRate / f)
 }
 
 export function generateSignal(p: SignalParams): { t: Float64Array; x: Float64Array } {
-  const N = snapDuration(p.duration, p.frequency, p.samplingRate)
+  const f = safeFrequency(p.frequency)
+  const N = snapDuration(p.duration, f, p.samplingRate)
   const t = new Float64Array(N)
   const x = new Float64Array(N)
 
   for (let i = 0; i < N; i++) {
     t[i] = i / p.samplingRate
     // Rational tau avoids 2π accumulation errors at transition boundaries
-    const tau = ((i * p.frequency) / p.samplingRate) % 1
+    const tau = ((i * f) / p.samplingRate) % 1
 
     switch (p.waveType) {
       case 'sine':
