@@ -164,6 +164,10 @@ export default function NetworkAnalyzer({ circuit = DEFAULT_CIRCUIT, dutName, pr
     const primary = channel === 'ch2' ? bode2 : (bode1 ?? bode2)
     const feat = primary ? analyzeBode(primary.freq, primary.magDb) : null
 
+    // A cleared Mag Max/Min field is NaN; feeding it to Plotly's yaxis range blanks/hangs the plot
+    // (a hang the ErrorBoundary can't catch). Fall back to sane defaults when non-finite.
+    const yMin = Number.isFinite(magMin) ? magMin : -90
+    const yMax = Number.isFinite(magMax) ? magMax : 10
     const logRange: [number, number] = [Math.log10(fStart), Math.log10(fStop)]
     // A dotted marker at each −3 dB crossing (1 for LP/HP, 2 for BP/notch, none for flat).
     const cutoffShape = (feat?.cutoffs ?? []).map((f) => ({
@@ -199,7 +203,7 @@ export default function NetworkAnalyzer({ circuit = DEFAULT_CIRCUIT, dutName, pr
     }
 
     const annoF = feat && feat.shape !== 'flat' ? (feat.center ?? feat.cutoffs[0]) : null
-    const cutoffAnno = feat && annoF ? [{ x: Math.log10(annoF), y: magMin + (magMax - magMin) * 0.12,
+    const cutoffAnno = feat && annoF ? [{ x: Math.log10(annoF), y: yMin + (yMax - yMin) * 0.12,
       text: bodeAnno(feat),
       showarrow: false, font: { size: 10, color: '#fff' }, bgcolor: 'rgba(40,40,40,0.9)',
       bordercolor: '#666', borderwidth: 1 }] : []
@@ -207,7 +211,7 @@ export default function NetworkAnalyzer({ circuit = DEFAULT_CIRCUIT, dutName, pr
     Plotly.react(magRef.current, magData,
       { ...common, margin: { l: 56, r: 16, t: 22, b: 8 },
         xaxis: { ...baseX, showticklabels: false },
-        yaxis: { title: { text: 'Magnitude (dB)', font: { size: 11 } }, range: [magMin, magMax],
+        yaxis: { title: { text: 'Magnitude (dB)', font: { size: 11 } }, range: [yMin, yMax],
                  gridcolor: '#2a2a2a', zerolinecolor: '#444', tickfont: { size: 10 }, color: 'var(--text-secondary)' },
         shapes: cutoffShape, annotations: cutoffAnno,
       }, config)

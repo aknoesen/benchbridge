@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
-import { SignalParams, WaveType, generateSignal } from './core/signal'
+import { SignalParams, WaveType, generateSignal, safeFrequency } from './core/signal'
 import { DEFAULT_CHANNELS, resolveChannelSamples, ChannelInputs, type Samples } from './core/scope'
 import { toCircuit, type Schematic } from './core/schematic'
 import { type SupplySettings, buildNetlist, applyGeneratorParams } from './core/netlist'
@@ -354,9 +354,10 @@ export default function App() {
       try {
         const capSec = scopeWinSec * 2.2
         const fs = Math.min(params.samplingRate, Math.max(2000, Math.floor(200000 / capSec)))
-        const settle = Math.max(genSpan, 3 / params.frequency) // let startup transients decay
+        const driveF = safeFrequency(params.frequency) // guard a degenerate field → finite tran timing
+        const settle = Math.max(genSpan, 3 / driveF) // let startup transients decay
         const stop = settle + capSec
-        const step = Math.max(capSec / 200000, 1 / (params.frequency * 40)) // resolve the drive, cap points
+        const step = Math.max(capSec / 200000, 1 / (driveF * 40)) // resolve the drive, cap points
         const ckt = applyGeneratorParams(drawn.circuit, params, params2)
         const res = await spiceRef.current!.run(buildNetlist(ckt, { kind: 'tran', step, stop }))
         if (cancelled) return

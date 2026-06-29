@@ -226,9 +226,12 @@ export default function SpectrumAnalyzer({
       const theory = theoreticalHarmonics(sigPar.waveType, sigPar.amplitude, sigPar.frequency, sigPar.dutyCycle, 15)
       const theoryFreqs: number[] = [], theoryDbfs: number[] = []
       theory.frequencies.forEach((f, i) => {
-        if (f <= freqMax) {
+        const a = theory.amplitudesV[i]
+        // Skip non-finite points (e.g. a transiently cleared Amplitude field) so the theory
+        // overlay never pushes NaN coordinates into Plotly.
+        if (f <= freqMax && Number.isFinite(f) && Number.isFinite(a)) {
           theoryFreqs.push(f)
-          theoryDbfs.push(20 * Math.log10((theory.amplitudesV[i] + 1e-12) / 2.5))
+          theoryDbfs.push(20 * Math.log10((a + 1e-12) / 2.5))
         }
       })
       traces.push({
