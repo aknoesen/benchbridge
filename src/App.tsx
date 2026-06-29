@@ -14,6 +14,7 @@ import Breadboard from './components/Breadboard'
 import About from './components/About'
 import Welcome from './components/Welcome'
 import Quickstart from './components/Quickstart'
+import ErrorBoundary from './components/ErrorBoundary'
 import { EXAMPLES } from './core/examples'
 import { type BoardLayout, PLACEABLE_KINDS, DIP_KINDS } from './core/breadboard'
 import Voltmeter from './components/Voltmeter'
@@ -541,7 +542,7 @@ export default function App() {
       </nav>
 
       <main className={`instrument-area arrange-${arrange}`}>
-        {panels.map((id) => <Fragment key={id}>{renderPanel(id)}</Fragment>)}
+        {panels.map((id) => <Fragment key={id}><ErrorBoundary label={id}>{renderPanel(id)}</ErrorBoundary></Fragment>)}
       </main>
     </div>
   )
