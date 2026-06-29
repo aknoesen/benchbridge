@@ -40,8 +40,10 @@ type ChannelSel = 'ch1' | 'ch2' | 'both'
 interface SpecSlice { freq: number[]; amp: number[]; noiseFloorDbfs: number; binWidthHz: number }
 
 // Compute the displayed spectrum slice (DC bin dropped, limited to freqMax).
-function specSlice(sig: Samples, Fs: number, bits: number, windowType: WindowType, freqMax: number): SpecSlice {
-  const { freqAxis, magnitudeDbfs, noiseFloorDbfs, binWidthHz } = computeSpectrum(sig.x, Fs, bits, 5, windowType)
+function specSlice(sig: Samples, Fs: number, bits: number, windowType: WindowType, freqMax: number,
+                   dacEnabled: boolean, dacBits: number): SpecSlice {
+  const { freqAxis, magnitudeDbfs, noiseFloorDbfs, binWidthHz } =
+    computeSpectrum(sig.x, Fs, bits, 5, windowType, dacEnabled, dacBits)
   const maxIdx = freqAxis.findIndex(f => f > freqMax) || freqAxis.length
   return {
     freq: Array.from(freqAxis.slice(1, maxIdx)),
@@ -95,6 +97,10 @@ export default function SpectrumAnalyzer({
 
   const [channel, setChannel] = useState<ChannelSel>('ch1')
   const [bits, setBits]           = useState(12)
+  // SIG-2: optional DAC (W1/W2 AWG output) quantization floor, default OFF so the ADC Learning Mode
+  // and the 12-bit canary stay clean. dacBits default 12 = the real M2K AWG.
+  const [dacEnabled, setDacEnabled] = useState(false)
+  const [dacBits, setDacBits]       = useState(12)
   const [showTheory, setShowTheory] = useState(false)
   const [freqMax, setFreqMax]     = useState(10000)
   const [windowType, setWindowType] = useState<WindowType>('hanning')
@@ -115,7 +121,7 @@ export default function SpectrumAnalyzer({
     avgBufferRef.current  = null
     avgCountRef.current   = 0
     prevBinCountRef.current = 0
-  }, [bits, freqMax, windowType, channel,
+  }, [bits, dacEnabled, dacBits, freqMax, windowType, channel,
       params.frequency, params.waveType, params.dutyCycle, params.samplingRate,
       params2.frequency, params2.waveType, params2.dutyCycle, params2.samplingRate])
 
@@ -125,15 +131,15 @@ export default function SpectrumAnalyzer({
 
     // ── Both channels: simple dual live overlay against the shared noise floor ──
     if (channel === 'both' && signal && signal2) {
-      const s1 = specSlice(signal, params.samplingRate, bits, windowType, freqMax)
-      const s2 = specSlice(signal2, params2.samplingRate, bits, windowType, freqMax)
+      const s1 = specSlice(signal, params.samplingRate, bits, windowType, freqMax, dacEnabled, dacBits)
+      const s2 = specSlice(signal2, params2.samplingRate, bits, windowType, freqMax, dacEnabled, dacBits)
       const [pf, pa] = peakOf(s1)
       setMarkerFreq(pf); setMarkerAmp(pa)
       const traces: Plotly.Data[] = [
         { x: s1.freq, y: s1.amp, type: 'scatter', mode: 'lines', line: { color: CH1_HEX, width: 2 }, name: 'CH1' },
         { x: s2.freq, y: s2.amp, type: 'scatter', mode: 'lines', line: { color: CH2_HEX, width: 2 }, name: 'CH2' },
         { x: [s1.freq[0], s1.freq[s1.freq.length - 1]], y: [s1.noiseFloorDbfs, s1.noiseFloorDbfs],
-          type: 'scatter', mode: 'lines', line: { color: '#ff4444', width: 1, dash: 'dot' }, name: `Floor (${bits}-bit)` },
+          type: 'scatter', mode: 'lines', line: { color: '#ff4444', width: 1, dash: 'dot' }, name: dacEnabled ? `Floor (ADC ${bits} + DAC ${dacBits})` : `Floor (${bits}-bit)` },
       ]
       const layout = makeLayout(freqMax, pf, pa)
       const config: Partial<Plotly.Config> = { displayModeBar: false, responsive: true, scrollZoom: true }
@@ -155,7 +161,7 @@ export default function SpectrumAnalyzer({
       return
     }
 
-    const s = specSlice(sig, sigPar.samplingRate, bits, windowType, freqMax)
+    const s = specSlice(sig, sigPar.samplingRate, bits, windowType, freqMax, dacEnabled, dacBits)
     const freqDisp = s.freq, ampDisp = s.amp
 
     if (ampDisp.length !== prevBinCountRef.current) {
@@ -245,7 +251,7 @@ export default function SpectrumAnalyzer({
     if (!initialised.current) { Plotly.newPlot(el, traces, layout, config); initialised.current = true }
     else Plotly.react(el, traces, layout, config)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signal, signal2, channel, bits, showTheory, freqMax, params, params2, windowType, persistence, showAvg])
+  }, [signal, signal2, channel, bits, dacEnabled, dacBits, showTheory, freqMax, params, params2, windowType, persistence, showAvg])
 
   const snrDb = (6.02 * bits + 1.76).toFixed(0)
 
@@ -372,6 +378,35 @@ export default function SpectrumAnalyzer({
           <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 3 }}>
             SNR ≈ {snrDb} dB
           </div>
+        </div>
+
+        {/* SIG-2: optional DAC (W1/W2 output) quantization floor — distinct from the ADC control
+            above. Default OFF; 12-bit = real M2K AWG. The worse of DAC/ADC sets the visible floor. */}
+        <div className="control-row">
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', marginBottom: 6 }}>
+            <input type="checkbox" checked={dacEnabled} onChange={e => setDacEnabled(e.target.checked)} />
+            <span style={{ color: dacEnabled ? '#ff8844' : 'var(--text-label)' }}>
+              DAC model (W1/W2 output)
+            </span>
+          </label>
+          {dacEnabled && (
+            <>
+              <div className="control-row-inline" style={{ marginBottom: 2 }}>
+                <label>DAC (output)</label>
+                <span className="value-badge" style={{ color: '#ff8844' }}>{dacBits}-bit</span>
+              </div>
+              <div className="bit-depth-selector">
+                {BIT_DEPTHS.map(b => (
+                  <button key={b} className={dacBits === b ? 'active' : ''} onClick={() => setDacBits(b)}>
+                    {b}-bit
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 3 }}>
+                DAC sets the floor on the way out; the worse of DAC / ADC dominates ({dacBits === 12 ? 'real M2K AWG' : 'coarse'}).
+              </div>
+            </>
+          )}
         </div>
 
         <div className="control-row" style={{ borderTop: '1px solid #333', paddingTop: 8, marginTop: 4 }}>

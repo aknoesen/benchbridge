@@ -270,12 +270,23 @@ export interface SpectrumResult {
   binWidthHz: number            // frequency resolution of each FFT bin
 }
 
+// SIG-2: the M2K's W1/W2 AWG (DAC) output range is ±5 V → 10 V full-scale span, modelled here as an
+// optional, default-OFF quantization floor. This is the AWG output range (the generator's amplitude
+// and offset both clamp to ±5 V), NOT the scope's ±2.5 V ADC range (adcRangeV=5). Same total-span
+// convention as adcRangeV. The wider span means the DAC's lsb is coarser than the ADC's at equal bit
+// depth — turning a 12-bit DAC on still raises the floor — which is part of the lesson.
+export const DAC_FULLSCALE_V = 10
+
 export function computeSpectrum(
   x: Float64Array,
   samplingRate: number,
   bits: number = 12,
   adcRangeV: number = 5,        // total range (default ±2.5 V = 5 V)
-  windowType: WindowType = 'hanning'
+  windowType: WindowType = 'hanning',
+  // SIG-2 — optional, default-OFF DAC quantization floor (synthetic, mirroring the ADC term). When
+  // disabled the function is byte-identical to before, so existing callers/tests are unaffected.
+  dacEnabled: boolean = false,
+  dacBits: number = 12
 ): SpectrumResult {
   const N = x.length
 
@@ -309,10 +320,19 @@ export function computeSpectrum(
                 : 1.50
   const winPowerSum = noiseBW * winSum * winSum / N
   const sigBin = lsb * Math.sqrt(winPowerSum / 8)
+  // SIG-2: a parallel DAC noise term, constructed identically to the ADC term but from the DAC's lsb
+  // (DAC full-scale / 2^dacBits). The two independent Gaussians power-add per bin (variances sum), so
+  // the floor rises by the DAC's contribution. Gated: when off, no extra gaussianRandom() is drawn,
+  // so the ADC realization — and the whole output — is byte-identical to before.
+  const sigBinDac = dacEnabled ? (DAC_FULLSCALE_V / Math.pow(2, dacBits)) * Math.sqrt(winPowerSum / 8) : 0
   const nUniq = Math.floor(N / 2) + 1
   for (let i = 0; i < nUniq; i++) {
     re[i] += gaussianRandom() * sigBin
     im[i] += gaussianRandom() * sigBin
+    if (dacEnabled) {
+      re[i] += gaussianRandom() * sigBinDac
+      im[i] += gaussianRandom() * sigBinDac
+    }
   }
 
   const freqAxis = new Float64Array(nUniq)
@@ -332,8 +352,16 @@ export function computeSpectrum(
   // Total SNR from Walden formula
   const snrDb = 6.02 * bits + 1.76
 
-  const noiseFloorDbfs = -10 * Math.log10(N) - bits * 6.021
-                         + 10 * Math.log10(2 * noiseBW / 3)
+  let noiseFloorDbfs = -10 * Math.log10(N) - bits * 6.021
+                       + 10 * Math.log10(2 * noiseBW / 3)
+  // SIG-2: add the DAC floor in power (variances add). adcNoisePow reuses the SAME −bits·6.021 ADC
+  // term, so when the DAC is off this branch is skipped and the floor is byte-identical. The
+  // (DAC_FULLSCALE_V/adcRangeV)² factor accounts for the DAC's wider full-scale relative to the ADC.
+  if (dacEnabled) {
+    const adcNoisePow = Math.pow(10, (-bits * 6.021) / 10)
+    const dacNoisePow = Math.pow(DAC_FULLSCALE_V / adcRangeV, 2) * Math.pow(10, (-dacBits * 6.021) / 10)
+    noiseFloorDbfs += 10 * Math.log10((adcNoisePow + dacNoisePow) / adcNoisePow)
+  }
 
   const binWidthHz = samplingRate / N  // N-point FFT: exact bin width, no zero-padding
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  generateSignal, computeSpectrum, snapDuration, safeFrequency, MIN_FREQUENCY,
+  generateSignal, computeSpectrum, snapDuration, safeFrequency, MIN_FREQUENCY, DAC_FULLSCALE_V,
   type SignalParams, type SpectrumResult,
 } from './signal'
 
@@ -136,6 +136,66 @@ describe('SIG-1 — bin-width readout', () => {
       const N = snapDuration(p.duration, p.frequency, fs)
       expect(N).toBe(generateSignal(p).x.length)
       expect(spectrumOf(p, 12).binWidthHz).toBeCloseTo(fs / N, 9)
+    }
+  })
+})
+
+// Replicates computeSpectrum's theoretical floor (Hanning → noiseBW 1.5, so the window term is 0)
+// so the tests can assert the exact value the function should return, ADC-only and ADC+DAC.
+function predictedFloor(N: number, adcBits: number, dacOn: boolean, dacBits: number, adcRange = 5): number {
+  let floor = -10 * Math.log10(N) - adcBits * 6.021 + 10 * Math.log10(2 * 1.5 / 3)
+  if (dacOn) {
+    const adcPow = Math.pow(10, (-adcBits * 6.021) / 10)
+    const dacPow = Math.pow(DAC_FULLSCALE_V / adcRange, 2) * Math.pow(10, (-dacBits * 6.021) / 10)
+    floor += 10 * Math.log10((adcPow + dacPow) / adcPow)
+  }
+  return floor
+}
+
+describe('SIG-2 — optional DAC quantization floor (default OFF)', () => {
+  const p = base({ waveType: 'square', frequency: 1000, samplingRate: 100000 })
+  const N = snapDuration(p.duration, p.frequency, p.samplingRate) // 1600
+  const x = generateSignal(p).x
+
+  it('DAC off is byte-identical: omitting the args == dacEnabled=false, and the 12-bit canary holds', () => {
+    // The magnitude arrays carry fresh random noise each call by design (shimmer), so only the
+    // deterministic floor is asserted — that is what "byte-identical when off" means in practice.
+    const omitted = computeSpectrum(x, p.samplingRate, 12, 5, 'hanning')
+    const explicitOff = computeSpectrum(x, p.samplingRate, 12, 5, 'hanning', false, 12)
+    expect(explicitOff.noiseFloorDbfs).toBe(omitted.noiseFloorDbfs)
+    expect(omitted.noiseFloorDbfs).toBeGreaterThan(-104.5) // canary: ≈ −104.29 dBFS
+    expect(omitted.noiseFloorDbfs).toBeLessThan(-104.0)
+    expect(omitted.noiseFloorDbfs).toBeCloseTo(predictedFloor(N, 12, false, 12), 9)
+  })
+
+  it('DAC on raises the floor by the predicted (power-added) amount', () => {
+    const off = computeSpectrum(x, p.samplingRate, 12, 5, 'hanning', false, 12).noiseFloorDbfs
+    const on = computeSpectrum(x, p.samplingRate, 12, 5, 'hanning', true, 12).noiseFloorDbfs
+    expect(on).toBeGreaterThan(off)
+    expect(on).toBeCloseTo(predictedFloor(N, 12, true, 12), 9)
+    // 12-bit DAC over ±5 V vs 12-bit ADC over ±2.5 V → variances 4:1 → +10·log10(1+4) ≈ +6.99 dB
+    expect(on - off).toBeCloseTo(10 * Math.log10(5), 6)
+  })
+
+  it('the worse converter wins: a coarse 4-bit DAC dominates a fine 12-bit ADC', () => {
+    const fineAdcOnly = computeSpectrum(x, p.samplingRate, 12, 5, 'hanning', false, 12).noiseFloorDbfs
+    const coarseDac = computeSpectrum(x, p.samplingRate, 12, 5, 'hanning', true, 4).noiseFloorDbfs
+    expect(coarseDac).toBeCloseTo(predictedFloor(N, 12, true, 4), 9)
+    // The 4-bit DAC floor sits far above the fine 12-bit ADC floor — a great ADC can't recover
+    // detail the DAC already discarded. (≈ −50 vs −104 dBFS → ~54 dB.)
+    expect(coarseDac).toBeGreaterThan(fineAdcOnly + 40)
+  })
+
+  it('no inter-harmonic leakage with the DAC on (12-bit), at the default and each Fs preset', () => {
+    for (const fs of FS_PRESETS) {
+      const ps = base({ waveType: 'sine', frequency: 1000, samplingRate: fs })
+      const res = computeSpectrum(generateSignal(ps).x, fs, 12, 5, 'hanning', true, 12)
+      const peakIdx = argmax(res.magnitudeDbfs, 1)
+      expect(res.freqAxis[peakIdx]).toBeCloseTo(1000, 3) // fundamental on its exact bin
+      // The fundamental still towers over every non-fundamental bin: those carry only the (now higher)
+      // combined noise floor, not a discrete leakage spike (which would sit ~40–50 dB above the floor).
+      const leak = maxLeakageDbfs(res, [1000], 2)
+      expect(res.magnitudeDbfs[peakIdx] - leak).toBeGreaterThan(30)
     }
   })
 })

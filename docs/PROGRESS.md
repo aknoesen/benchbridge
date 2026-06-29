@@ -10,23 +10,33 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Next session: start here (updated 2026-06-28)
 
+**SIG-2 (optional DAC quantization) is DONE — Track I is fully built (SIG-1 + SIG-2).** The Spectrum
+Analyzer's Learning Mode now has a **"DAC model (W1/W2 output)" toggle + 4/8/12-bit selector**
+(default 12 = real M2K AWG), distinct from the ADC bit-depth control, modelling the AWG DAC as an
+optional, **default-OFF** synthetic quantization floor. `computeSpectrum` (in `core/signal.ts`) gained
+two optional, gated args — `dacEnabled=false`, `dacBits=12` — that add a parallel synthetic Gaussian
+noise term (TPDF, constructed identically to the existing ADC term) from the DAC full-scale
+(`DAC_FULLSCALE_V = 10`, the AWG ±5 V range) and power-add the floors. **When off it's byte-identical**
+(no extra RNG drawn), so the **12-bit canary holds at −104.29 dBFS**; `generateSignal`, tau, the window
+denominator, Bluestein, and the **ADC** noise term were **not touched**. Verified live: DAC off →
+−104; DAC 12-bit on → ~−97 (+6.99 dB predicted); **DAC 4-bit + ADC 12-bit → ~−50 dBFS, the DAC
+dominates** ("worst converter wins"). New `signal.test.ts` (4 SIG-2 tests): byte-identical-off +
+canary, DAC-on raises floor by the predicted amount, coarse-DAC-dominates-fine-ADC, no inter-harmonic
+leakage with DAC on at every Fs preset. **138/138 tests, build clean.** Full detail in the top log
+entry below. Next Track I work: none — the digitization story (DAC out → Fs → ADC in) is complete.
+
 **SIG-1 (settable ADC sample rate) is DONE.** The Spectrum Analyzer has an **Acquisition (ADC)**
 section with an **Fs preset dropdown** (5/10/20/50/100/200 kSa/s, default 100) that sets
 `params.samplingRate` on **both** channels, plus a live **Fs / N / bin-width (Fs/N) + Nyquist**
-readout. The scope capture path already honoured `params.samplingRate` (no change needed). All three
-demos work and were verified live: **aliasing** (6 kHz at Fs=10 kSa/s folds to exactly 4 kHz, bin 64),
-**oversampling** (floor −104.29 → −107.30 dBFS at 200 kSa/s, the ~3 dB processing gain), and the
-**bin-width readout**. The protected math was **not touched** — only `snapDuration` was *exported*
-(plumbing) for the readout/tests; tau, the periodic window denominator, Bluestein, and the synthetic
-noise model are untouched, so the **12-bit canary holds at −104.29 dBFS** (100 kSa/s, square/1 kHz/
-Hanning). New `core/signal.test.ts` (4 tests) asserts zero inter-harmonic leakage at every preset and
-the alias landing on its exact bin. Next ROADMAP `TODO` in Track I is **SIG-2** (optional DAC
-quantization, default OFF — do NOT start without being asked). Full detail in the top log entry below.
+readout. Demos verified live: **aliasing** (6 kHz at Fs=10 kSa/s → exactly 4 kHz, bin 64),
+**oversampling** (floor −104.29 → −107.30 dBFS at 200 kSa/s), and the **bin-width readout**. Only
+`snapDuration` was *exported* (plumbing); the protected math is untouched.
 
-**Also landed this session (separate commits):** per-panel **ErrorBoundary** (`cc01e99`) and the
-**scope blank-screen fix** (`067c715`, Plotly YT↔XY `scaleanchor` re-init), plus a **bug-report
-template + About link** (`28f92d6`). `README.md` has a small uncommitted course-agnostic edit left
-for andre.
+**Also landed recently (separate commits):** per-panel **ErrorBoundary** (`cc01e99`), the **scope
+blank-screen fix** (`067c715`, Plotly YT↔XY `scaleanchor` re-init), a **bug-report template + About
+link** (`28f92d6`), and the **degenerate-input blank-screen sweep** — frequency (`8d1c156`/`d57870e`),
+amplitude/offset/duty finite-buffer guard (`7a0dc7f`), and the NA-range / long-tran / theory guards
+(`9fd4fbe`).
 
 ---
 
