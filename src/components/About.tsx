@@ -57,8 +57,21 @@ export default function About() {
           <p style={{ marginTop: 0 }}>
             <a href={reportBugUrl()} target="_blank" rel="noopener noreferrer" style={link}>Report a bug on GitHub</a>
             {' — '}<span style={{ color: 'var(--text-secondary)' }}>opens a pre-filled report with your
-            browser already filled in (a free GitHub account is needed to submit).</span>
+            browser already filled in.</span>
           </p>
+          <details style={{ marginTop: 0, color: 'var(--text-secondary)', fontSize: 13 }}>
+            <summary style={{ cursor: 'pointer' }}>How to report a bug (first time?)</summary>
+            <ol style={{ paddingLeft: 18, marginTop: 6, lineHeight: 1.6 }}>
+              <li>Click <b>Report a bug on GitHub</b> above. It opens a report with your browser details
+                already filled in.</li>
+              <li>You'll need a <b>free GitHub account</b> to submit. If you don't have one, GitHub will
+                prompt you to make one (about a minute, one time).</li>
+              <li>Briefly describe <b>what you were doing</b> and <b>what went wrong</b>. If a red
+                "This panel hit an error" box appeared, click its <b>Error details</b> and paste the
+                text in — that's the most helpful thing you can include.</li>
+              <li>Click the green <b>Submit new issue</b> button. Done.</li>
+            </ol>
+          </details>
 
           <h3 style={{ marginBottom: 4 }}>License</h3>
           <p style={{ marginTop: 0 }}>
