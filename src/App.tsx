@@ -515,6 +515,9 @@ export default function App() {
       <nav className="nav-panel">
         <div className="nav-logo" onClick={() => setEntered(false)} title="Welcome" style={{ cursor: 'pointer' }}><img src={`${import.meta.env.BASE_URL}bridgem2k.svg`} alt="BridgeM2K" style={{ width: 48, height: 48, display: "block", margin: "0 auto" }} /></div>
         {navBtn('quickstart', '▷', <>Quick<br/>start</>, 'Quickstart — new here? Start with this', quickstartSeen && active !== 'quickstart' && !presetId)}
+        {/* Order mirrors the app's workflow: learn -> design -> build -> measure. */}
+        {navBtn('schematic', '▤', 'Circuit', 'Schematic Editor')}
+        {navBtn('breadboard', '∷', 'Board', 'Breadboard layout')}
         {navBtn('siggen', '⌇', <>Signal<br/>Gen</>, 'Signal Generator')}
         {navBtn('scope', '∿', 'Scope', 'Oscilloscope')}
         {navBtn('spectrum', '▲', 'Spectrum', 'Spectrum Analyzer')}
@@ -522,8 +525,6 @@ export default function App() {
         {navBtn('curvetracer', '⌥', <>Curve<br/>Tracer</>, 'Curve Tracer (transistor characteristics)')}
         {navBtn('voltmeter', 'Ω', 'Voltmeter', 'Voltmeter (DC)')}
         {navBtn('psu', '∓', 'Supply', 'Power Supply')}
-        {navBtn('schematic', '▤', 'Circuit', 'Schematic Editor')}
-        {navBtn('breadboard', '∷', 'Board', 'Breadboard layout')}
 
         <div className="nav-sep">Layouts</div>
         <select className={`nav-layouts ${presetId ? 'nav-active' : ''}`} value={presetId ?? ''}
