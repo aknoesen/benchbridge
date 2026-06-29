@@ -15,6 +15,12 @@
   padding: 8px 0;
   gap: 4px;
   flex-shrink: 0;
+  /* On short (laptop) screens the button column is taller than the viewport; let it scroll
+     so the lower nav items (Board, Voltmeter, Supply, About...) stay reachable instead of
+     being clipped off the bottom. min-height:0 + box-sizing keep it within the 100vh shell. */
+  min-height: 0;
+  box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .nav-logo {
