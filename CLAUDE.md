@@ -22,9 +22,17 @@ The instruments above are built. Planning, phase status, and per-phase specs liv
 2. `docs/ROADMAP.md` — phased plan + live status; take the first `TODO` phase
 3. the relevant `docs/specs/*.md` — detailed phase spec with acceptance criteria
 4. `docs/PROGRESS.md` — handoff log from prior sessions
+5. `docs/private/AGENT-HANDOFF.md` — the Cowork ⇄ Claude Code handoff log (see below)
 
 Do one phase per session, verify against the Definition of Done, update `PROGRESS.md` and
 `ROADMAP.md`, and commit. This CLAUDE.md remains the signal-math constitution below.
+
+**Two-agent workflow.** A second Claude (the **Cowork** agent in andre's desktop app) also works on
+this repo: it edits files on disk but **cannot commit** (its sandbox git is unreliable) and stages
+specs, docs, and ready-to-build changes for Claude Code to verify, build, and commit on the host.
+Check `docs/private/AGENT-HANDOFF.md` at session start for staged work and notes; append your results
+and the commit hash there when done. If a file's working-tree state looks corrupted from Cowork's
+view, trust the host: re-check with `git status` before assuming damage.
 
 ## Tech stack
 
