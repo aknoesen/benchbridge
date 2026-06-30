@@ -438,7 +438,7 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
       else comps.push({ kind: 'vsource', id: String(vc++), nodes: [na, nb], dc: 0, acMag: 1 })
     } else if (c.kind === 'diode' || c.kind === 'led' || c.kind === 'zener' || c.kind === 'photodiode') {
       const na = rename(netOf(ts[0].gx, ts[0].gy)), nk = rename(netOf(ts[1].gx, ts[1].gy))
-      let p: { is?: number; n?: number; rs?: number; bv?: number; cj0?: number; iphoto?: number } = {}
+      let p: { is?: number; n?: number; rs?: number; bv?: number; cj0?: number; iphoto?: number; iphotoAc?: number } = {}
       if (c.kind === 'led') {
         // Set IS so the forward drop ≈ the chosen Vf (V) at ~10 mA, with LED-like ideality N=2.
         const vf = c.value ?? 2.0, N = 2.0, VT = 0.02585, Iref = 0.01
@@ -450,7 +450,9 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
         // the datasheet 80 µA short-circuit current (Ev = 1000 lx); CJO = 72 pF (VR = 0); BV = 32 V
         // (datasheet max reverse). `value` is the photocurrent in A — sensitivity 80 nA/lx, so
         // 1000 lx ≈ 80 µA; default 80 µA. The parallel source is added in buildNetlist via `iphoto`.
-        p = { is: 1e-10, n: 1, rs: 10, bv: 32, cj0: 72e-12, iphoto: c.value ?? 80e-6 }
+        // TIA-1: iphotoAc = 1 A is the normalised .ac stimulus (independent of illumination), so the
+        // Network Analyzer reads V(out) directly as transimpedance in ohms (Z = V/I, I = 1 A).
+        p = { is: 1e-10, n: 1, rs: 10, bv: 32, cj0: 72e-12, iphoto: c.value ?? 80e-6, iphotoAc: 1 }
       }
       comps.push({ kind: 'diode', id: String(dd++), nodes: [na, nk], ...p })
     } else if (c.kind === 'bjt') {

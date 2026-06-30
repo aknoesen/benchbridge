@@ -8,7 +8,21 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
-## Next session: start here (updated 2026-06-28)
+## Next session: start here (updated 2026-06-30)
+
+**TIA-1 (AC photocurrent stimulus) is DONE — Track J started.** The photodiode's parallel `Iph` source
+now carries an **AC magnitude (default 1 A) emitted only under `.ac`** (`core/netlist.ts` diode branch
+keys off `analysis.kind === 'ac'`); `.op`/`.tran` decks stay **byte-identical** (DC term only), so the
+photodiode polarity + all prior tests are unchanged. `Diode` gained `iphotoAc?`; `toCircuit` passes
+`iphotoAc: 1` (the normalised stimulus, independent of the illumination `value`), so a 1 A AC current
+makes `V(out)` read directly as transimpedance in ohms. 4 new `netlist.test.ts` cases (AC term only
+under `.ac`; `.op`/`.tran` have none; custom magnitude; **end-to-end `.ac` on photodiode→ideal
+op-amp→Rf gives |V(out)| ≈ Rf**). Build clean (`tsc`+vite), **151/151** vitest, **no `core/signal.ts`
+change → 12-bit canary untouched**. ROADMAP TIA-1 → DONE; decisions locked (TIA-2 = both dBΩ + linear-Ω
+toggle; TIA-3 ships the `core/tia.ts` Cf helper). **Next Track J `TODO`: TIA-2** (Network Analyzer
+transimpedance read) — though Cowork has since staged a **TIA-0** (TLV9062 op-amp) with its own open
+decisions for andre; sequence per andre. Photodiode branch was merged to `main` (`9c32d17`, ff) to
+unblock this. Not yet committed at time of writing.
 
 **Photodiode part added (BPW 34) — ad-hoc, andre 2026-06-30; not a ROADMAP phase.** A new
 `'photodiode'` `SchKind` placeable from the editor palette ("Photo") and convertible via the

@@ -127,6 +127,7 @@ export interface Diode {
   bv?: number // reverse breakdown voltage (Zener)
   cj0?: number // zero-bias junction capacitance (F) — photodiode/LED reverse-recovery & AC load
   iphoto?: number // photodiode illumination current (A); a parallel source injected cathode→anode
+  iphotoAc?: number // AC magnitude (A) of that source, emitted ONLY under .ac (TIA-1; default 1 A)
 }
 
 // Bipolar junction transistor (SCH-8). nodes = [collector, base, emitter]; `polarity` sets the
@@ -396,8 +397,14 @@ export function buildNetlist(circuit: Circuit, analysis: Analysis): string {
         // Photodiode illumination: a DC current source in parallel injects the photocurrent from
         // cathode (n+) to anode (n-) inside the source, so it sources current out of the anode
         // externally — an anode-positive open-circuit voltage and a reverse short-circuit current,
-        // exactly as an illuminated photodiode behaves. DC only, so it leaves .ac sweeps untouched.
-        if (c.iphoto) lines.push(`Iph${c.id} ${n(c.nodes[1])} ${n(c.nodes[0])} DC ${fmt(c.iphoto)}`)
+        // exactly as an illuminated photodiode behaves. TIA-1: under .ac it ALSO carries an AC
+        // magnitude (default 1 A) so a Bode sweep sees the photocurrent as the stimulus — with a 1 A
+        // current, V(out) reads directly as transimpedance in ohms. .op/.tran stay DC-only (the AC
+        // term is ignored outside .ac anyway, but we omit it so those decks are byte-identical).
+        if (c.iphoto) {
+          const ac = analysis.kind === 'ac' ? ` AC ${fmt(c.iphotoAc ?? 1)}` : ''
+          lines.push(`Iph${c.id} ${n(c.nodes[1])} ${n(c.nodes[0])} DC ${fmt(c.iphoto)}${ac}`)
+        }
         break
       }
       case 'bjt': {

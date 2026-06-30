@@ -151,3 +151,49 @@ describe('photodiode (BPW 34)', () => {
     expect(v).toBeLessThan(0.085)
   }, 30000)
 })
+
+describe('TIA-1 — AC photocurrent stimulus', () => {
+  // Minimal transimpedance amp: photodiode anode at the op-amp virtual-ground (inN), cathode to gnd,
+  // Rf from out back to that node, + input grounded. An ideal op-amp holds vg≈0, so V(out) = −Iph·Rf;
+  // with the photocurrent's AC magnitude = 1 A, |V(out)| reads as the transimpedance Rf directly.
+  const tia = (rf = 100000): Circuit => ({
+    title: 'TIA',
+    components: [
+      { kind: 'diode', id: '1', nodes: ['vg', '0'], is: 1e-10, n: 1, cj0: 72e-12, iphoto: 80e-6, iphotoAc: 1 },
+      { kind: 'opamp', id: '1', model: 'ideal', nodes: { inP: '0', inN: 'vg', out: 'out' }, gain: 1e6 },
+      { kind: 'resistor', id: 'f', nodes: ['out', 'vg'], ohms: rf },
+      { kind: 'ground', id: '0', node: '0' },
+    ],
+  })
+
+  it('appends AC 1 to the Iph source only under .ac', () => {
+    expect(buildNetlist(tia(), { kind: 'ac', sweep: 'dec', points: 5, fStart: 10, fStop: 1e5 }))
+      .toContain('Iph1 0 vg DC 0.00008 AC 1')
+  })
+
+  it('keeps .op / .tran decks byte-identical (DC term only, no AC)', () => {
+    expect(buildNetlist(tia(), { kind: 'op' })).toContain('Iph1 0 vg DC 0.00008\n')
+    expect(buildNetlist(tia(), { kind: 'op' })).not.toMatch(/Iph1 .* AC /)
+    expect(buildNetlist(tia(), { kind: 'tran', step: 1e-5, stop: 1e-2 })).not.toMatch(/Iph1 .* AC /)
+  })
+
+  it('honours a custom iphotoAc magnitude under .ac', () => {
+    const c = tia()
+    ;(c.components[0] as { iphotoAc?: number }).iphotoAc = 2
+    expect(buildNetlist(c, { kind: 'ac', sweep: 'dec', points: 5, fStart: 10, fStop: 1e5 }))
+      .toContain('Iph1 0 vg DC 0.00008 AC 2')
+  })
+
+  it('reads |V(out)| ≈ Rf at low frequency (transimpedance = Rf with a 1 A stimulus)', async () => {
+    const nl = buildNetlist(tia(100000), { kind: 'ac', sweep: 'dec', points: 10, fStart: 1, fStop: 100 })
+    const sim = new Simulation()
+    await sim.start()
+    sim.setNetList(nl)
+    const r = await sim.runSim()
+    const oi = r.variableNames.findIndex((nm) => nm.toLowerCase().includes('out'))
+    const ovals = r.data[oi].values as Complex[]
+    const magLow = Math.hypot(ovals[0].real, ovals[0].img) // ≈1 Hz, well below any roll-off
+    expect(magLow).toBeGreaterThan(95000)  // ≈ Rf = 100 kΩ → 100 kV per amp
+    expect(magLow).toBeLessThan(105000)
+  }, 30000)
+})

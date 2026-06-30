@@ -213,6 +213,29 @@ Notes:
 - **Canary:** with no circuit and the default rate, the 12-bit ADC floor must still sit at −104 dBFS.
   SIG-2 must be verified OFF-by-default; SIG-1 must not reintroduce inter-harmonic leakage.
 
+## Track J — Transimpedance amplifiers (photodiode front-end)  ← planned (andre, 2026-06-30)
+
+Builds on the BPW 34 photodiode part (branch `photodiode-bpw34`, `9c32d17`). The photodiode gives the
+**DC** half of a TIA (`Vout = −Iph·Rf` via `.op`), but the **frequency response** — bandwidth, the
+Cin–Rf peaking, and the Cf compensation that is the whole point of TIA design — is unobservable: the
+photocurrent is emitted DC-only and the Network Analyzer Bode is a voltage ratio `V/V`, with no read
+path for a transimpedance `V/I`. This track adds the smallest pieces that make TIA frequency response
+real. **TIA-1 depends on the photodiode branch being merged to `main` first.** No `core/signal.ts`
+change anywhere → the 12-bit canary is untouched throughout. Spec: `docs/specs/tia-transimpedance.md`.
+
+| ID | Deliverable | Depends on | Status |
+|----|-------------|-----------|--------|
+| TIA-0 | **Add the TLV9062 op-amp model** (the summer TIA project's amp). Dual low-voltage CMOS RRIO: GBW 10 MHz, slew 6.5 V/µs, supply **1.8–5.5 V total**, rail-to-rail in+out, outputHeadroom ≈ 0.02 (RR), Vos ~2 mV max (display only), Iq ~0.55 mA/ch. Reuses the SCH-9 level-1 `buildOpampSubckt` machinery — just a new catalog card. **Three decisions for andre (see spec):** (1) it is **off-kit** (not ADALP2000) → use the existing "not in your parts kit" badge, or add a "course parts" tier; (2) **non-DIP** (SOIC-8) → SOIC-to-DIP adapter footprint on the breadboard, or sim-only + "use a breakout" note (this is exactly why F-4 pulled AD8542); (3) **supply: the auto ±5 V (10 V total) rail synthesis EXCEEDS the TLV9062's 5.5 V max** — it must default to a single +5 V or ±2.5 V supply in sim, not the kit op-amps' auto ±5 V. | — | TODO |
+| TIA-1 | **AC photocurrent stimulus.** Give the photodiode's `Iph` source an AC magnitude (default 1 A) emitted only under `.ac`, leaving `.op`/`.tran` byte-identical. With a 1 A stimulus, `V(out)` reads as transimpedance in ohms directly. Pure netlist change + tests. | photodiode-bpw34 merged | DONE |
+| TIA-2 | **Transimpedance read in the Network Analyzer.** A mode that plots `Z(f) = V(out)/I_in` as `|Z|` in **dBΩ and linear Ω** (toggle — andre 2026-06-30) (+ phase), reusing the −3 dB classifier; denominator is the 1 A photocurrent. New pure `transimpedance()` helper + a mode toggle in `NetworkAnalyzer.tsx`. | TIA-1 | TODO |
+| TIA-3 | **Guided single-supply TLV9062 TIA example + compensation helper (ships, not deferred — andre 2026-06-30).** A photodiode→TLV9062→Rf(+Cf) example running **single-supply (+5 V)** with the `+` input at a Vref divider, built to make the rocky single-supply transition visible (output rests at Vref not 0 V, no negative swing, photodiode orientation matters, bench ±5 V must not cross the part). No W1 source, so transimpedance mode works directly. Plus a pure `core/tia.ts` that recommends `Cf ≈ √(Cin/(2π·Rf·GBW))`, predicts the −3 dB bandwidth, and flags peaking. | TIA-0, TIA-2 | TODO |
+
+Notes:
+- **Decisions locked (andre, 2026-06-30):** TIA-2 plots **both dBΩ and a linear-Ω** axis (a toggle, not dBΩ-only); TIA-3 **ships the `core/tia.ts` Cf compensation helper** (no TIA-4 defer).
+- **Canary:** independent of these circuit changes — confirm the no-circuit 12-bit floor stays −104 dBFS.
+- The photodiode part itself was an ad-hoc add (not a phase); this track is the deliberate follow-on
+  that turns it into a teachable TIA front-end for the analog sequence (EEC100 target).
+
 ## Recommended session sequence
 
 A reasonable single-developer (single CC session per row) order:
