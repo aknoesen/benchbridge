@@ -15,6 +15,14 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 all pushed to `origin/main` (repo is now `aknoesen/benchbridge`; Render URL stays `bridgem2k.onrender.com`).
 Cowork's on-disk NOTICE/README were truncated (dropped the third-party list) — repaired from LICENSE.
 
+**FB-4 (Quickstart) is DONE — the tester punch-list FB-1→FB-4 is complete.** Fixed the three JSX
+whitespace-adjacency typos (`<i>signal</i>`+newline+`outputs`, `<b>Bode</b>`+`plot`, `<b>W2</b>`+`sets`
+→ added `{' '}`); added an early **"this app *simulates* the M2K — not connected to hardware, not a
+Scopy replacement"** note in the intro; and inserted a **"Load a signal to work with"** step (loads the
+W1-driven `rc-lp` → scope) above "Set a signal" so the Signal-Gen/Scope walkthrough no longer dead-ends
+on the generator-less divider (existing steps renumbered 1→2/3/4). Build clean, **223/223**. Next
+`TODO`: **F-7** (breadboard auto-route).
+
 **FB-3 (UI polish) is DONE** (Track K). Three fixes: (1) the internal **"LOOP-1"** string in the
 SchematicEditor tip → plain "The Network Analyzer plots the result." (the only user-facing phase-ID
 leak; the rest are code comments); (2) the Circuit **Clear** button now `window.confirm`s before wiping

@@ -56,6 +56,11 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
             in Analog Devices' Scopy software, so what you do in the browser maps directly onto the
             bench hardware you will use in lab.
           </p>
+          <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 8 }}>
+            <b style={{ color: GOLD }}>To be clear:</b> this app <b>simulates</b> the M2K's behaviour in
+            your browser — it is <b>not</b> connected to any physical M2K, and it is a learning twin,
+            <b> not</b> a replacement for Analog Devices' Scopy. Nothing you do here touches real hardware.
+          </p>
 
           <h3 style={h3}>How the M2K and this app line up</h3>
           <p style={{ marginTop: 0 }}>
@@ -73,7 +78,7 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
             ))}
           </div>
           <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 10 }}>
-            <b style={{ color: GOLD }}>One thing the M2K trips people on:</b> W1 / W2 are <i>signal</i>
+            <b style={{ color: GOLD }}>One thing the M2K trips people on:</b> W1 / W2 are <i>signal</i>{' '}
             outputs (≈ 50 Ω source resistance), not a power source — use the <b>V+ / V−</b> supply to
             power a circuit, and W1/W2 only to inject a signal. The twin models this 50 Ω, so a heavy
             load on W1/W2 sags here exactly as it would on the bench.
@@ -315,6 +320,16 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
             <div style={{ display: 'flex', alignItems: 'flex-start' }}>
               <span style={stepNum}>1</span>
               <div style={{ flex: 1 }}>
+                <b>Load a signal to work with.</b> The divider from the last step has no generator — this
+                loads a W1-driven circuit (an RC filter) and opens the scope, so you have a live waveform.
+                <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => { onLoadExample('rc-lp'); onGoTo('scope') }}>Load a W1 signal → Oscilloscope →</button></div>
+              </div>
+            </div>
+          </div>
+          <div style={card}>
+            <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+              <span style={stepNum}>2</span>
+              <div style={{ flex: 1 }}>
                 <b>Set a signal.</b> Open the Signal Generator, pick a wave / frequency / amplitude on W1
                 (W2 is the second source), and press Run.
                 <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('siggen')}>Open Signal Generator →</button></div>
@@ -323,7 +338,7 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
           </div>
           <div style={card}>
             <div style={{ display: 'flex', alignItems: 'flex-start' }}>
-              <span style={stepNum}>2</span>
+              <span style={stepNum}>3</span>
               <div style={{ flex: 1 }}>
                 <b>See it in time.</b> Open the Oscilloscope — voltage vs time (YT). Time/div zooms the
                 window; the trigger holds the wave steady.
@@ -333,7 +348,7 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
           </div>
           <div style={card}>
             <div style={{ display: 'flex', alignItems: 'flex-start' }}>
-              <span style={stepNum}>3</span>
+              <span style={stepNum}>4</span>
               <div style={{ flex: 1 }}>
                 <b>Switch to XY — trace an I-V curve.</b> XY mode plots CH1 (X = voltage across the part)
                 against CH2 (Y = its current), drawing the device's I-V curve directly. The <b>Zener</b> is
@@ -346,7 +361,7 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
 
           <h3 style={h3}>Next: Network Analyzer — and how the M2K digitizes</h3>
           <p style={{ marginTop: 0 }}>
-            The Network Analyzer sweeps frequency and plots gain (and phase) against it — a <b>Bode</b>
+            The Network Analyzer sweeps frequency and plots gain (and phase) against it — a <b>Bode</b>{' '}
             plot. Load the RC low-pass and you will see it pass low frequencies and roll off above ~1 kHz
             (the −3 dB corner).
           </p>
@@ -413,7 +428,7 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
             each V<sub>gs</sub>, or a BJT's <b>I<sub>c</sub> vs V<sub>ce</sub></b> at each base step.
           </p>
           <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 8 }}>
-            Under the hood it's the real bench trick: <b>W1</b> ramps the drain/collector voltage, <b>W2</b>
+            Under the hood it's the real bench trick: <b>W1</b> ramps the drain/collector voltage, <b>W2</b>{' '}
             sets a constant gate/base bias, and a <b>sense resistor</b> turns current into a voltage the ADC
             can read (I = V<sub>sense</sub> / R<sub>sense</sub>). The real M2K traces one curve at a time; the
             twin automates the stepped passes and draws the whole labelled family in one shot. Tune the
