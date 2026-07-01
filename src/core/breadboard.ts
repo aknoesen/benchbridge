@@ -221,7 +221,7 @@ export const DIP_BOT_ROW: Row = 'f' // bottom-bank row adjacent to the channel
 // physical DIP footprint; the schematic op-amp maps to one via its kit `part` (opampBoardPkg). The
 // values 'lmc662' / 'ina125' deliberately match the legacy SchKind strings so older saved boards
 // (PlacedDip.kind = 'lmc662' / 'ina125') still deserialize.
-export type DipPkg = 'opamp-single' | 'opamp-quad' | 'lmc662' | 'ina125'
+export type DipPkg = 'opamp-single' | 'opamp-quad' | 'opamp-soic-adapter' | 'lmc662' | 'ina125'
 
 export interface DipDef {
   pins: number            // total pin count (even)
@@ -249,6 +249,13 @@ export const DIP_DEFS: Record<DipPkg, DipDef> = {
     fn: ['OUT A', '−IN A', '+IN A', 'V−', '+IN B', '−IN B', 'OUT B', 'V+'],
     rails: { vpos: 7, vneg: 3 }, amp: { out: 0, inN: 1, inP: 2 },
   },
+  // TIA-0: TLV9062 is a SOIC-8 (no DIP) — boarded on an 8-pin SOIC-to-DIP adapter. Standard dual
+  // op-amp pinout (same as the LMC662 8-DIP); the name flags the adapter.
+  'opamp-soic-adapter': {
+    pins: 8, name: 'Op-amp (SOIC-8 on adapter)',
+    fn: ['OUT A', '−IN A', '+IN A', 'V−', '+IN B', '−IN B', 'OUT B', 'V+'],
+    rails: { vpos: 7, vneg: 3 }, amp: { out: 0, inN: 1, inP: 2 },
+  },
   'ina125': {
     pins: 16, name: 'INA125',
     fn: ['V+', 'SLEEP', 'V−', 'VREFOUT', 'IAREF', 'VIN−', 'VIN+', 'RG', 'RG', 'VO', 'Sense', 'VREFCOM', 'VREFBG', 'VREF2.5', 'VREF5', 'VREF10'],
@@ -260,9 +267,11 @@ export const DIP_DEFS: Record<DipPkg, DipDef> = {
 // quad 14-DIP (OP482/484), or the off-kit 8-pin dual fallback (no/unknown part → LMC662 behaviour).
 export function opampBoardPkg(part?: string): DipPkg {
   if (part && isKitOpamp(part)) {
-    const channels = getOpamp(part).channels
-    if (channels === 1) return 'opamp-single'
-    if (channels === 4) return 'opamp-quad'
+    const p = getOpamp(part)
+    if (p.channels === 1) return 'opamp-single'
+    if (p.channels === 4) return 'opamp-quad'
+    // A dual kit/course part: SOIC-8 parts (TLV9062) board on an adapter; otherwise the 8-DIP dual.
+    if (p.channels === 2) return p.package === '8-SOIC' ? 'opamp-soic-adapter' : 'lmc662'
   }
   return 'lmc662'
 }

@@ -558,7 +558,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
           </div>
         )}
 
-        {(['opamp-single', 'opamp-quad', 'lmc662'] as const)
+        {(['opamp-single', 'opamp-quad', 'opamp-soic-adapter', 'lmc662'] as const)
           .filter((pkg) => exp.dips.some((d) => d.kind === pkg))
           .map((pkg) => {
             const def = DIP_DEFS[pkg]

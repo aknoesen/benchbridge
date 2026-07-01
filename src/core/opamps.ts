@@ -13,14 +13,18 @@
 
 // F-4: ADTL082 + AD8542 removed — they ship as breakout boards (BOB), not breadboard DIPs, so they
 // are not part of the kit op-amp library the twin offers. Every remaining kit op-amp is a DIP.
+// TIA-0: TLV9062 added as a *course* part (not ADALP2000) for the summer TIA project — see `origin`.
 export type OpampKind =
-  | 'op27' | 'op37' | 'op97' | 'op482' | 'op484'
+  | 'op27' | 'op37' | 'op97' | 'op482' | 'op484' | 'tlv9062'
 
 export interface OpampPart {
   kind: OpampKind
   name: string
-  package: '8-DIP' | '14-DIP'
+  package: '8-DIP' | '14-DIP' | '8-SOIC'
   channels: 1 | 2 | 4
+  // Part sourcing tier (TIA-0): 'kit' = stocked in the ADALP2000 kit; 'course' = deliberately supplied
+  // for a course (shown with a neutral "course part" label, NOT the "not in your parts kit" warning).
+  origin: 'kit' | 'course'
   gbwHz: number
   slewRate: number        // V/µs
   vosTyp: number          // volts (catalog/display only; not injected into the level-1 model)
@@ -29,35 +33,47 @@ export interface OpampPart {
   railToRailIn: boolean
   railToRailOut: boolean
   outputHeadroom: number  // volts from each rail the output can reach (≈0 if RR out)
+  // Sim auto-rails synthesised when V+/V− are left unwired (TIA-0). Defaults to ±5 V (the M2K rails)
+  // when omitted; a low-voltage part (TLV9062, 5.5 V max) sets a single +5 V supply to stay in range.
+  supplyDefault?: { vcc: number; vee: number }
   count: number           // units in kit (future BOM)
   note?: string
 }
 
 export const KIT_OPAMPS: Record<OpampKind, OpampPart> = {
   op27: {
-    kind: 'op27', name: 'OP27', package: '8-DIP', channels: 1, gbwHz: 8e6, slewRate: 2.8,
+    kind: 'op27', name: 'OP27', package: '8-DIP', channels: 1, origin: 'kit', gbwHz: 8e6, slewRate: 2.8,
     vosTyp: 25e-6, supplyMin: 8, supplyMax: 36, railToRailIn: false, railToRailOut: false,
     outputHeadroom: 2.0, count: 2, note: 'Low-noise precision bipolar; output swings to ~2 V of each rail',
   },
   op37: {
-    kind: 'op37', name: 'OP37', package: '8-DIP', channels: 1, gbwHz: 63e6, slewRate: 17,
+    kind: 'op37', name: 'OP37', package: '8-DIP', channels: 1, origin: 'kit', gbwHz: 63e6, slewRate: 17,
     vosTyp: 25e-6, supplyMin: 8, supplyMax: 36, railToRailIn: false, railToRailOut: false,
     outputHeadroom: 2.0, count: 2, note: 'Decompensated OP27 — stable only at closed-loop gain ≥ 5',
   },
   op97: {
-    kind: 'op97', name: 'OP97', package: '8-DIP', channels: 1, gbwHz: 0.9e6, slewRate: 0.2,
+    kind: 'op97', name: 'OP97', package: '8-DIP', channels: 1, origin: 'kit', gbwHz: 0.9e6, slewRate: 0.2,
     vosTyp: 25e-6, supplyMin: 4.5, supplyMax: 40, railToRailIn: false, railToRailOut: false,
     outputHeadroom: 1.0, count: 2, note: 'Low-power high-precision; ultra-low input bias (~30 pA)',
   },
   op482: {
-    kind: 'op482', name: 'OP482', package: '14-DIP', channels: 4, gbwHz: 4e6, slewRate: 9,
+    kind: 'op482', name: 'OP482', package: '14-DIP', channels: 4, origin: 'kit', gbwHz: 4e6, slewRate: 9,
     vosTyp: 4e-3, supplyMin: 9, supplyMax: 36, railToRailIn: false, railToRailOut: false,
     outputHeadroom: 1.5, count: 2, note: 'High-speed JFET quad; output swings to ~1.5 V of each rail',
   },
   op484: {
-    kind: 'op484', name: 'OP484', package: '14-DIP', channels: 4, gbwHz: 4e6, slewRate: 4,
+    kind: 'op484', name: 'OP484', package: '14-DIP', channels: 4, origin: 'kit', gbwHz: 4e6, slewRate: 4,
     vosTyp: 65e-6, supplyMin: 3, supplyMax: 36, railToRailIn: true, railToRailOut: true,
     outputHeadroom: 0.02, count: 1, note: 'Precision rail-to-rail I/O; works to +1.5 V single supply',
+  },
+  // TIA-0: TI TLV9062 — the summer TIA project's amp. Dual CMOS RRIO, 10 MHz GBW, 1.8–5.5 V supply.
+  // A *course* part (not in the ADALP2000 kit); SOIC-8 boarded on a DIP adapter. Its 5.5 V max is
+  // below the M2K's ±5 V (10 V), so it defaults to a single +5 V sim supply (supplyDefault).
+  tlv9062: {
+    kind: 'tlv9062', name: 'TLV9062', package: '8-SOIC', channels: 2, origin: 'course', gbwHz: 10e6,
+    slewRate: 6.5, vosTyp: 0.3e-3, supplyMin: 1.8, supplyMax: 5.5, railToRailIn: true, railToRailOut: true,
+    outputHeadroom: 0.02, supplyDefault: { vcc: 5, vee: 0 }, count: 0,
+    note: 'Course part (not ADALP2000): dual CMOS rail-to-rail I/O; single-supply +5 V (1.8–5.5 V max)',
   },
 }
 

@@ -372,12 +372,15 @@ export function buildNetlist(circuit: Circuit, analysis: Analysis): string {
       case 'opamp':
         if (c.part && isKitOpamp(c.part)) {
           // SCH-9 kit op-amp: a .subckt macromodel instance. The plain 'opamp' symbol carries no
-          // power pins, so synthesise the M2K ±5 V rails per instance (matching the LMC662 model's
-          // auto-±5 fallback); a wired vpos/vneg (e.g. a future powered symbol) is used if present.
+          // power pins, so synthesise the auto rails per instance; a wired vpos/vneg (e.g. a future
+          // powered symbol) is used if present. TIA-0: the rail VALUES come from the part's
+          // `supplyDefault` (default ±5 V, the M2K rails) so a low-voltage part like the TLV9062
+          // (5.5 V max) synthesises a single +5 V supply instead of an over-max ±5 V.
+          const sd = getOpamp(c.part).supplyDefault ?? { vcc: 5, vee: -5 }
           const vcc = c.nodes.vpos ? n(c.nodes.vpos) : `xop${c.id}_vcc`
           const vee = c.nodes.vneg ? n(c.nodes.vneg) : `xop${c.id}_vee`
-          if (!c.nodes.vpos) lines.push(`Vvcc${c.id} ${vcc} 0 DC 5`)
-          if (!c.nodes.vneg) lines.push(`Vvee${c.id} ${vee} 0 DC -5`)
+          if (!c.nodes.vpos) lines.push(`Vvcc${c.id} ${vcc} 0 DC ${fmt(sd.vcc)}`)
+          if (!c.nodes.vneg) lines.push(`Vvee${c.id} ${vee} 0 DC ${fmt(sd.vee)}`)
           lines.push(`X${c.id} ${n(c.nodes.inP)} ${n(c.nodes.inN)} ${vcc} ${vee} ${n(c.nodes.out)} ${c.part}`)
           usedOpampKinds.add(c.part)
         } else {

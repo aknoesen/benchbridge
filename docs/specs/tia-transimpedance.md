@@ -70,30 +70,32 @@ Verified datasheet params (TI TLV9062, "TLV906xS 10 MHz RRIO CMOS"):
   `buildOpampSubckt` already produces a correct RRIO clamp from `railToRailOut`/`outputHeadroom`, so no
   emitter change. Update `opamps.test.ts` (catalog has the part with these params; `isKitOpamp` true).
 
-**Three decisions for andre — resolve before building (each changes what gets built):**
+**Decisions locked (andre, 2026-06-30) — build to these:**
 
-1. **Off-kit identity.** The library principle is "ADALP2000-kit op-amps only" (SCH-9). The TLV9062 is
-   **not** in that kit — it is a course-supplied part for this project. Either reuse the existing
-   **"not in your parts kit"** badge path (simplest), or introduce a small **"course parts"** tier
-   distinct from off-kit-legacy so a deliberately-provided part doesn't look like a mistake.
-2. **Package / breadboard.** The TLV9062 has **no DIP** (SOIC-8). This is the exact reason F-4 pulled
-   AD8542 from the library. Options: (a) add a **SOIC-to-DIP adapter** footprint on the breadboard so
-   Check still works, or (b) ship it **sim + schematic only** with a "use a breakout adapter on the
-   bench" note and skip the board Check for it. Pick one.
-3. **Supply voltage — important.** Kit op-amps get **auto ±5 V rails** synthesised in sim
-   (`netlist.ts`: `Vvcc … DC 5` / `Vvee … DC -5`). That is **10 V total, which exceeds the TLV9062's
-   5.5 V absolute max.** The model would still "run" (the clamp just uses whatever rails it is given),
-   but it would misrepresent a real over-voltage condition and an unrealistic output swing. The
-   TLV9062 must default to a supply **within 5.5 V** — single **+5 V** (`vee = 0`) or **±2.5 V** — not
-   the kit ±5 V. Decide the default and how the auto-rail synthesis is made part-aware (e.g. a
-   per-part `supplyDefault` the netlist uses instead of the hardcoded ±5 V). This is the one real
-   modelling change in TIA-0; everything else is a catalog card.
+1. **"Course parts" tier (NOT the off-kit badge).** The TLV9062 is a deliberately course-supplied part,
+   so add a small **"course parts"** category distinct from the ADALP2000 kit and from the off-kit-legacy
+   path (e.g. an `origin: 'kit' | 'course' | 'legacy'` tag, or a `course: true` flag on the part), and
+   show a neutral "course part" label in the picker — not a "not in your parts kit" warning, which would
+   read as a mistake. The existing kit op-amps stay `origin: 'kit'`; the legacy LMC662 stays its current
+   off-kit path. This is the only structural change to the op-amp catalog.
+2. **SOIC-to-DIP adapter footprint.** Board the TLV9062 as an **8-pin SOIC-to-DIP adapter** so the
+   breadboard Check still works (the student uses a real adapter on the bench). Add the adapter as a
+   `DipPkg`/`DIP_DEFS` entry (8-pin, dual op-amp pinout like the LMC662 8-DIP) in `core/breadboard.ts`,
+   following the F-4 `opampBoardPkg` pattern; the legend notes it is a SOIC-8 on an adapter.
+3. **Single +5 V default, part-aware rail synthesis.** The TLV9062 defaults to **single +5 V**
+   (`vcc = +5`, `vee = 0`) — within its 5.5 V max — **not** the kit op-amps' auto ±5 V (10 V total,
+   over-max). Make the auto-rail synthesis part-aware: add a **`supplyDefault`** to the op-amp card
+   (e.g. `{ vcc: 5, vee: 0 }`; kit parts keep `{ vcc: 5, vee: -5 }`) and have `netlist.ts` synthesise
+   the per-instance `Vvcc`/`Vvee` from it instead of the hardcoded `DC 5`/`DC -5`. A wired vpos/vneg
+   still overrides, as today. This is the one real modelling change; the rest is a catalog card.
 
-**DoD:** build clean; `npm test` green incl. the new catalog test; TLV9062 appears in the op-amp
-picker; it simulates a known closed-loop gain with its chosen default supply, and (per decision 2)
-either boards via an adapter or shows the sim-only note; existing 5 kit op-amps unchanged; no
-`core/signal.ts` change. PROGRESS + ROADMAP (TIA-0 → DONE); one commit. TIA-0 is independent of the
-photodiode branch and can land first.
+**DoD:** build clean; `npm test` green incl. the new catalog test (TLV9062 params present, `origin`/
+`supplyDefault` correct); TLV9062 appears in the op-amp picker with a **"course part"** label (no
+not-in-kit warning); it simulates single-supply +5 V (output respects 0–5 V rails, no 10 V swing) at a
+known closed-loop gain; it **boards as the SOIC-to-DIP adapter and Check passes** when the rails are
+wired; existing 5 kit op-amps and the LMC662 path unchanged; no `core/signal.ts` change. PROGRESS +
+ROADMAP (TIA-0 → DONE); one commit. **TIA-0 is the next phase to build (andre, 2026-06-30)** — it is
+independent of the photodiode branch.
 
 ### TIA-1 — AC photocurrent stimulus (the core unblock)
 

@@ -10,6 +10,33 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Next session: start here (updated 2026-06-30)
 
+**TIA-0 (TLV9062 op-amp) is DONE.** The TI TLV9062 (the summer TIA project's amp) is in the op-amp
+library as a **course part** (the summer project's amp; not ADALP2000). Built to andre's three locked
+decisions:
+- **Course-parts tier** — `OpampPart` gained `origin: 'kit' | 'course'` (all 5 kit parts `'kit'`,
+  TLV9062 `'course'`). The inspector shows a neutral blue **"course part"** badge (not the orange
+  "not in your parts kit" warning). `isKitOpamp` returns true for it (it lives in the catalog).
+- **SOIC-to-DIP adapter footprint** — new `DipPkg` `'opamp-soic-adapter'` (8-pin, standard dual
+  pinout) in `core/breadboard.ts`; `opampBoardPkg` routes a dual **8-SOIC** part to it (other duals →
+  the LMC662 8-DIP). Pinout legend added to `Breadboard.tsx`.
+- **Part-aware auto-rails** — `OpampPart.supplyDefault` (`{vcc,vee}`); `netlist.ts` synthesises
+  `Vvcc`/`Vvee` from it instead of hardcoded ±5. TLV9062 = `{vcc:5, vee:0}` (single +5 V, within its
+  5.5 V max); kit parts omit it → ±5 V as before. The inspector's over-supply warning + "auto …"
+  text are now part-aware (`railLabel`).
+
+`opamps.test.ts`: catalog now lists 6 parts; TLV9062 params/origin/supplyDefault asserted; kit parts
+have no `supplyDefault`; **engine tests** — kit op-amp emits `DC 5`/`DC -5`, TLV9062 emits `DC 5`/`DC 0`,
+and a single-supply TLV9062 output stays in 0–5 V (never negative) while a ±5 kit part swings to ~−2 V.
+Build clean, **156/156**, no `core/signal.ts` change (12-bit canary intact). ROADMAP TIA-0 → DONE.
+**Not yet committed at time of writing.**
+
+⚠ **Known limitation flagged for TIA-3 (not a TIA-0 bug):** an inverting amp with `+` at **ground**
+is single-supply-broken — the output can't go negative and the level-1 macromodel winds up to the
+clamp floor (the engine test documents this). This is exactly why TIA-3's example must bias `+` at a
+**Vref divider**. Also, the board Check still expects V+/V− pins on the ±5 rails (the single-supply
+"V− pin → GND" board wiring is a TIA-3 / follow-on concern, not handled here). **Next Track J `TODO`:
+TIA-2** (Network Analyzer transimpedance read) — or TIA-3 once TIA-2 lands; sequence per andre.
+
 **TIA-1 (AC photocurrent stimulus) is DONE — Track J started.** The photodiode's parallel `Iph` source
 now carries an **AC magnitude (default 1 A) emitted only under `.ac`** (`core/netlist.ts` diode branch
 keys off `analysis.kind === 'ac'`); `.op`/`.tran` decks stay **byte-identical** (DC term only), so the

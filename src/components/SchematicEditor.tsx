@@ -815,7 +815,12 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
               const part = kind ? getOpamp(kind) : null
               const gain = opampNoiseGain(sel)
               const op37LowGain = part?.kind === 'op37' && gain !== null && gain < 5
-              const overSupply = part ? 10 > part.supplyMax : false // M2K rails are ±5 (10 V total)
+              // TIA-0: the simulated supply is the part's auto-rail default (±5 V kit; single +5 V for
+              // a low-voltage part like the TLV9062), so the over-max warning tracks the actual rails.
+              const railDef = part?.supplyDefault ?? { vcc: 5, vee: -5 }
+              const supplyTotal = railDef.vcc - railDef.vee
+              const railLabel = railDef.vee === 0 ? `+${railDef.vcc} V single-supply` : `±${railDef.vcc} V`
+              const overSupply = part ? supplyTotal > part.supplyMax : false
               return (
                 <>
                   <div className="control-row-inline" title="Pick an op-amp from your ADALP2000 parts kit">
@@ -835,6 +840,16 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                       {part.railToRailOut ? ' rail-to-rail output' : ` output to ~${part.outputHeadroom} V of each rail`}.
                     </div>
                   )}
+                  {part?.origin === 'course' && (
+                    <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, color: 'var(--accent-blue)', border: '1px solid var(--accent-blue)' }}>
+                        course part
+                      </span>
+                      <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
+                        supplied for the course (not in the ADALP2000 kit); boards as a SOIC-8 on a DIP adapter
+                      </span>
+                    </div>
+                  )}
                   {!onKit && (
                     <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, color: '#ffaa55', border: '1px solid #ffaa55' }}>
@@ -851,11 +866,11 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                   )}
                   {overSupply && (
                     <div style={{ fontSize: 10, color: '#ffaa55', marginTop: 4, lineHeight: 1.4 }}>
-                      ⚠ {part!.name} is single-supply {part!.supplyMin}–{part!.supplyMax} V — the M2K's ±5 V rails (10 V) exceed its max.
+                      ⚠ {part!.name} max supply is {part!.supplyMin}–{part!.supplyMax} V — the simulated {railLabel} ({supplyTotal} V total) exceeds its max.
                     </div>
                   )}
                   <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.4 }}>
-                    Power is implied in simulation (auto ±5 V); on the breadboard it's a DIP whose V+/V− you wire to the rails.
+                    Power is implied in simulation (auto {railLabel}); on the breadboard it's a DIP whose V+/V− you wire to the rails.
                   </div>
                 </>
               )
