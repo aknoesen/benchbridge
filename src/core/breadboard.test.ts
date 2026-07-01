@@ -30,8 +30,20 @@ describe('breadboard nets (F-1)', () => {
   })
 })
 
-import { checkEquivalence, PORT_TERMINAL, type BoardLayout } from './breadboard'
+import { checkEquivalence, PORT_TERMINAL, to92PinHoles, type BoardLayout } from './breadboard'
 import { type Schematic } from './schematic'
+
+describe('to92PinHoles (ARB-1 polish: TO-92 placeable in any term row)', () => {
+  it('defaults to the top-bank term row b, and honours an explicit row', () => {
+    expect(to92PinHoles(3)).toEqual(['b3', 'b4', 'b5'])
+    expect(to92PinHoles(3, 'e')).toEqual(['e3', 'e4', 'e5'])
+    expect(to92PinHoles(3, 'g')).toEqual(['g3', 'g4', 'g5'])
+  })
+  it('returns null when the three legs overrun the board', () => {
+    expect(to92PinHoles(0, 'e')).toBeNull()
+    expect(to92PinHoles(999, 'e')).toBeNull()
+  })
+})
 
 // W1 -> R1 -> (out) -> C1 -> GND ; 1+ probes the R-C node.
 const rcSch: Schematic = {

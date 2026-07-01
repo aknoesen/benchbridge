@@ -186,7 +186,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
     for (const p of board.parts) { used.add(nets.get(p.aHole)!); used.add(nets.get(p.bHole)!) }
     for (const j of board.jumpers) { used.add(nets.get(j.a)!); used.add(nets.get(j.b)!) }
     for (const d of (board.dips ?? [])) for (const k of (dipPinHoles(d.kind, d.col) ?? [])) used.add(nets.get(k)!)
-    for (const t of (board.transistors ?? [])) for (const k of (to92PinHoles(t.col) ?? [])) used.add(nets.get(k)!)
+    for (const t of (board.transistors ?? [])) for (const k of (to92PinHoles(t.col, t.row) ?? [])) used.add(nets.get(k)!)
     const m = new Map<string, string>()
     let i = 0
     for (const n of used) { if (n) { m.set(n, NET_COLORS[i % NET_COLORS.length]); i++ } }
@@ -259,7 +259,9 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
           return
         }
       }
-      const part = { id: tool.id, kind: tool.partKind, aHole: pending, bHole: key }
+      // Carry the schematic part's value so the board render can draw a value-correct body
+      // (resistor colour bands, ceramic vs electrolytic cap). ARB-1 polish.
+      const part = { id: tool.id, kind: tool.partKind, aHole: pending, bHole: key, value: schematic.components.find((c) => c.id === tool.id)?.value }
       setBoard((b) => ({ ...b, parts: [...b.parts.filter((p) => p.id !== tool.id), part] }))
       setPending(null); setTool({ kind: 'select' })
       return
@@ -278,12 +280,13 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
     }
     if (tool.kind === 'placeTransistor') {
       const h = holeByKey.get(key)!
-      // Anchor is the left leg: a term-row hole with two more isolated columns to its right.
-      if (h.row !== TO92_ROW || !to92PinHoles(h.col)) {
-        setCheck({ ok: false, message: `Click a hole in row ${TO92_ROW} (left leg); the TO-92 needs 3 adjacent columns.` })
+      // Anchor is the left leg: ANY term-row hole with two more free columns to its right (each column
+      // is its own net). Accept whichever term row the student clicks and place the TO-92 there.
+      if (h.kind !== 'term' || !to92PinHoles(h.col, h.row)) {
+        setCheck({ ok: false, message: `Click a term-row hole (left leg) with 3 free columns to its right.` })
         return
       }
-      const tr = { id: tool.id, kind: tool.partKind, col: h.col }
+      const tr = { id: tool.id, kind: tool.partKind, col: h.col, row: h.row }
       setBoard((b) => ({ ...b, transistors: [...(b.transistors ?? []).filter((t) => t.id !== tool.id), tr] }))
       setTool({ kind: 'select' })
       return
@@ -487,7 +490,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
               return (
                 <g key={p.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
                   onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, parts: bb.parts.filter((x) => x.id !== p.id) })); setCheck(null) } }}>
-                  <PartBody kind={p.kind} value={p.value} ax={a.x} ay={a.y} bx={b.x} by={b.y} />
+                  <PartBody kind={p.kind} value={p.value ?? schematic.components.find((c) => c.id === p.id)?.value} ax={a.x} ay={a.y} bx={b.x} by={b.y} />
                   {/* pin dots at the two holes, coloured by net when nets are shown */}
                   <circle cx={a.x} cy={a.y} r={3} fill={(showNets && activeColor.get(nets.get(p.aHole)!)) || '#cfcfcf'} stroke="#000" strokeWidth={0.5} />
                   <circle cx={b.x} cy={b.y} r={3} fill={(showNets && activeColor.get(nets.get(p.bHole)!)) || '#cfcfcf'} stroke="#000" strokeWidth={0.5} />
@@ -531,7 +534,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
               )
             })}
             {(board.transistors ?? []).map((t) => {
-              const pins = to92PinHoles(t.col); if (!pins) return null
+              const pins = to92PinHoles(t.col, t.row); if (!pins) return null
               const legs = pins.map((k) => pos(k))
               const labels = to92Legend(t.kind)
               const cx = legs[1].x

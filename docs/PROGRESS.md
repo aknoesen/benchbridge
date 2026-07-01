@@ -15,6 +15,16 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 all pushed to `origin/main` (repo is now `aknoesen/benchbridge`; Render URL stays `bridgem2k.onrender.com`).
 Cowork's on-disk NOTICE/README were truncated (dropped the third-party list) — repaired from LICENSE.
 
+**ARB-1 polish (andre's 3 live-test bugs) — DONE.** (1) **Resistor colour bands were empty** because the
+placed board part carried no `value`; now `placePart` copies the schematic part's value (+ a render-time
+fallback for loaded boards) so `resistorBands` gets a real value. (2) **TO-92 placement was too strict**
+(only row `b`); `to92PinHoles` is now row-aware, `PlacedTransistor` carries its `row`, `checkEquivalence`
+honours it, and placement accepts **any term-row hole** (message clarified). (3) **LED refdes collided
+with inductor "L"** — the diode family (`diode`/`led`/`zener`/`photodiode`) now all get prefix **`D`** in
+`REFDES`, so a LED is `D…` not `L…`. Tests: `partvisuals.test.ts` +10k/2.2k band cases; `breadboard.test.ts`
+`to92PinHoles` row-awareness. Build clean, tests green (`core/signal.ts` untouched). **Still open from
+andre's list: (4) show only schematic-present M2K terminals, (5) native-light board.**
+
 **ARB-1 (realistic breadboard part visuals) is DONE — Track L started.** Board 2-pin parts now render
 as real component bodies (a new `PartBody` in `Breadboard.tsx`, drawn along the a→b axis): **resistor**
 with a beige body + **E-series colour bands from the value**, **capacitor** as a ceramic disc (< 1 µF)

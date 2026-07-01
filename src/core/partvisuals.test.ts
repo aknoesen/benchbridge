@@ -15,6 +15,11 @@ describe('resistorBands (ARB-1 colour code)', () => {
     expect(resistorBands(100)).toEqual([BROWN, BLACK, BROWN, RES_GOLD])
     // 10 Ω → brown, black, black (×1)
     expect(resistorBands(10)).toEqual([BROWN, BLACK, BLACK, RES_GOLD])
+    // 10 kΩ → brown, black, orange (×1000) — andre's screenshot value
+    const ORANGE = RES_COLORS[3]
+    expect(resistorBands(10000)).toEqual([BROWN, BLACK, ORANGE, RES_GOLD])
+    // 2.2 kΩ → red, red, red (×100)
+    expect(resistorBands(2200)).toEqual([RED, RED, RED, RES_GOLD])
   })
 
   it('always yields 4 bands for a positive value; none for non-positive', () => {

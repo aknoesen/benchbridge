@@ -104,6 +104,8 @@ const DEFAULT_PART: Partial<Record<SchKind, string>> = {
 const REFDES: Partial<Record<SchKind, string>> = {
   resistor: 'R', capacitor: 'C', inductor: 'L', vsource: 'V',
   opamp: 'U', lmc662: 'U', ina125: 'U', bjt: 'Q', mosfet: 'M',
+  // Diode family shares 'D' (a LED is a diode); 'led' must NOT fall back to 'L' (= inductor).
+  diode: 'D', led: 'D', zener: 'D', photodiode: 'D',
 }
 function refPrefix(k: SchKind): string {
   return REFDES[k] ?? k[0].toUpperCase()

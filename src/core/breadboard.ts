@@ -307,10 +307,11 @@ export function dipPinHoles(pkg: DipPkg, col: number): string[] | null {
 export const TO92_KINDS = new Set<SchKind>(['bjt', 'mosfet'])
 export const TO92_ROW: Row = 'b' // a top-bank term row (any isolated-column term row works)
 
-// Hole keys for a TO-92 anchored at `col` (three adjacent columns, same row). Null if it overruns.
-export function to92PinHoles(col: number): string[] | null {
+// Hole keys for a TO-92 anchored at `col` in `row` (three adjacent columns, same row). Null if it
+// overruns. `row` defaults to TO92_ROW; any isolated-column term row works (each column is its own net).
+export function to92PinHoles(col: number, row: Row = TO92_ROW): string[] | null {
   if (col < 1 || col + 2 > COLS) return null
-  return [holeKey(TO92_ROW, col), holeKey(TO92_ROW, col + 1), holeKey(TO92_ROW, col + 2)]
+  return [holeKey(row, col), holeKey(row, col + 1), holeKey(row, col + 2)]
 }
 
 // Leg labels in schematic-terminal order (matches terminalsOf), for the side legend.
@@ -324,7 +325,7 @@ export interface PlacedPort { port: string; hole: string }
 // the board DIP package (F-4), not the schematic kind. `name` is the display label (the real part).
 export interface PlacedDip { id: string; kind: DipPkg; col: number; name?: string }
 // A placed TO-92 transistor anchored by its left leg column; leg holes derive via to92PinHoles().
-export interface PlacedTransistor { id: string; kind: SchKind; col: number }
+export interface PlacedTransistor { id: string; kind: SchKind; col: number; row?: Row }
 export interface BoardLayout { parts: PlacedPart[]; jumpers: Jumper[]; ports: PlacedPort[]; dips?: PlacedDip[]; transistors?: PlacedTransistor[] }
 
 export const emptyBoard = (): BoardLayout => ({ parts: [], jumpers: [], ports: [], dips: [], transistors: [] })
@@ -484,7 +485,7 @@ export function checkEquivalence(s: Schematic, board: BoardLayout, holes: Hole[]
   }
   for (const tr of exp.transistors) {
     const pl = placedTr.get(tr.id)!
-    const holesForTr = to92PinHoles(pl.col) ?? []
+    const holesForTr = to92PinHoles(pl.col, pl.row) ?? []
     tr.pinNets.forEach((net, k) => {
       schem.set(`${tr.id}.p${k + 1}`, net)
       brd.set(`${tr.id}.p${k + 1}`, bn(holesForTr[k] ?? `?${tr.id}.${k}`))
