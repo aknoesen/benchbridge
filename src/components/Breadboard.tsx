@@ -322,7 +322,10 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
               </span>
             )}
             {boardable && check && (
-              <span title={check.message} style={{ fontSize: 12, color: check.ok ? 'var(--theory-color)' : '#ffaa55', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{check.message}</span>
+              // Compact status only; the full message is in the side panel (FB-3).
+              <span style={{ fontSize: 12, color: check.ok ? 'var(--theory-color)' : '#ffaa55', whiteSpace: 'nowrap' }}>
+                {check.ok ? '✓ Match' : '✗ Check — see result panel →'}
+              </span>
             )}
             {boardable && floatingMinus.length > 0 && (
               <span title={floatingMinus.join('  ')} style={{ fontSize: 12, color: '#ffbf00', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -527,6 +530,19 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
       </div>
 
       <div className="settings-panel">
+        {/* FB-3: the Check result lives here in the side panel (full, wrapping text) instead of a
+            truncated header string, so it reads on a small monitor and never overlays the board. */}
+        {boardable && check && (
+          <div style={{
+            marginBottom: 10, padding: '7px 9px', borderRadius: 4, fontSize: 11, lineHeight: 1.5,
+            color: check.ok ? 'var(--theory-color)' : '#ffaa55',
+            border: `1px solid ${check.ok ? 'var(--theory-color)' : '#ffaa55'}`,
+            background: 'rgba(0,0,0,0.25)',
+          }}>
+            <b>{check.ok ? '✓ Check passed' : '✗ Check'}</b><br />
+            {check.message}
+          </div>
+        )}
         <div className="section-title">Place from schematic</div>
         {!boardable && (
           <div style={{ fontSize: 11, color: '#ff7a7a', lineHeight: 1.5, marginBottom: 6 }}>

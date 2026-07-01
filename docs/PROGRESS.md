@@ -15,6 +15,14 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 all pushed to `origin/main` (repo is now `aknoesen/benchbridge`; Render URL stays `bridgem2k.onrender.com`).
 Cowork's on-disk NOTICE/README were truncated (dropped the third-party list) — repaired from LICENSE.
 
+**FB-3 (UI polish) is DONE** (Track K). Three fixes: (1) the internal **"LOOP-1"** string in the
+SchematicEditor tip → plain "The Network Analyzer plots the result." (the only user-facing phase-ID
+leak; the rest are code comments); (2) the Circuit **Clear** button now `window.confirm`s before wiping
+(undo still available); (3) the breadboard **Check result** moved from a truncating header span to a
+**full, wrapping block at the top of the right settings panel** (the header keeps only a compact
+✓/✗ status), so the message reads on a small monitor and never overlays the board. UI-only, build
+clean, **223/223**. Next `TODO`: **FB-4** (Quickstart spacing + digital-twin note + W1/W2-example step).
+
 **FB-2 (single-ended grounding + input probes) is DONE** (Track K). Every **single-ended** example now
 wires **1−/2− to GND** (`adc1n`/`adc2n` ports) and carries a **2+ scope probe on its input** (andre's
 extra ask), so students see both input and output and the single-ended ADC reference matches the real

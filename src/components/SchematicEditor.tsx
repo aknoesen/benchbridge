@@ -620,7 +620,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                 </optgroup>
               ))}
             </select>
-            <button className="run-btn" onClick={() => { snapshot(); setSch({ components: [], wires: [] }); setSelected(null); setSelectedWire(null) }}>Clear</button>
+            <button className="run-btn" onClick={() => { if (!window.confirm('Clear the entire circuit? You can undo this with Ctrl+Z.')) return; snapshot(); setSch({ components: [], wires: [] }); setSelected(null); setSelectedWire(null) }}>Clear</button>
             <input ref={fileRef} type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={openCircuit} />
           </div>
         </div>
@@ -988,7 +988,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         )}
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 8 }}>
           Tip: place parts, wire them, then press Simulate. Needs a V src, a Ground, and a
-          Probe on the output. LOOP-1 plots the result in the Network Analyzer.
+          Probe on the output. The Network Analyzer plots the result.
         </div>
       </div>
     </div>
