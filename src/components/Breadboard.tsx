@@ -2,7 +2,7 @@
 // it. Place the schematic's R/C/L parts and M2K ports by clicking holes, run jumpers, then Check
 // that the board is electrically the drawn circuit. Practice colours each node live; Bench hides
 // the nodes until Check. See docs/specs/breadboard.md.
-import { useMemo, useRef, useState, type Dispatch, type SetStateAction, type CSSProperties } from 'react'
+import { useMemo, useRef, useState, type Dispatch, type SetStateAction, type CSSProperties, type ReactNode } from 'react'
 import {
   buildHoles, boardNets, boardWidth, boardHeight, PAD, PITCH, CHANNEL_SLOT,
   schematicExpectation, checkEquivalence, type BoardLayout, type CheckResult,
@@ -12,6 +12,7 @@ import {
 } from '../core/breadboard'
 import { type Schematic, type SchKind } from '../core/schematic'
 import { type SignalParams } from '../core/signal'
+import { resistorBands, ledColor } from '../core/partvisuals'
 import { exportSvgToPng } from './exportImage'
 import './Instrument.css'
 
@@ -32,6 +33,67 @@ const MIN_RESISTOR_HOLES = 4
 // render and the equivalence check share one source of truth (F-4).
 // TO-92 discrete transistors (SCH-8). Leg order matches to92Legend / the schematic terminal order.
 const TR_NAME: Record<string, string> = { bjt: 'BJT', mosfet: 'MOSFET' }
+
+// ── ARB-1: realistic 2-pin part bodies (kit-scoped, rendering only) ──────────────────────────────
+// A realistic body for a placed 2-pin part, drawn along the a→b axis (leads bent to the holes). Pure
+// SVG; no model/Check involvement. Cathode-side features (diode band, LED flat) sit toward b.
+function PartBody({ kind, value, ax, ay, bx, by }: { kind: SchKind; value?: number; ax: number; ay: number; bx: number; by: number }): ReactNode {
+  const mx = (ax + bx) / 2, my = (ay + by) / 2
+  const len = Math.hypot(bx - ax, by - ay) || 1
+  const angle = (Math.atan2(by - ay, bx - ax) * 180) / Math.PI
+  const h = Math.max(7, (len - 18) / 2) // half body length (leads take ~9px each side)
+  const lead = (
+    <>
+      <line x1={-len / 2} y1={0} x2={-h} y2={0} stroke="#b9bcc2" strokeWidth={1.6} />
+      <line x1={h} y1={0} x2={len / 2} y2={0} stroke="#b9bcc2" strokeWidth={1.6} />
+    </>
+  )
+  let body: ReactNode
+  if (kind === 'resistor') {
+    const bands = resistorBands(value ?? 0), bh = 13
+    body = (
+      <>
+        <rect x={-h} y={-bh / 2} width={2 * h} height={bh} rx={bh / 2} fill="#e2d3ab" stroke="#a89468" strokeWidth={1} />
+        {bands.map((c, i) => <rect key={i} x={-h * 0.55 + i * (h * 0.42)} y={-bh / 2 + 1} width={2.6} height={bh - 2} fill={c} />)}
+      </>
+    )
+  } else if (kind === 'capacitor') {
+    body = (value ?? 0) >= 1e-6 ? (
+      <>
+        <rect x={-h} y={-9} width={2 * h} height={18} rx={4} fill="#2b3a63" stroke="#16223f" strokeWidth={1} />
+        <rect x={-h} y={-9} width={4} height={18} fill="#cdd6ea" />{/* polarity stripe (electrolytic) */}
+      </>
+    ) : (
+      <ellipse cx={0} cy={0} rx={Math.min(h, 11)} ry={9} fill="#e6c25c" stroke="#a8892e" strokeWidth={1} />
+    )
+  } else if (kind === 'diode' || kind === 'zener') {
+    body = (
+      <>
+        <rect x={-h} y={-6.5} width={2 * h} height={13} rx={2.5} fill="#26262b" stroke="#555" strokeWidth={1} />
+        <rect x={h - 4} y={-6.5} width={2.6} height={13} fill="#e6e6ea" />{/* cathode band, toward b */}
+      </>
+    )
+  } else if (kind === 'led') {
+    body = (
+      <>
+        <circle cx={0} cy={0} r={9} fill={ledColor(value)} fillOpacity={0.9} stroke="#00000055" strokeWidth={1} />
+        <circle cx={-2.5} cy={-2.5} r={2.5} fill="#ffffff" fillOpacity={0.5} />
+      </>
+    )
+  } else if (kind === 'photodiode') {
+    body = (
+      <>
+        <circle cx={0} cy={0} r={9} fill="#bcd6ec" fillOpacity={0.75} stroke="#7fa8c9" strokeWidth={1} />
+        <circle cx={-2.5} cy={-2.5} r={2.5} fill="#ffffff" fillOpacity={0.55} />
+      </>
+    )
+  } else if (kind === 'inductor') {
+    body = <rect x={-h} y={-6} width={2 * h} height={12} rx={6} fill="#5a4632" stroke="#3a2c1e" strokeWidth={1} />
+  } else {
+    body = <rect x={-h} y={-6} width={2 * h} height={12} rx={3} fill="#1b1b1f" stroke="#888" strokeWidth={1} />
+  }
+  return <g transform={`translate(${mx} ${my}) rotate(${angle})`}>{lead}{body}</g>
+}
 
 // F-4: a parametric DIP-pinout legend driven by DIP_DEFS, so any op-amp package (8-pin single,
 // 8-pin dual, 14-pin quad) renders correctly with the right name and pin functions — replacing the
@@ -425,9 +487,11 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
               return (
                 <g key={p.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
                   onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, parts: bb.parts.filter((x) => x.id !== p.id) })); setCheck(null) } }}>
-                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--ch1-color)" strokeWidth={2} />
-                  <rect x={mx - 11} y={my - 7} width={22} height={14} rx={2} fill="var(--bg-panel)" stroke="var(--ch1-color)" />
-                  <text x={mx} y={my + 4} fontSize={9} fill="var(--text-primary)" textAnchor="middle">{p.id}</text>
+                  <PartBody kind={p.kind} value={p.value} ax={a.x} ay={a.y} bx={b.x} by={b.y} />
+                  {/* pin dots at the two holes, coloured by net when nets are shown */}
+                  <circle cx={a.x} cy={a.y} r={3} fill={(showNets && activeColor.get(nets.get(p.aHole)!)) || '#cfcfcf'} stroke="#000" strokeWidth={0.5} />
+                  <circle cx={b.x} cy={b.y} r={3} fill={(showNets && activeColor.get(nets.get(p.bHole)!)) || '#cfcfcf'} stroke="#000" strokeWidth={0.5} />
+                  <text x={mx} y={my + 16} fontSize={8} fill="var(--text-secondary)" textAnchor="middle">{p.id}</text>
                 </g>
               )
             })}
@@ -443,8 +507,9 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                 <g key={d.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
                   onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, dips: (bb.dips ?? []).filter((x) => x.id !== d.id) })); setCheck(null) } }}>
                   <rect x={bx} y={by} width={bw} height={bh} rx={3} fill="#1b1b1f" stroke="#888" strokeWidth={1} />
-                  {/* notch on the left edge marks pin-1 end (datasheet orientation) */}
+                  {/* notch on the left edge + pin-1 dot mark the datasheet orientation */}
                   <path d={`M ${bx + 5} ${by + bh / 2 - 5} a 5 5 0 0 0 0 10`} fill="none" stroke="#888" strokeWidth={1} />
+                  <circle cx={bx + 6} cy={by + bh - 6} r={2} fill="#c9cdd2" />
                   {pins.map((k, i) => {
                     const h = pos(k); const net = nets.get(k)!
                     const col = (showNets && activeColor.get(net)) || '#cfcfcf'

@@ -15,6 +15,18 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 all pushed to `origin/main` (repo is now `aknoesen/benchbridge`; Render URL stays `bridgem2k.onrender.com`).
 Cowork's on-disk NOTICE/README were truncated (dropped the third-party list) — repaired from LICENSE.
 
+**ARB-1 (realistic breadboard part visuals) is DONE — Track L started.** Board 2-pin parts now render
+as real component bodies (a new `PartBody` in `Breadboard.tsx`, drawn along the a→b axis): **resistor**
+with a beige body + **E-series colour bands from the value**, **capacitor** as a ceramic disc (< 1 µF)
+or an electrolytic can with a polarity stripe (≥ 1 µF), **diode/Zener** as a black body with a cathode
+band toward b, **LED** as a coloured dome (colour ∝ Vf), **photodiode** as a clear dome, **inductor** as
+a coil body. DIP bodies gained a **pin-1 dot** (with the existing notch); jumpers were already coloured
+by net. The value→appearance math (`resistorBands`, `ledColor`) moved to a pure **`core/partvisuals.ts`**
+with a test (`partvisuals.test.ts`: 4.7 kΩ→yellow/violet/red, etc.). **Model + `checkEquivalence`
+untouched** — the 223 prior tests are unchanged (Check identical), +3 new = **226/226**, build clean, no
+`core/signal.ts` change. ⚠ Visual-only aspects (bodies "read as real", spacing) not browser-verified
+headlessly — worth an eyeball. Local-only (not pushed). Next `TODO`: **ARB-2** (active/live board).
+
 **FB-4 (Quickstart) is DONE — the tester punch-list FB-1→FB-4 is complete.** Fixed the three JSX
 whitespace-adjacency typos (`<i>signal</i>`+newline+`outputs`, `<b>Bode</b>`+`plot`, `<b>W2</b>`+`sets`
 → added `{' '}`); added an early **"this app *simulates* the M2K — not connected to hardware, not a
