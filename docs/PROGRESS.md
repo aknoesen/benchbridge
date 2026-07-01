@@ -15,6 +15,18 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 all pushed to `origin/main` (repo is now `aknoesen/benchbridge`; Render URL stays `bridgem2k.onrender.com`).
 Cowork's on-disk NOTICE/README were truncated (dropped the third-party list) — repaired from LICENSE.
 
+**FB-2 (single-ended grounding + input probes) is DONE** (Track K). Every **single-ended** example now
+wires **1−/2− to GND** (`adc1n`/`adc2n` ports) and carries a **2+ scope probe on its input** (andre's
+extra ask), so students see both input and output and the single-ended ADC reference matches the real
+M2K. Treated as **differential and left untouched: `diode-iv`, `zener-iv`** (CH1 = anode−cathode via
+1−, per CLAUDE.md). The `tia-photodiode` example got `adc1n`→GND only (no voltage input → no 2+).
+Curve tracers (`nmos-output-xy`, `nmos-curve-family`, `bjt-curve-family`) grounded 1−/2− (the drain/
+collector already carries the W1 sweep as the "input"). New `examples.test.ts` suite runs `toCircuit`
+over **all** examples asserting: a CH1 output probe, no "not connected" warnings, `ch1n === '0'` for
+single-ended, and a W1 input node probed by a scope channel. Build clean, **223/223**, no
+`core/signal.ts` change. Next `TODO`: **FB-3** (UI polish — LOOP-1 string, Clear-confirm, Check-error
+placement).
+
 **FB-1 (scope measurement window) is DONE** (Track K). Root cause: `Oscilloscope.tsx` measured Vpp/RMS
 over the **visible graticule span** (`winSamples = windowSec·Fs`), which at a fast timebase is **< 1
 signal period**, so `vmax−vmin` under-reported Vpp ("reads half"). Fixed by measuring over the **full

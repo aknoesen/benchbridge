@@ -6,6 +6,34 @@ import { buildNetlist } from './netlist'
 import { normalizeResult, nodeVoltage } from './spice'
 import { schematicExpectation } from './breadboard'
 
+// FB-2: single-ended examples wire 1−/2− to GND and probe the input (2+). The diode/Zener I-V examples
+// are deliberately DIFFERENTIAL (CH1 = anode−cathode via 1−), so they are exempt from the 1−@GND rule.
+const DIFFERENTIAL = new Set(['diode-iv', 'zener-iv'])
+
+describe('FB-2: examples ground 1−/2− (single-ended) and probe the input', () => {
+  for (const ex of EXAMPLES) {
+    it(`${ex.id}: nets resolve — CH1 output probe, every port connected`, () => {
+      const { warnings, probes } = toCircuit(ex.schematic)
+      expect(probes.ch1).toBeDefined()
+      // Any added 1−/2−/2+ port that failed to land on its net shows up as a "not connected" warning.
+      expect(warnings.filter((w) => /not connected/i.test(w))).toEqual([])
+    })
+
+    if (!DIFFERENTIAL.has(ex.id)) {
+      it(`${ex.id}: CH1 is single-ended (1− at ground)`, () => {
+        expect(toCircuit(ex.schematic).probes.ch1n).toBe('0')
+      })
+    }
+
+    if (ex.schematic.components.some((c) => c.kind === 'awg1')) {
+      it(`${ex.id}: a W1 input node is probed by a scope channel`, () => {
+        const { probes } = toCircuit(ex.schematic)
+        expect(probes.ch1 === 'in' || probes.ch2 === 'in').toBe(true)
+      })
+    }
+  }
+})
+
 describe('TIA-3 photodiode example', () => {
   const ex = EXAMPLES.find((e) => e.id === 'tia-photodiode')!
 
