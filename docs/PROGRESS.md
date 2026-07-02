@@ -8,7 +8,33 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
-## Next session: start here (updated 2026-07-02, batch 2)
+## Next session: start here (updated 2026-07-02, batch 3)
+
+**ARB-5b (rotate a placed part) + the bezel finish are DONE — one commit, host-verified (285/285
+incl. the 12-bit canary, build clean, live Chrome pass).**
+- **Rotate** — hover a placed part and press `R` (guarded against typing fields / an active drag).
+  2-pin parts turn in 90° steps about their a-leg to the first orientation that passes the MOVE
+  validators (a polarized part's flip changes the leg→net mapping — Check reflects it, since Check
+  pairs `p.a→aHole`). DIPs flip 180° end-for-end via a new `flipped` flag: **same holes, pin 1
+  swaps ends** — the pin→hole assignment now flows through `dipPinHolesPlaced()` /
+  `to92PinHolesPlaced()` everywhere pins meet nets (checkEquivalence, autoRouteJumpers,
+  boardNodeMap, the render), so a flipped chip auto-routes AND Checks consistently (unit test
+  proves the flipped wiring fails the unflipped chip). Notch + pin-1 dimple render on the opposite
+  end so a backwards chip is visible. TO-92 flips leg order (labels follow; the body shape isn't
+  mirrored — cosmetic, note for the tuning round). Old-hole jumpers removed on a committed rotate
+  (the locked MOVE rule), z-order bump, one undo; no-fit → snap-back message. Pure
+  `rotatePartOnBoard` + 5 new tests. Live-verified: Rf rotated h9–h13 → h9–e9 (vertical, across the
+  channel) with the auto-router re-routing around it; one Ctrl-Z restored the layout.
+- **Bezel finish** — the in-SVG bench rect kept its `BENCH_EDGE` stroke, which drew the boxed
+  rectangle andre still saw. Now it's a stroke-less full-bleed rect kept ONLY as the export
+  backdrop (the export canvas is transparent without it; the panel background is the bench on
+  screen). And the board is now truly centred: the SVG had a right-only 42-px rail-label margin, so
+  the board sat left of centre — margins are symmetric now (viewBox starts at −RM/2, RM 52), with
+  the probe-readout edge-flip updated to the new right edge.
+
+---
+
+## Earlier on 2026-07-02 (batch 2)
 
 **The board-interaction cluster is DONE (built by CC per the 2026-07-02 handoff entries), four
 commits, all host-verified (280/280 incl. the 12-bit canary, build clean, live Chrome pass each):**
