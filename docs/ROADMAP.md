@@ -265,6 +265,7 @@ Spec: `docs/specs/active-realistic-breadboard.md`.
 | ARB-1 | **Realistic part visuals** — real component bodies scoped to the ADALP2000 kit (resistor **colour bands from value**, ceramic/electrolytic caps, diode/**LED** bodies, DIP with **pin-1**, TO-92, coloured jumpers). Pure `Breadboard.tsx` rendering; model + Check untouched. | F-3 | DONE |
 | ARB-2 | **Active / live board** — bind the already-computed sim state to the board via the net↔node equivalence: on-board **node-voltage probe/readout** (hover, DMM-style DC), **LED glow ∝ current** (the PWM-LED lab works in sim). Sim **read** path only (reuses the existing `.tran`; `boardNodeMap` accessor + `core/boardsim.ts` extraction). No `core/signal.ts`. | ARB-1, LOOP-1 | DONE |
 | ARB-3 | **Auto-route (folds in F-7)** — the manual/hint/auto jumper control (`docs/specs/board-autoroute.md`), rendered in the ARB-1 realistic style. | F-7/ARB-1 | DONE |
+| ARB-4 | **Fritzing-style photoreal cream board** (`docs/specs/fritzing-board.md`) — cream substrate on a dark bench bezel, metal-clip sockets, red/blue rails, gradient-shaded 3-D part bodies + drop shadows, glossy DIP, arced glossy jumpers; hover/Practice cues re-tuned for cream. Pure SVG re-skin — supersedes ARB-1's flat dark look (decision: andre, 2026-07-02); model/Check/geometry/ARB-2 live behaviour untouched. | ARB-1..3 | DONE |
 
 Notes:
 - **Sequencing:** ARB-1 (visuals) → ARB-2 (active) → ARB-3 (auto-route). Each ships user-visible value alone.

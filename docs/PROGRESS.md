@@ -10,6 +10,39 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Next session: start here (updated 2026-07-02)
 
+**ARB-4 (Fritzing-style photoreal cream breadboard) is BUILT** — by the Cowork agent per
+`docs/specs/fritzing-board.md`; Claude Code to build+verify+commit on the host. Pure SVG re-skin of
+`Breadboard.tsx` + a pure helper in `partvisuals.ts`; **no model / Check / geometry / sim change**.
+- **What changed** — one `<defs>` block (`arb4-*` gradients + one `feDropShadow` filter) and a dark
+  bench bezel behind a cream gradient board (top bevel, bottom edge, recessed centre groove, faint
+  a–j/column legend); sockets are dark rounded-square metal clips in a moulded recess (hole geometry
+  + hit targets untouched, only the glyph); rails re-tuned red/blue/dark-gnd on cream with +/− end
+  glyphs; hover/pending are dark rings (white was invisible on cream), Practice net colours keep
+  their semantics with a dark rim; `PartBody` bodies got cylindrical gradients + the shared drop
+  shadow + metallic leads (LED = domed lens over the **verbatim ARB-2 glow halos**; photodiode,
+  ceramic/electrolytic, diode band, inductor all shaded); the placed DIP is a glossy black body
+  inset between the pin rows with silver trapezoid legs, pin-1 dimple, notch, top sheen; TO-92
+  shaded with metallic legs; all jumpers (student / POWER_WIRES / F-7 auto / hint ghost) are now
+  quadratic-Bézier arcs (shadow + casing + gloss; auto keeps its dashed core, hint stays a numbered
+  green dashed ghost with the badge on the arc apex) via new pure `jumperArc()` in
+  `core/partvisuals.ts` (+4 unit tests).
+- **Tuning in one place** — the look constants sit at the top of `Breadboard.tsx` (`BOARD_CREAM_*`,
+  `SHADOW_DY/BLUR/OPACITY`, `WIRE_BOW_MIN/MAX/FRAC`, `SOCKET_*`, `RAIL_*`, `HOVER_RING`, …); expect
+  one visual tuning round with andre after deploy (the spec says so).
+- **Export-PNG decision** — the board now exports **without** the `light: true` inversion pass
+  (call changed in `Breadboard.tsx`; `exportImage.ts` untouched): the inversion would turn the
+  cream board near-black AND `light` mode strips every `url()` gradient fill (it was built to drop
+  the schematic grid). The cream board on its dark bezel is already a clean, self-contained figure.
+- **Verification** — sandbox mount served a day-old snapshot (known git/mount unreliability), so
+  host `tsc`/full suite **not run here**; the pure `partvisuals` helpers were shadow-tested in /tmp
+  with the repo's vitest (**9/9 green**, incl. the 4 new `jumperArc` cases) and the edited SVG
+  regions were re-read from the host tree for JSX balance. **CC must run `npm run build` + `npm
+  test` + the live Chrome pass** (place R/C/LED/DIP, wire jumpers, check Practice/hover on cream,
+  LED glow tracks current, auto/hint styles, probe readout, Export PNG) **+ the 12-bit canary**
+  (no signal-path change was made — `core/signal.ts` untouched).
+
+---
+
 **ARB-3 / F-7 (breadboard auto-routing: manual / hint / auto) is DONE** — built by the Cowork agent
 per `docs/specs/board-autoroute.md`; Claude Code to build+commit on the host.
 - **Engine** — new pure `autoRouteJumpers(s, board, holes): AutoJumper[]` (AutoJumper = Jumper + a

@@ -13,7 +13,7 @@ import {
 } from '../core/breadboard'
 import { type Schematic, type SchKind } from '../core/schematic'
 import { type SignalParams } from '../core/signal'
-import { resistorBands, ledColor, ledBrightness } from '../core/partvisuals'
+import { resistorBands, ledColor, ledBrightness, jumperArc } from '../core/partvisuals'
 import { exportSvgToPng } from './exportImage'
 import './Instrument.css'
 
@@ -39,10 +39,122 @@ const MIN_RESISTOR_HOLES = 4
 // TO-92 discrete transistors (SCH-8). Leg order matches to92Legend / the schematic terminal order.
 const TR_NAME: Record<string, string> = { bjt: 'BJT', mosfet: 'MOSFET' }
 
-// ── ARB-1: realistic 2-pin part bodies (kit-scoped, rendering only) ──────────────────────────────
+// ── ARB-4: Fritzing-look tuning constants (art direction — adjust these, not the markup) ─────────
+// Substrate
+const BOARD_CREAM_TOP = '#f3ecd8'   // cream board gradient, top edge …
+const BOARD_CREAM_BOT = '#e4d8b8'   // … to bottom edge
+const BOARD_BEVEL_TOP = '#fbf6e8'   // 1 px light bevel along the board's top edge
+const BOARD_BEVEL_BOT = '#cfc098'   // 1 px darker edge along the bottom
+const BOARD_BORDER = '#b7a87e'      // board outline stroke
+const BENCH_FILL = '#17181b'        // dark bench bezel behind the cream board (kills the theme seam)
+const BENCH_EDGE = '#2c2d31'
+const GROOVE_TOP = '#a99a72'        // recessed centre channel: shadowed top lip …
+const GROOVE_BOT = '#e8ddbe'        // … down to the lit bottom lip
+const EDGE_INK = '#9c8f6b'          // faint moulded a–j / column-number legend
+// Sockets
+const SOCKET_SIZE = 5.2             // metal-clip socket square, px
+const SOCKET_RECESS = 8.6           // moulded recess square around each socket, px
+const RECESS_FILL = 'rgba(0,0,0,0.08)'
+const HOVER_RING = '#1b1b1f'        // hover = dark ring (a white fill is invisible on cream)
+const PENDING_RING = '#2f6fd4'      // first-click marker while placing a jumper/part
+// Rails on cream
+const RAIL_RED = '#d24a3a'
+const RAIL_BLUE = '#3b6fb0'
+const RAIL_GND = '#3d4046'
+const RAIL_UNWIRED = '#8a7f5f'
+// Parts
+const LABEL_INK = '#4a4136'         // part/pin labels sitting on the cream substrate
+const SHADOW_DY = 1.5               // drop shadow: vertical offset …
+const SHADOW_BLUR = 1.2             // … blur (feGaussianBlur stdDeviation via feDropShadow) …
+const SHADOW_OPACITY = 0.33         // … and strength (#00000055 ≈ 0.33)
+// Jumpers
+const WIRE_BOW_MIN = 6              // arc bow (px) for the shortest jumpers …
+const WIRE_BOW_MAX = 14             // … clamped here for the longest …
+const WIRE_BOW_FRAC = 0.1           // … plus this fraction of the span length
+const WIRE_W = 3.4                  // insulation casing width
+const WIRE_SHADOW = 'rgba(0,0,0,0.30)'
+const WIRE_GLOSS = 'rgba(255,255,255,0.35)'
+
+// The single <defs> block every ARB-4 gradient/filter lives in. IDs carry an `arb4-` prefix so they
+// can't collide with other inline SVGs in the app; the PNG export clones defs along with the board,
+// so exported figures stay self-contained.
+function BoardDefs(): ReactNode {
+  const grad = (id: string, stops: [number, string, number?][], x2 = 0, y2 = 1) => (
+    <linearGradient id={id} x1={0} y1={0} x2={x2} y2={y2}>
+      {stops.map(([o, c, a], i) => <stop key={i} offset={o} stopColor={c} stopOpacity={a ?? 1} />)}
+    </linearGradient>
+  )
+  return (
+    <defs>
+      {grad('arb4-board', [[0, BOARD_CREAM_TOP], [1, BOARD_CREAM_BOT]])}
+      {grad('arb4-groove', [[0, GROOVE_TOP], [0.22, '#c9bb94'], [0.7, '#cfc198'], [1, GROOVE_BOT]])}
+      {grad('arb4-strip', [[0, '#143c63'], [1, '#0a2138']])}
+      {/* the metal clip inside each socket: dark toward the top-left = a moulded inner shadow */}
+      <linearGradient id="arb4-socket" x1={0} y1={0} x2={1} y2={1}>
+        <stop offset={0} stopColor="#232327" /><stop offset={0.55} stopColor="#3a3a3e" /><stop offset={1} stopColor="#4b4b52" />
+      </linearGradient>
+      {/* metallic leads: shading across a horizontal lead, and the transpose for vertical DIP/TO-92 legs */}
+      {grad('arb4-lead', [[0, '#8f939a'], [0.4, '#d7dade'], [1, '#75787e']])}
+      {grad('arb4-leg', [[0, '#9a9ea6'], [0.5, '#d7dade'], [1, '#84888f']], 1, 0)}
+      {/* one glossy-cylinder sheen overlaid on every tube body (it shades the resistor bands too) */}
+      {grad('arb4-sheen', [[0, '#000000', 0.2], [0.18, '#ffffff', 0.38], [0.45, '#ffffff', 0.06], [1, '#000000', 0.26]])}
+      {grad('arb4-resistor', [[0, '#c9b587'], [0.28, '#f0e2bc'], [0.6, '#e3d4a9'], [1, '#c9b587']])}
+      {grad('arb4-ecap', [[0, '#2e3b60'], [0.3, '#5c6fa3'], [1, '#1a2440']])}
+      {grad('arb4-diode', [[0, '#3f3f47'], [0.3, '#565660'], [1, '#141419']])}
+      {grad('arb4-inductor', [[0, '#6b5540'], [0.3, '#83694c'], [1, '#3a2c1e']])}
+      {grad('arb4-dip', [[0, '#2a2a2e'], [0.55, '#1b1b1f'], [1, '#0c0c0e']])}
+      {grad('arb4-to92', [[0, '#3a3a40'], [0.4, '#26262b'], [1, '#121215']])}
+      <radialGradient id="arb4-ceramic" cx={0.4} cy={0.35} r={0.75}>
+        <stop offset={0} stopColor="#f2d98f" /><stop offset={0.65} stopColor="#e6c25c" /><stop offset={1} stopColor="#b08a32" />
+      </radialGradient>
+      {/* colour-agnostic domed-lens overlay: white specular falloff into a darkened rim */}
+      <radialGradient id="arb4-dome" cx={0.38} cy={0.32} r={0.85}>
+        <stop offset={0} stopColor="#ffffff" stopOpacity={0.7} />
+        <stop offset={0.4} stopColor="#ffffff" stopOpacity={0.15} />
+        <stop offset={0.78} stopColor="#ffffff" stopOpacity={0} />
+        <stop offset={1} stopColor="#000000" stopOpacity={0.28} />
+      </radialGradient>
+      {/* the one soft drop shadow every part body shares */}
+      <filter id="arb4-shadow" x="-40%" y="-40%" width="180%" height="220%">
+        <feDropShadow dx={0} dy={SHADOW_DY} stdDeviation={SHADOW_BLUR} floodColor="#000000" floodOpacity={SHADOW_OPACITY} />
+      </filter>
+    </defs>
+  )
+}
+
+// ── ARB-4: one insulated jumper in the Fritzing style — a gentle arc lifting off the board, drawn
+// as shadow arc + coloured casing + gloss highlight, ending in plated cups at the sockets. The
+// F-7 semantics survive unchanged: `dashedCore` is the auto-mode "machine-generated, read-only"
+// cue (the old dashed centre line), and colour still comes from wireColor / the power convention.
+function JumperWire({ ax, ay, bx, by, color, dashedCore }: {
+  ax: number; ay: number; bx: number; by: number; color: string; dashedCore?: boolean
+}): ReactNode {
+  const arc = jumperArc(ax, ay, bx, by, WIRE_BOW_MIN, WIRE_BOW_MAX, WIRE_BOW_FRAC)
+  return (
+    <>
+      <path d={arc.d} fill="none" stroke={WIRE_SHADOW} strokeWidth={WIRE_W + 1.4} strokeLinecap="round"
+        transform={`translate(0 ${SHADOW_DY + 0.7})`} />
+      <path d={arc.d} fill="none" stroke={color} strokeWidth={WIRE_W} strokeLinecap="round" />
+      {dashedCore
+        ? <path d={arc.d} fill="none" stroke="#ffffff" strokeOpacity={0.4} strokeWidth={1} strokeDasharray="3 5" strokeLinecap="round" />
+        : <path d={arc.d} fill="none" stroke={WIRE_GLOSS} strokeWidth={1} strokeLinecap="round" transform="translate(0 -0.7)" />}
+      {/* plated cups: the two points the wire actually connects */}
+      {([[ax, ay], [bx, by]] as const).map(([x, y], i) => (
+        <g key={i}>
+          <circle cx={x} cy={y} r={4.4} fill={color} stroke="#101013" strokeWidth={1} />
+          <circle cx={x} cy={y} r={1.6} fill="#000000" opacity={0.35} />
+        </g>
+      ))}
+    </>
+  )
+}
+
+// ── ARB-1/ARB-4: realistic 2-pin part bodies (kit-scoped, rendering only) ────────────────────────
 // A realistic body for a placed 2-pin part, drawn along the a→b axis (leads bent to the holes). Pure
 // SVG; no model/Check involvement. Cathode-side features (diode band, LED flat) sit toward b.
-// `glow` (ARB-2): LED emission 0..1 from the live sim's average forward current (ledBrightness).
+// ARB-4 gives every body a cylindrical gradient + the shared drop shadow and metallic leads; the
+// `glow` prop (ARB-2: LED emission 0..1 from the live sim via ledBrightness) is preserved exactly —
+// the halo circles keep their radii/opacity and now layer UNDER the shaded lens.
 function PartBody({ kind, value, ax, ay, bx, by, glow }: { kind: SchKind; value?: number; ax: number; ay: number; bx: number; by: number; glow?: number }): ReactNode {
   const mx = (ax + bx) / 2, my = (ay + by) / 2
   const len = Math.hypot(bx - ax, by - ay) || 1
@@ -54,62 +166,95 @@ function PartBody({ kind, value, ax, ay, bx, by, glow }: { kind: SchKind; value?
     resistor: 16, capacitor: 12, inductor: 14, diode: 12, zener: 12, led: 9, photodiode: 9,
   }
   const h = Math.min(FIXED_HALF[kind] ?? 12, Math.max(6, len / 2 - 3))
+  // Metallic leads: thin rects (not lines) so the cross-axis gradient shades them round; they tuck
+  // 1.5 px under the body so the joint never shows.
+  const LW = 1.7
   const lead = (
     <>
-      <line x1={-len / 2} y1={0} x2={-h} y2={0} stroke="#b9bcc2" strokeWidth={1.6} />
-      <line x1={h} y1={0} x2={len / 2} y2={0} stroke="#b9bcc2" strokeWidth={1.6} />
+      <rect x={-len / 2} y={-LW / 2} width={len / 2 - h + 1.5} height={LW} rx={LW / 2} fill="url(#arb4-lead)" />
+      <rect x={h - 1.5} y={-LW / 2} width={len / 2 - h + 1.5} height={LW} rx={LW / 2} fill="url(#arb4-lead)" />
     </>
   )
   let body: ReactNode
+  let halo: ReactNode = null // LED glow, drawn under the shadowed body (never inside the filter)
   if (kind === 'resistor') {
     const bands = resistorBands(value ?? 0), bh = 13
     body = (
       <>
-        <rect x={-h} y={-bh / 2} width={2 * h} height={bh} rx={bh / 2} fill="#e2d3ab" stroke="#a89468" strokeWidth={1} />
-        {bands.map((c, i) => <rect key={i} x={-h * 0.55 + i * (h * 0.42)} y={-bh / 2 + 1} width={2.6} height={bh - 2} fill={c} />)}
+        <rect x={-h} y={-bh / 2} width={2 * h} height={bh} rx={bh / 2} fill="url(#arb4-resistor)" stroke="#a89468" strokeWidth={0.8} />
+        {bands.map((c, i) => <rect key={i} x={-h * 0.55 + i * (h * 0.42)} y={-bh / 2 + 0.7} width={2.6} height={bh - 1.4} fill={c} />)}
+        <rect x={-h} y={-bh / 2} width={2 * h} height={bh} rx={bh / 2} fill="url(#arb4-sheen)" />
       </>
     )
   } else if (kind === 'capacitor') {
     body = (value ?? 0) >= 1e-6 ? (
       <>
-        <rect x={-h} y={-9} width={2 * h} height={18} rx={4} fill="#2b3a63" stroke="#16223f" strokeWidth={1} />
+        <rect x={-h} y={-9} width={2 * h} height={18} rx={4} fill="url(#arb4-ecap)" stroke="#16223f" strokeWidth={0.8} />
+        <ellipse cx={h - 2.2} cy={0} rx={2.2} ry={8.2} fill="#55689e" />{/* lit can end */}
         <rect x={-h} y={-9} width={4} height={18} fill="#cdd6ea" />{/* polarity stripe (electrolytic) */}
+        <text x={-h + 2} y={2.8} fontSize={7} fontWeight={800} fill="#1a2440" textAnchor="middle">−</text>
+        <rect x={-h} y={-9} width={2 * h} height={18} rx={4} fill="url(#arb4-sheen)" />
       </>
     ) : (
-      <ellipse cx={0} cy={0} rx={Math.min(h, 11)} ry={9} fill="#e6c25c" stroke="#a8892e" strokeWidth={1} />
+      <ellipse cx={0} cy={0} rx={Math.min(h, 11)} ry={9} fill="url(#arb4-ceramic)" stroke="#a8892e" strokeWidth={0.8} />
     )
   } else if (kind === 'diode' || kind === 'zener') {
     body = (
       <>
-        <rect x={-h} y={-6.5} width={2 * h} height={13} rx={2.5} fill="#26262b" stroke="#555" strokeWidth={1} />
+        <rect x={-h} y={-6.5} width={2 * h} height={13} rx={2.5} fill="url(#arb4-diode)" stroke="#101014" strokeWidth={0.8} />
         <rect x={h - 4} y={-6.5} width={2.6} height={13} fill="#e6e6ea" />{/* cathode band, toward b */}
+        <rect x={-h} y={-6.5} width={2 * h} height={13} rx={2.5} fill="url(#arb4-sheen)" />
       </>
     )
   } else if (kind === 'led') {
     // Live glow: an unlit LED is a dull dome; forward current adds a soft halo + brightens the lens.
+    // The two halo circles are ARB-2 verbatim — do not retune them here.
     const g = Math.max(0, Math.min(1, glow ?? 0))
     const col = ledColor(value)
-    body = (
+    halo = (
       <>
         {g > 0 && <circle cx={0} cy={0} r={9 + 12 * g} fill={col} opacity={0.28 * g} />}
         {g > 0 && <circle cx={0} cy={0} r={9 + 5 * g} fill={col} opacity={0.45 * g} />}
+      </>
+    )
+    body = (
+      <>
+        <circle cx={0} cy={0} r={10.4} fill={col} fillOpacity={0.22} stroke="#00000033" strokeWidth={0.8} />{/* base flange */}
         <circle cx={0} cy={0} r={9} fill={col} fillOpacity={0.55 + 0.45 * g} stroke="#00000055" strokeWidth={1} />
+        <circle cx={0} cy={0} r={9} fill="url(#arb4-dome)" />{/* translucent dome shading */}
         <circle cx={-2.5} cy={-2.5} r={2.5} fill="#ffffff" fillOpacity={0.45 + 0.45 * g} />
       </>
     )
   } else if (kind === 'photodiode') {
     body = (
       <>
+        <circle cx={0} cy={0} r={10.2} fill="#bcd6ec" fillOpacity={0.3} stroke="#00000022" strokeWidth={0.8} />
         <circle cx={0} cy={0} r={9} fill="#bcd6ec" fillOpacity={0.75} stroke="#7fa8c9" strokeWidth={1} />
+        <circle cx={0} cy={0} r={9} fill="url(#arb4-dome)" />
         <circle cx={-2.5} cy={-2.5} r={2.5} fill="#ffffff" fillOpacity={0.55} />
       </>
     )
   } else if (kind === 'inductor') {
-    body = <rect x={-h} y={-6} width={2 * h} height={12} rx={6} fill="#5a4632" stroke="#3a2c1e" strokeWidth={1} />
+    body = (
+      <>
+        <rect x={-h} y={-6} width={2 * h} height={12} rx={6} fill="url(#arb4-inductor)" stroke="#3a2c1e" strokeWidth={0.8} />
+        <rect x={-h} y={-6} width={2 * h} height={12} rx={6} fill="url(#arb4-sheen)" />
+      </>
+    )
   } else {
-    body = <rect x={-h} y={-6} width={2 * h} height={12} rx={3} fill="#1b1b1f" stroke="#888" strokeWidth={1} />
+    body = (
+      <>
+        <rect x={-h} y={-6} width={2 * h} height={12} rx={3} fill="#1b1b1f" stroke="#888" strokeWidth={1} />
+        <rect x={-h} y={-6} width={2 * h} height={12} rx={3} fill="url(#arb4-sheen)" />
+      </>
+    )
   }
-  return <g transform={`translate(${mx} ${my}) rotate(${angle})`}>{lead}{body}</g>
+  return (
+    <g transform={`translate(${mx} ${my}) rotate(${angle})`}>
+      {halo}
+      <g filter="url(#arb4-shadow)">{lead}{body}</g>
+    </g>
+  )
 }
 
 // F-4: a parametric DIP-pinout legend driven by DIP_DEFS, so any op-amp package (8-pin single,
@@ -279,8 +424,10 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
     if (net === nets.get(PORT_TERMINAL['GND'])) return 'gnd'
     return null
   }
-  const SUPPLY_LINE: Record<string, string> = { pos: '#e04040', neg: '#4a9eff', gnd: '#c9cdd2' }
-  const SUPPLY_HOLE: Record<string, string> = { pos: '#5a2a2a', neg: '#23304a', gnd: '#3a3a3a' }
+  // ARB-4: same semantics as always (pos = red, neg = blue, gnd = neutral), values re-tuned to
+  // read on the cream board — rail lines/wires go saturated-dark, hole markers become recess tints.
+  const SUPPLY_LINE: Record<string, string> = { pos: RAIL_RED, neg: RAIL_BLUE, gnd: RAIL_GND }
+  const SUPPLY_HOLE: Record<string, string> = { pos: 'rgba(210,74,58,0.16)', neg: 'rgba(59,111,176,0.16)', gnd: 'rgba(0,0,0,0.12)' }
   const placedPart = new Map(board.parts.map((p) => [p.id, p]))
   const placedDip = new Map((board.dips ?? []).map((d) => [d.id, d]))
   const placedTr = new Map((board.transistors ?? []).map((t) => [t.id, t]))
@@ -476,8 +623,12 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
               title={boardable ? 'Check board vs schematic' : 'This circuit has no breadboard footprint'} style={!boardable ? { opacity: 0.5 } : undefined}>✓ Check</button>
             <button className="run-btn" onClick={saveLab}>Save</button>
             <button className="run-btn" onClick={() => fileRef.current?.click()}>Open</button>
+            {/* ARB-4: export as-is (no light-inversion pass). The board is now itself a light cream
+                figure on a self-contained dark bezel; `light: true` would invert the cream to
+                near-black AND strip every gradient body (exportImage drops url() fills in light
+                mode, which used to be just the schematic grid). */}
             <button className="run-btn" title="Save the board layout as a PNG for your prelab"
-              onClick={() => { if (svgRef.current) exportSvgToPng(svgRef.current, 'breadboard.png', { light: true }).catch((e) => setCheck({ ok: false, message: `Export failed: ${e.message}` })) }}>
+              onClick={() => { if (svgRef.current) exportSvgToPng(svgRef.current, 'breadboard.png').catch((e) => setCheck({ ok: false, message: `Export failed: ${e.message}` })) }}>
               Export PNG
             </button>
             <input ref={fileRef} type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={openLab} />
@@ -486,16 +637,43 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
         <div className="plotly-display" style={{ overflow: 'auto', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 8 }}>
           <svg ref={svgRef} viewBox={`0 0 ${W2} ${H2}`} width={W2} height={H2} style={{ maxWidth: '100%', height: 'auto' }}
             onMouseMove={onSvgMove} onMouseLeave={() => cursor && setCursor(null)}>
-            {/* fixed M2K adaptor-board connector strips, top & bottom */}
-            <rect x={2} y={2} width={W - 4} height={STRIP - 8} rx={5} fill="#0f2c49" stroke="#1d4d7a" />
-            <rect x={2} y={OY + H + 6} width={W - 4} height={STRIP - 8} rx={5} fill="#0f2c49" stroke="#1d4d7a" />
-            {/* board body */}
-            <rect x={2} y={OY + 2} width={W - 4} height={H - 4} rx={8} fill="#15171a" stroke="#333" />
+            <BoardDefs />
+            {/* ARB-4: the whole scene sits on a dark bench bezel, so the cream board reads as a
+                thing ON the bench (not a light-theme seam) and the exported PNG is self-contained */}
+            <rect x={0.75} y={0.75} width={W2 - 1.5} height={H2 - 1.5} rx={10} fill={BENCH_FILL} stroke={BENCH_EDGE} strokeWidth={1.5} />
+            {/* fixed M2K adaptor-board connector strips, top & bottom (brushed navy) */}
+            <rect x={2} y={2} width={W - 4} height={STRIP - 8} rx={5} fill="url(#arb4-strip)" stroke="#1d4d7a" />
+            <rect x={2} y={OY + H + 6} width={W - 4} height={STRIP - 8} rx={5} fill="url(#arb4-strip)" stroke="#1d4d7a" />
+            {/* board body: cream plastic with a light top bevel and a darker bottom edge */}
+            <rect x={2} y={OY + 2} width={W - 4} height={H - 4} rx={10} fill="url(#arb4-board)" stroke={BOARD_BORDER} strokeWidth={1.5} />
+            <line x1={9} y1={OY + 3.6} x2={W - 9} y2={OY + 3.6} stroke={BOARD_BEVEL_TOP} strokeWidth={1.2} strokeLinecap="round" />
+            <line x1={9} y1={OY + H - 3.6} x2={W - 9} y2={OY + H - 3.6} stroke={BOARD_BEVEL_BOT} strokeWidth={1.2} strokeLinecap="round" />
+            {/* faint moulded legend: row letters + column numbers, Fritzing-style */}
+            <g pointerEvents="none" fill={EDGE_INK} fontSize={7.5}>
+              {holes.filter((hh) => hh.col === 1 && hh.kind === 'term').map((hh) => (
+                <g key={'rowl' + hh.row}>
+                  <text x={9} y={hh.y + OY + 2.6} textAnchor="middle">{hh.row}</text>
+                  <text x={W - 9} y={hh.y + OY + 2.6} textAnchor="middle">{hh.row}</text>
+                </g>
+              ))}
+              {[1, 5, 10, 15, 20, 25, 30].map((c) => (
+                <g key={'coll' + c}>
+                  <text x={PAD + (c - 1) * PITCH} y={railY(2) + 2.6} textAnchor="middle">{c}</text>
+                  <text x={PAD + (c - 1) * PITCH} y={railY(14) + 2.6} textAnchor="middle">{c}</text>
+                </g>
+              ))}
+            </g>
             {([[0, 'TP'], [1, 'TN'], [15, 'BP'], [16, 'BN']] as const).map(([s, row]) => {
               const fn = supplyOf(holeKey(row, 1))
+              const col = fn ? SUPPLY_LINE[fn] : RAIL_UNWIRED
+              const glyph = fn === 'pos' ? '+' : fn === 'neg' ? '−' : ''
               return (
-                <line key={s} x1={PAD - 10} y1={railY(s)} x2={W - PAD + 10} y2={railY(s)}
-                  stroke={fn ? SUPPLY_LINE[fn] : '#555'} strokeOpacity={0.55} strokeWidth={2.5} />
+                <g key={s} pointerEvents="none">
+                  <line x1={PAD - 10} y1={railY(s)} x2={W - PAD + 10} y2={railY(s)}
+                    stroke={col} strokeOpacity={0.85} strokeWidth={2} />
+                  {glyph && <text x={PAD - 15} y={railY(s) + 3.5} fontSize={11} fontWeight={800}
+                    fill={col} textAnchor="middle">{glyph}</text>}
+                </g>
               )
             })}
             {/* function label on each rail (outer = GND, top inner = V+, bottom inner = V−) */}
@@ -503,16 +681,19 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
               <text key={'rl' + s} x={W - PAD + 12} y={railY(s) + 4} fontSize={13} fontWeight={800}
                 fill={TERM_COLOR[c]} textAnchor="start">{lbl}</text>
             ))}
-            <rect x={2} y={railY(CHANNEL_SLOT) - PITCH / 2} width={W - 4} height={PITCH} fill="#0d0d0d" />
+            {/* recessed centre channel: a moulded valley (shadowed top lip, lit bottom lip) */}
+            <rect x={2} y={railY(CHANNEL_SLOT) - PITCH / 2} width={W - 4} height={PITCH} fill="url(#arb4-groove)" />
+            <line x1={2} y1={railY(CHANNEL_SLOT) - PITCH / 2 + 0.7} x2={W - 2} y2={railY(CHANNEL_SLOT) - PITCH / 2 + 0.7}
+              stroke="#000000" strokeOpacity={0.2} strokeWidth={1.2} />
+            <line x1={2} y1={railY(CHANNEL_SLOT) + PITCH / 2 - 0.7} x2={W - 2} y2={railY(CHANNEL_SLOT) + PITCH / 2 - 0.7}
+              stroke="#ffffff" strokeOpacity={0.5} strokeWidth={1.2} />
             {holes.map((h) => {
               const net = nets.get(h.key)!
               const aCol = showNets ? activeColor.get(net) : undefined
               const hover = mode === 'practice' && hoverNet === net
               const railFn = (h.kind === 'railP' || h.kind === 'railN') ? supplyOf(h.key) : null
-              const base = railFn ? SUPPLY_HOLE[railFn] : '#2b2b2b'
-              const fill = hover ? '#ffffff' : (aCol ?? base)
-              const r = (hover || pending === h.key) ? 4.4 : (aCol ? 3.6 : 3)
               const cy = h.y + OY
+              const S = SOCKET_SIZE, RS = SOCKET_RECESS
               return (
                 <g key={h.key} style={{ cursor: 'pointer' }}
                   onMouseEnter={() => { if (mode === 'practice') setHoverNet(net); setProbeKey(h.key) }}
@@ -520,38 +701,42 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                   onClick={() => onNode(h.key)}>
                   {/* generous invisible hit target (the whole cell) so clicks don't need to be precise */}
                   <circle cx={h.x} cy={cy} r={PITCH / 2 - 1} fill="transparent" />
-                  <circle cx={h.x} cy={cy} r={r} fill={fill}
-                    stroke={pending === h.key ? '#fff' : '#000'} strokeWidth={pending === h.key ? 1.5 : 0.5}
-                    style={{ pointerEvents: 'none' }} />
+                  <g style={{ pointerEvents: 'none' }}>
+                    {/* moulded recess, tinted toward the rail's function on the power rows */}
+                    <rect x={h.x - RS / 2} y={cy - RS / 2} width={RS} height={RS} rx={2}
+                      fill={railFn ? SUPPLY_HOLE[railFn] : RECESS_FILL} />
+                    {/* the metal clip; Practice paints it with the net colour + a dark rim so it reads on cream */}
+                    <rect x={h.x - S / 2} y={cy - S / 2} width={S} height={S} rx={1.3}
+                      fill={aCol ?? 'url(#arb4-socket)'} stroke={aCol ? HOVER_RING : '#00000066'} strokeWidth={aCol ? 0.9 : 0.5} />
+                    {/* hover / first-click: a dark ring + soft outer glow (white is invisible on cream) */}
+                    {(hover || pending === h.key) && (
+                      <>
+                        <rect x={h.x - S / 2 - 3} y={cy - S / 2 - 3} width={S + 6} height={S + 6} rx={2.6} fill="none"
+                          stroke={pending === h.key ? PENDING_RING : HOVER_RING} strokeWidth={1.6} />
+                        <rect x={h.x - S / 2 - 5} y={cy - S / 2 - 5} width={S + 10} height={S + 10} rx={3.4} fill="none"
+                          stroke={pending === h.key ? PENDING_RING : HOVER_RING} strokeOpacity={0.25} strokeWidth={2.4} />
+                      </>
+                    )}
+                  </g>
                 </g>
               )
             })}
             {/* standard power distribution — always present, coloured by terminal, not deletable */}
             {POWER_WIRES.map((w, i) => {
               const a = pos(w.a), b = pos(w.b)
-              const col = TERM_COLOR[w.color]
               return (
                 <g key={'pw' + i} style={{ pointerEvents: 'none' }}>
-                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#000" strokeOpacity={0.5} strokeWidth={5} strokeLinecap="round" />
-                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={col} strokeWidth={3} strokeLinecap="round" strokeOpacity={0.92} />
-                  <circle cx={a.x} cy={a.y} r={4.4} fill={col} stroke="#000" strokeWidth={1} />
-                  <circle cx={b.x} cy={b.y} r={4.4} fill={col} stroke="#000" strokeWidth={1} />
+                  <JumperWire ax={a.x} ay={a.y} bx={b.x} by={b.y} color={TERM_COLOR[w.color]} />
                 </g>
               )
             })}
             {routing !== 'auto' && board.jumpers.map((j, i) => {
               const a = pos(j.a), b = pos(j.b)
-              const col = wireColor(j.a, j.b)
               return (
                 <g key={'j' + i} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
                   onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, jumpers: bb.jumpers.filter((_, k) => k !== i) })); setCheck(null) } }}>
-                  {/* shadow lifts the jumper visually above the board */}
-                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#000" strokeOpacity={0.55} strokeWidth={5.5} strokeLinecap="round" />
-                  {/* coloured by its node, so it matches the bus/column it joins */}
-                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={col} strokeWidth={3} strokeLinecap="round" />
-                  {/* junction dots = the only points it actually connects */}
-                  <circle cx={a.x} cy={a.y} r={4.6} fill={col} stroke="#000" strokeWidth={1} />
-                  <circle cx={b.x} cy={b.y} r={4.6} fill={col} stroke="#000" strokeWidth={1} />
+                  {/* arced insulated wire, coloured by its node so it matches the bus/column it joins */}
+                  <JumperWire ax={a.x} ay={a.y} bx={b.x} by={b.y} color={wireColor(j.a, j.b)} />
                 </g>
               )
             })}
@@ -559,15 +744,10 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                 read-only (no delete click); hovering shows why the jumper exists */}
             {routing === 'auto' && autoJumpers.map((j, i) => {
               const a = pos(j.a), b = pos(j.b)
-              const col = wireColor(j.a, j.b)
               return (
                 <g key={'aj' + i} style={{ cursor: 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}>
                   <title>{`auto-routed (read-only): ${j.note}`}</title>
-                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#000" strokeOpacity={0.55} strokeWidth={5.5} strokeLinecap="round" />
-                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={col} strokeWidth={3} strokeLinecap="round" />
-                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#ffffff" strokeOpacity={0.4} strokeWidth={1} strokeDasharray="3 5" strokeLinecap="round" />
-                  <circle cx={a.x} cy={a.y} r={4.6} fill={col} stroke="#000" strokeWidth={1} />
-                  <circle cx={b.x} cy={b.y} r={4.6} fill={col} stroke="#000" strokeWidth={1} />
+                  <JumperWire ax={a.x} ay={a.y} bx={b.x} by={b.y} color={wireColor(j.a, j.b)} dashedCore />
                 </g>
               )
             })}
@@ -586,7 +766,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                   {/* pin dots at the two holes, coloured by net when nets are shown */}
                   <circle cx={a.x} cy={a.y} r={3} fill={(showNets && activeColor.get(nets.get(p.aHole)!)) || '#cfcfcf'} stroke="#000" strokeWidth={0.5} />
                   <circle cx={b.x} cy={b.y} r={3} fill={(showNets && activeColor.get(nets.get(p.bHole)!)) || '#cfcfcf'} stroke="#000" strokeWidth={0.5} />
-                  <text x={mx} y={my + 16} fontSize={8} fill="var(--text-secondary)" textAnchor="middle">{p.id}</text>
+                  <text x={mx} y={my + 16} fontSize={8} fill={LABEL_INK} textAnchor="middle">{p.id}</text>
                 </g>
               )
             })}
@@ -597,21 +777,36 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
               // Display the real part name (from the current schematic), falling back to the package.
               const dipName = exp.dips.find((e) => e.id === d.id)?.name ?? d.name ?? def?.name ?? d.kind
               const tl = pos(holeKey(DIP_TOP_ROW, d.col)), br = pos(holeKey(DIP_BOT_ROW, d.col + n - 1))
-              const bx = tl.x - 7, by = tl.y - 7, bw = (br.x - tl.x) + 14, bh = (br.y - tl.y) + 14
+              // ARB-4: like the real package, the moulded body sits BETWEEN the two pin rows and the
+              // silver legs reach out to the sockets. Same anchor holes as always — geometry frozen.
+              const bx = tl.x - 7, bw = (br.x - tl.x) + 14
+              const INSET = 4.5
+              const by = tl.y + INSET, bh = (br.y - tl.y) - 2 * INSET
               return (
                 <g key={d.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
                   onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, dips: (bb.dips ?? []).filter((x) => x.id !== d.id) })); setCheck(null) } }}>
-                  <rect x={bx} y={by} width={bw} height={bh} rx={3} fill="#1b1b1f" stroke="#888" strokeWidth={1} />
-                  {/* notch on the left edge + pin-1 dot mark the datasheet orientation */}
-                  <path d={`M ${bx + 5} ${by + bh / 2 - 5} a 5 5 0 0 0 0 10`} fill="none" stroke="#888" strokeWidth={1} />
-                  <circle cx={bx + 6} cy={by + bh - 6} r={2} fill="#c9cdd2" />
+                  {/* silver legs, one shaded trapezoid per pin seating into its socket */}
+                  {pins.map((k, i) => {
+                    const h = pos(k)
+                    const isBottom = i < n
+                    const edgeY = isBottom ? by + bh : by
+                    const holeY = isBottom ? h.y + 1 : h.y - 1
+                    return <path key={'leg' + i} d={`M ${h.x - 2.1} ${edgeY} L ${h.x + 2.1} ${edgeY} L ${h.x + 1.2} ${holeY} L ${h.x - 1.2} ${holeY} Z`}
+                      fill="url(#arb4-leg)" stroke="#00000044" strokeWidth={0.4} />
+                  })}
+                  {/* glossy black body with a top specular sheen */}
+                  <rect x={bx} y={by} width={bw} height={bh} rx={3} fill="url(#arb4-dip)" stroke="#000000" strokeWidth={0.8} filter="url(#arb4-shadow)" />
+                  <rect x={bx + 4} y={by + 2.5} width={bw - 8} height={3.4} rx={1.7} fill="#ffffff" opacity={0.1} />
+                  {/* notch on the left edge + pin-1 dimple mark the datasheet orientation */}
+                  <path d={`M ${bx + 5} ${by + bh / 2 - 5} a 5 5 0 0 0 0 10`} fill="#101013" stroke="#3a3a40" strokeWidth={1} />
+                  <circle cx={bx + 7} cy={by + bh - 5.5} r={2} fill="#0b0b0d" stroke="#404046" strokeWidth={0.6} />
                   {pins.map((k, i) => {
                     const h = pos(k); const net = nets.get(k)!
                     const col = (showNets && activeColor.get(net)) || '#cfcfcf'
                     const isBottom = i < n           // pins 1..n on the bottom row, n+1..2n on top
                     const numY = isBottom ? h.y + 12 : h.y - 7
                     const rails = def?.rails
-                    const numCol = rails && i === rails.vpos ? '#e04040' : rails && i === rails.vneg ? '#4a9eff' : '#9aa0a6'
+                    const numCol = rails && i === rails.vpos ? '#e04040' : rails && i === rails.vneg ? '#4a9eff' : '#6b6255'
                     return (
                       <g key={i}>
                         <circle cx={h.x} cy={h.y} r={3.2} fill={col} stroke="#000" strokeWidth={0.5}>
@@ -621,7 +816,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                       </g>
                     )
                   })}
-                  <text x={(bx + bx + bw) / 2} y={by + bh / 2 + 3} fontSize={8} fill="#cfcfcf" textAnchor="middle">{d.id} · {dipName}</text>
+                  <text x={(bx + bx + bw) / 2} y={by + bh / 2 + 3} fontSize={8} fill="#c3c6cc" textAnchor="middle">{d.id} · {dipName}</text>
                 </g>
               )
             })}
@@ -636,24 +831,26 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
               return (
                 <g key={t.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
                   onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, transistors: (bb.transistors ?? []).filter((x) => x.id !== t.id) })); setCheck(null) } }}>
-                  {/* legs: one short lead from each hole up to the package face */}
-                  {legs.map((g, i) => {
+                  {/* legs: one short metallic lead from each hole up to the package face */}
+                  {legs.map((lp, i) => {
                     const net = nets.get(pins[i])!
                     const col = (showNets && activeColor.get(net)) || '#cfcfcf'
                     return (
                       <g key={i}>
-                        <line x1={g.x} y1={g.y} x2={g.x} y2={legTopY} stroke="#9aa0a6" strokeWidth={1.5} />
-                        <circle cx={g.x} cy={g.y} r={3.2} fill={col} stroke="#000" strokeWidth={0.5}>
+                        <rect x={lp.x - 0.85} y={legTopY} width={1.7} height={lp.y - legTopY} rx={0.85} fill="url(#arb4-leg)" />
+                        <circle cx={lp.x} cy={lp.y} r={3.2} fill={col} stroke="#000" strokeWidth={0.5}>
                           <title>{`${t.id} ${labels[i]}`}</title>
                         </circle>
-                        <text x={g.x} y={g.y + 12} fontSize={9} fontWeight={800} fill="#9aa0a6" textAnchor="middle">{labels[i]}</text>
+                        <text x={lp.x} y={lp.y + 12} fontSize={9} fontWeight={800} fill={LABEL_INK} textAnchor="middle">{labels[i]}</text>
                       </g>
                     )
                   })}
                   {/* TO-92 package: flat front (bottom edge), rounded back (top) — datasheet face order */}
                   <path d={`M ${cx - halfW} ${bodyBot} L ${cx + halfW} ${bodyBot} L ${cx + halfW} ${bodyTop + 7} A ${halfW} 7 0 0 0 ${cx - halfW} ${bodyTop + 7} Z`}
-                    fill="#1b1b1f" stroke="#888" strokeWidth={1} />
-                  <text x={cx} y={(bodyBot + bodyTop) / 2 + 5} fontSize={8} fill="#cfcfcf" textAnchor="middle">{t.id} · {TR_NAME[t.kind] ?? t.kind}</text>
+                    fill="url(#arb4-to92)" stroke="#0a0a0c" strokeWidth={1} filter="url(#arb4-shadow)" />
+                  <path d={`M ${cx - halfW + 4} ${bodyTop + 6} A ${halfW - 4} 5 0 0 1 ${cx + halfW - 4} ${bodyTop + 6}`}
+                    fill="none" stroke="#ffffff" strokeOpacity={0.12} strokeWidth={2} />{/* top sheen */}
+                  <text x={cx} y={(bodyBot + bodyTop) / 2 + 5} fontSize={8} fill="#c3c6cc" textAnchor="middle">{t.id} · {TR_NAME[t.kind] ?? t.kind}</text>
                 </g>
               )
             })}
@@ -683,22 +880,27 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                 sits in the side panel), never written into board.jumpers, never part of Check */}
             {routing === 'hint' && showHint && autoJumpers.map((j, i) => {
               const a = pos(j.a), b = pos(j.b)
-              const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2
+              // Ghosted in the same arced style as a real jumper; the badge pins to the arc's apex.
+              const arc = jumperArc(a.x, a.y, b.x, b.y, WIRE_BOW_MIN, WIRE_BOW_MAX, WIRE_BOW_FRAC)
               return (
                 <g key={'hj' + i} style={{ pointerEvents: 'none' }}>
-                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--theory-color)" strokeOpacity={0.85} strokeWidth={2.5} strokeDasharray="6 5" strokeLinecap="round" />
+                  <path d={arc.d} fill="none" stroke="var(--theory-color)" strokeOpacity={0.85} strokeWidth={2.5} strokeDasharray="6 5" strokeLinecap="round" />
                   <circle cx={a.x} cy={a.y} r={4} fill="none" stroke="var(--theory-color)" strokeWidth={1.5} />
                   <circle cx={b.x} cy={b.y} r={4} fill="none" stroke="var(--theory-color)" strokeWidth={1.5} />
-                  <circle cx={mx} cy={my} r={7} fill="#101418" stroke="var(--theory-color)" strokeWidth={1} />
-                  <text x={mx} y={my + 3} fontSize={9} fontWeight={800} fill="var(--theory-color)" textAnchor="middle">{i + 1}</text>
+                  <circle cx={arc.apexX} cy={arc.apexY} r={7} fill="#101418" stroke="var(--theory-color)" strokeWidth={1} />
+                  <text x={arc.apexX} y={arc.apexY + 3} fontSize={9} fontWeight={800} fill="var(--theory-color)" textAnchor="middle">{i + 1}</text>
                 </g>
               )
             })}
-            {/* rubber-band: from the first jumper click to the pointer */}
+            {/* rubber-band: from the first jumper click to the pointer (dark underlay so it reads on cream) */}
             {tool.kind === 'jumper' && pending && cursor && (
-              <line x1={pos(pending).x} y1={pos(pending).y} x2={cursor.x} y2={cursor.y}
-                stroke={wireColor(pending, pending)} strokeOpacity={0.8} strokeWidth={2.5}
-                strokeDasharray="5 4" strokeLinecap="round" style={{ pointerEvents: 'none' }} />
+              <g style={{ pointerEvents: 'none' }}>
+                <line x1={pos(pending).x} y1={pos(pending).y} x2={cursor.x} y2={cursor.y}
+                  stroke={HOVER_RING} strokeOpacity={0.4} strokeWidth={4} strokeLinecap="round" />
+                <line x1={pos(pending).x} y1={pos(pending).y} x2={cursor.x} y2={cursor.y}
+                  stroke={wireColor(pending, pending)} strokeOpacity={0.9} strokeWidth={2.5}
+                  strokeDasharray="5 4" strokeLinecap="round" />
+              </g>
             )}
             {/* ARB-2 hover probe: the pin's live DC voltage from the running sim (like a bench DMM) */}
             {probeKey && probeVolts !== null && (() => {

@@ -32,3 +32,24 @@ export function ledBrightness(amps: number): number {
   if (!(amps > I_MIN)) return 0
   return Math.min(1, Math.log10(amps / I_MIN) / Math.log10(I_MAX / I_MIN))
 }
+
+// ARB-4: arced-jumper geometry (the Fritzing look). A jumper is one quadratic Bézier bowing
+// perpendicular to its span — short wires barely bow, long ones lift more, clamped at bowMax.
+// Returns the path plus the curve's apex (t = 0.5), where the hint overlay pins its numbered badge.
+// Pure math so the bow behaviour is unit-testable; the bow amounts themselves are look-tuning
+// constants at the top of Breadboard.tsx.
+export interface JumperArcGeom { d: string; apexX: number; apexY: number; bow: number }
+export function jumperArc(ax: number, ay: number, bx: number, by: number, bowMin: number, bowMax: number, bowFrac: number): JumperArcGeom {
+  const dx = bx - ax, dy = by - ay
+  const len = Math.hypot(dx, dy) || 1
+  const bow = Math.min(bowMax, bowMin + len * bowFrac)
+  // Unit normal to the span, flipped to point "up" (−y) so every wire lifts off the board the same
+  // way; a perfectly vertical wire bows deterministically toward −x.
+  let nx = -dy / len, ny = dx / len
+  if (ny > 0 || (ny === 0 && nx > 0)) { nx = -nx; ny = -ny }
+  // A quadratic's apex sits half-way between the chord midpoint and the control point, so the
+  // control point goes out 2×bow for the wire to clear the board by exactly `bow`.
+  const mx = (ax + bx) / 2, my = (ay + by) / 2
+  const cx = mx + nx * 2 * bow, cy = my + ny * 2 * bow
+  return { d: `M ${ax} ${ay} Q ${cx} ${cy} ${bx} ${by}`, apexX: mx + nx * bow, apexY: my + ny * bow, bow }
+}

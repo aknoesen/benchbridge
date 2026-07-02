@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resistorBands, ledColor, ledBrightness, RES_COLORS, RES_GOLD } from './partvisuals'
+import { resistorBands, ledColor, ledBrightness, jumperArc, RES_COLORS, RES_GOLD } from './partvisuals'
 
 const [BLACK, BROWN, RED, , YELLOW, , , VIOLET] = RES_COLORS
 
@@ -51,5 +51,35 @@ describe('ledBrightness (ARB-2 log glow curve, 0.1–20 mA)', () => {
     const at1mA = ledBrightness(1e-3)
     expect(at1mA).toBeCloseTo(Math.log10(10) / Math.log10(200), 6) // ≈ 0.43
     expect(ledBrightness(1e-2)).toBeGreaterThan(at1mA)
+  })
+})
+
+describe('jumperArc (ARB-4 arced-wire geometry)', () => {
+  const MIN = 6, MAX = 14, FRAC = 0.1
+
+  it('bows a horizontal wire upward, apex above the chord by bowMin + frac·len (clamped)', () => {
+    const a = jumperArc(0, 100, 40, 100, MIN, MAX, FRAC)
+    expect(a.bow).toBeCloseTo(10, 9)               // 6 + 0.1·40
+    expect(a.apexX).toBeCloseTo(20, 9)             // over the midpoint
+    expect(a.apexY).toBeCloseTo(90, 9)             // lifted by exactly `bow` (−y is up)
+    expect(a.d).toBe('M 0 100 Q 20 80 40 100')     // control point out 2×bow → apex at bow
+  })
+
+  it('clamps long spans at bowMax and floors short ones near bowMin', () => {
+    expect(jumperArc(0, 0, 500, 0, MIN, MAX, FRAC).bow).toBe(MAX)
+    expect(jumperArc(0, 0, 5, 0, MIN, MAX, FRAC).bow).toBeCloseTo(6.5, 9)
+  })
+
+  it('starts and ends exactly on the holes, whatever the direction', () => {
+    const a = jumperArc(30, 40, 10, 90, MIN, MAX, FRAC)
+    expect(a.d.startsWith('M 30 40 Q ')).toBe(true)
+    expect(a.d.endsWith(' 10 90')).toBe(true)
+  })
+
+  it('bows a vertical wire deterministically (same side both draw directions of the same span)', () => {
+    const down = jumperArc(50, 0, 50, 60, MIN, MAX, FRAC)
+    const up = jumperArc(50, 60, 50, 0, MIN, MAX, FRAC)
+    expect(down.apexX).toBeCloseTo(up.apexX, 9)    // both bow toward −x
+    expect(down.apexX).toBeLessThan(50)
   })
 })
