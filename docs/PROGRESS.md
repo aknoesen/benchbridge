@@ -86,6 +86,13 @@ per `docs/specs/board-autoroute.md`; Claude Code to build+commit on the host.
   (read-only)" badge, and Check passes ("✓ Match"); `boardRouting: 'auto'` survives a reload
   (`m2k-ui-settings-v1`), and `board.jumpers` stays `[]` throughout (caveat 2 behaves as designed).
   No-circuit Spectrum floor sits on the −104 dBFS theory line at 12-bit (canary eyeballed too).
+- **F-7 follow-up (andre decided 2026-07-02, built by CC):** saving in `auto` mode now bundles the
+  generated wiring — Save-lab and the localStorage autosave both materialise
+  `autoRouteJumpers(...)` as plain `{a,b}` jumpers into the persisted board (the live
+  `board.jumpers` is still never mutated while editing), so a reloaded/shared lab reproduces the
+  auto wiring and Check passes; switching to manual after a reload shows that wiring as the
+  student's own (the accepted trade-off). New `breadboard.test.ts` case (JSON round-trip → Check
+  passes, no `note` leak). Verified live: `m2k-board-v1` carries the 5 led-pwm jumpers after reload.
 
 
 **Example added (spec `docs/specs/tia-ac-example.md`, built by CC 2026-07-02):** `tia-ac` —

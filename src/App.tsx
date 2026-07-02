@@ -17,7 +17,7 @@ import Welcome from './components/Welcome'
 import Quickstart from './components/Quickstart'
 import ErrorBoundary from './components/ErrorBoundary'
 import { EXAMPLES } from './core/examples'
-import { type BoardLayout, PLACEABLE_KINDS, DIP_KINDS } from './core/breadboard'
+import { type BoardLayout, PLACEABLE_KINDS, DIP_KINDS, autoRouteJumpers, buildHoles } from './core/breadboard'
 import Voltmeter from './components/Voltmeter'
 import PowerSupply from './components/PowerSupply'
 import './App.css'
@@ -236,8 +236,16 @@ export default function App() {
   }, [schematic])
 
   useEffect(() => {
-    try { localStorage.setItem(BOARD_KEY, JSON.stringify(board)) } catch { /* quota */ }
-  }, [board])
+    // F-7 follow-up (andre 2026-07-02): in `auto` routing the autosaved board bundles the generated
+    // jumpers (as plain {a,b}) so a reloaded session reproduces the wiring and Check passes. The
+    // in-memory board.jumpers is never mutated — the set is materialised only into storage.
+    try {
+      const toStore = uiSettings.boardRouting === 'auto'
+        ? { ...board, jumpers: autoRouteJumpers(schematic, board, buildHoles()).map(({ a, b }) => ({ a, b })) }
+        : board
+      localStorage.setItem(BOARD_KEY, JSON.stringify(toStore))
+    } catch { /* quota */ }
+  }, [board, schematic, uiSettings.boardRouting])
 
   // Keep the breadboard in sync with the schematic: when parts are cleared/loaded/deleted, drop
   // board parts whose id no longer exists. If that empties the board (e.g. Clear or a brand-new

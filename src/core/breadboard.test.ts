@@ -363,4 +363,15 @@ describe('autoRouteJumpers (F-7/ARB-3 — manual/hint/auto routing engine)', () 
   it('does not alter checkEquivalence behaviour (manual fixture still checks ok)', () => {
     expect(checkEquivalence(rcSch, correctBoard(), holes).ok).toBe(true)
   })
+
+  it('save in auto materialises the generated set: JSON round-trip Check-passes with plain jumpers', () => {
+    // Mirrors Save-lab / the autosave in `auto` mode: bundle the generated wiring as plain {a,b}
+    // (no hint `note` leaks into the file), serialise, reload — Check passes on the loaded board.
+    const b = unwired()
+    const saved = { ...b, jumpers: autoRouteJumpers(rcSch, b, holes).map(({ a, b: bb }) => ({ a, b: bb })) }
+    const loaded = JSON.parse(JSON.stringify(saved)) as BoardLayout
+    expect(loaded.jumpers.length).toBeGreaterThan(0)
+    for (const j of loaded.jumpers) expect(Object.keys(j).sort()).toEqual(['a', 'b'])
+    expect(checkEquivalence(rcSch, loaded, holes).ok).toBe(true)
+  })
 })

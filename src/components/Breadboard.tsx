@@ -523,7 +523,11 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
   // native Save dialog when available, else a download fallback.
   const fileRef = useRef<HTMLInputElement>(null)
   async function saveLab() {
-    const json = JSON.stringify({ kind: 'm2k-lab', version: 2, schematic, board, generators }, null, 2)
+    // F-7 follow-up (andre 2026-07-02): a lab saved in `auto` mode bundles the generated wiring as
+    // plain jumpers, so a reloaded/shared lab reproduces it and Check passes. The live board still
+    // never mutates board.jumpers — the set is materialised only into the saved file.
+    const savedBoard = routing === 'auto' ? { ...board, jumpers: autoJumpers.map(({ a, b }) => ({ a, b })) } : board
+    const json = JSON.stringify({ kind: 'm2k-lab', version: 2, schematic, board: savedBoard, generators }, null, 2)
     const sfp = (window as unknown as {
       showSaveFilePicker?: (o: {
         suggestedName?: string
