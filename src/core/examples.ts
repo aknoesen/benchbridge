@@ -97,10 +97,40 @@ function nonInvertingAmp(): Schematic {
 
 export const EXAMPLES: Example[] = [
   {
+    id: 'flashlight', name: 'Flashlight (supply → resistor → LED)', group: 'Passive',
+    blurb: 'The simplest useful circuit: the V+ supply pushes current through a 470 Ω resistor into a ' +
+      'red LED. Channel 1 reads ACROSS the resistor (a differential measurement — neither probe at ' +
+      'ground): ≈3 V drop, so I = V/R ≈ 6 mA, the current that lights the LED. Turn the supply down on ' +
+      'the Power Supply and the LED dims while the drop falls with it — brightness, measured. Boards as ' +
+      'a real resistor + LED (watch it glow).',
+    // V+ (Power Supply, default +5 V) → R 470 → LED → GND. CH1 differential across R: 1+ on the
+    // V+ node, 1− on the R/LED junction. Drop ≈ 5 − 1.8 ≈ 3.2 V → I ≈ 6.8 mA. 1 V/div frames it.
+    ch1Vdiv: 1,
+    schematic: {
+      components: [
+        { id: 'VP', kind: 'vplus', gx: 2, gy: 4 },
+        { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 470 },  // a=(4,4) b=(6,4)
+        { id: 'D1', kind: 'led', gx: 6, gy: 4, value: 1.8 },       // anode=(6,4)=R1.b  cathode=(8,4); Vf 1.8 → red
+        { id: 'G1', kind: 'ground', gx: 8, gy: 6 },
+        { id: 'P1', kind: 'scope1', gx: 2, gy: 2 },                // 1+ on the V+ end of the resistor
+        { id: 'A1', kind: 'adc1n', gx: 6, gy: 2 },                 // 1− on the R/LED junction → CH1 = V across R
+      ],
+      wires: [
+        { x1: 2, y1: 4, x2: 4, y2: 4 },   // V+ -> R1.a
+        { x1: 2, y1: 4, x2: 2, y2: 2 },   // V+ -> 1+
+        { x1: 6, y1: 4, x2: 6, y2: 2 },   // R1.b / LED anode -> 1−  (differential across R1)
+        { x1: 8, y1: 4, x2: 8, y2: 6 },   // LED cathode -> ground
+      ],
+    },
+  },
+  {
     id: 'divider', name: 'Voltage divider (÷2)', group: 'Passive',
-    blurb: 'Two equal resistors halve the supply voltage. Lab-1 starter: the Power Supply V+ rail drives the divider — open the Voltmeter, where Channel 2 reads the applied V+ and Channel 1 reads the half-voltage midpoint. Change V+ on the Power Supply and watch both readings track.',
-    // V+ rail (Power Supply, default +5 V) drives the divider; read it and the midpoint on the
-    // Voltmeter. CH1 (scope1) = midpoint (2.5 V), CH2 (scope2) = applied V+ (5 V). 2 V/div frames both.
+    blurb: 'Two equal resistors split the supply in half — and the same 2.5 V is measured two ways. ' +
+      'Channel 1 reads ACROSS the top resistor (differential: probes on V+ and the midpoint, neither at ' +
+      'ground). Channel 2 reads the midpoint against ground (single-ended). Open the Voltmeter: both say ' +
+      '2.5 V. Change V+ on the Power Supply and watch them track.',
+    // V+ rail (Power Supply, default +5 V) drives the divider. CH1 = V+ − midpoint (differential
+    // across R1, 2.5 V); CH2 = midpoint (single-ended across R2, 2.5 V). 2 V/div frames both.
     ch1Vdiv: 2, ch2Vdiv: 2,
     schematic: {
       // Every connection is an explicit wire (not a coincidence of two legs at one grid point), so a
@@ -110,26 +140,54 @@ export const EXAMPLES: Example[] = [
         { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 10000 },              // a=(4,4) b=(6,4)
         { id: 'R2', kind: 'resistor', gx: 8, gy: 4, rotation: 1, value: 10000 }, // a=(8,4) b=(8,6)
         { id: 'G1', kind: 'ground', gx: 8, gy: 8 },
-        { id: 'P1', kind: 'scope1', gx: 10, gy: 4 },  // 1+ on the midpoint
-        { id: 'P2', kind: 'scope2', gx: 2, gy: 2 },   // 2+ on the applied V+
-        { id: 'A1', kind: 'adc1n', gx: 10, gy: 8 },   // 1- to ground (single-ended CH1)
-        { id: 'A2', kind: 'adc2n', gx: 12, gy: 8 },   // 2- to ground (single-ended CH2)
+        { id: 'P1', kind: 'scope1', gx: 2, gy: 2 },   // 1+ on the applied V+ (top of R1)
+        { id: 'A1', kind: 'adc1n', gx: 10, gy: 2 },   // 1− on the midpoint → CH1 differential across R1
+        { id: 'P2', kind: 'scope2', gx: 10, gy: 4 },  // 2+ on the midpoint
+        { id: 'A2', kind: 'adc2n', gx: 10, gy: 8 },   // 2− to ground → CH2 single-ended across R2
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },   // V+ -> R1.a (applied)
-        { x1: 2, y1: 4, x2: 2, y2: 2 },   // V+ -> 2+
+        { x1: 2, y1: 4, x2: 2, y2: 2 },   // V+ -> 1+
         { x1: 6, y1: 4, x2: 8, y2: 4 },   // R1.b -> R2.a (the midpoint link)
-        { x1: 8, y1: 4, x2: 10, y2: 4 },  // midpoint -> 1+
+        { x1: 8, y1: 4, x2: 10, y2: 4 },  // midpoint -> 2+
+        { x1: 10, y1: 4, x2: 10, y2: 2 }, // midpoint -> 1−  (differential across R1)
         { x1: 8, y1: 6, x2: 8, y2: 8 },   // R2.b -> ground
-        { x1: 8, y1: 8, x2: 10, y2: 8 },  // ground -> 1-
-        { x1: 10, y1: 8, x2: 12, y2: 8 }, // ground -> 2-
+        { x1: 8, y1: 8, x2: 10, y2: 8 },  // ground -> 2−
+      ],
+    },
+  },
+  {
+    id: 'signal-sine', name: 'A signal (W1 → scope)', group: 'Passive',
+    blurb: 'One clean signal, no circuit to speak of: W1 drives channel 1 of the scope directly (the ' +
+      '1 MΩ resistor is the scope\'s own input impedance, drawn explicitly). Change the wave shape, ' +
+      'frequency, and amplitude on the Signal Generator and watch the trace follow — then open the ' +
+      'Spectrum Analyzer to see the same signal as frequencies (a sine is one peak; a square wave is ' +
+      'a comb of odd harmonics).',
+    w1: sine(1000), ch1Vdiv: 0.5,
+    schematic: {
+      components: [
+        { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
+        { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 1e6 }, // the scope's 1 MΩ input; a=(6,4) b=(6,6)
+        { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
+        { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },   // 1+ straight on W1
+        { id: 'A1', kind: 'adc1n', gx: 8, gy: 8 },    // 1− to ground (single-ended CH1)
+      ],
+      wires: [
+        { x1: 2, y1: 4, x2: 6, y2: 4 },   // W1 -> R1.a
+        { x1: 6, y1: 4, x2: 8, y2: 4 },   // -> 1+
+        { x1: 6, y1: 6, x2: 6, y2: 8 },   // R1.b -> ground
+        { x1: 6, y1: 8, x2: 8, y2: 8 },   // ground -> 1−
       ],
     },
   },
   {
     id: 'rc-lp', name: 'RC low-pass (~1 kHz)', group: 'Passive',
-    blurb: 'Series R, shunt C. −3 dB near 1 kHz, −20 dB/decade.',
-    w1: sine(1000), ch1Vdiv: 0.5,
+    blurb: 'Series R, shunt C. −3 dB near 1 kHz, −20 dB/decade. The square drive makes the time ' +
+      'constant visible: the output rounds every edge as the capacitor charges (τ = RC). Slow the ' +
+      'frequency and the curve fills out; speed it up and the output barely moves.',
+    // Square drive (not sine) so the scope shows charging curves — τ in time; the Network Analyzer's
+    // .ac sweep is unaffected by the W1 shape.
+    w1: { waveType: 'square', frequency: 1000, amplitude: 1, offset: 0, dutyCycle: 50, samplingRate: 100000, duration: 0.016 }, ch1Vdiv: 0.5,
     schematic: {
       components: [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },

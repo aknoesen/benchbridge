@@ -9,7 +9,9 @@ import { ledAverageCurrents } from './boardsim'
 
 // FB-2: single-ended examples wire 1−/2− to GND and probe the input (2+). The diode/Zener I-V examples
 // are deliberately DIFFERENTIAL (CH1 = anode−cathode via 1−), so they are exempt from the 1−@GND rule.
-const DIFFERENTIAL = new Set(['diode-iv', 'zener-iv'])
+// QS-4 copy: the flashlight (CH1 across the resistor) and the divider (CH1 across the top R — the
+// "same 2.5 V two ways" lesson) are deliberately differential too.
+const DIFFERENTIAL = new Set(['diode-iv', 'zener-iv', 'flashlight', 'divider'])
 
 describe('FB-2: examples ground 1−/2− (single-ended) and probe the input', () => {
   for (const ex of EXAMPLES) {
@@ -33,6 +35,43 @@ describe('FB-2: examples ground 1−/2− (single-ended) and probe the input', (
       })
     }
   }
+})
+
+describe('Quickstart examples (QS-4 finished copy: flashlight / divider probes / signal-sine)', () => {
+  it('flashlight: CH1 differential across the 470 Ω reads ≈3 V (I ≈ 6 mA) at the default +5 V', async () => {
+    const ex = EXAMPLES.find((e) => e.id === 'flashlight')!
+    const { circuit, warnings, probes } = toCircuit(ex.schematic)
+    expect(warnings.filter((w) => /not connected/i.test(w))).toEqual([])
+    expect(probes.ch1n).not.toBe('0') // differential — 1− on the R/LED junction
+    const sim = new Simulation()
+    await sim.start()
+    sim.setNetList(buildNetlist(circuit, { kind: 'op' }))
+    const r = normalizeResult(await sim.runSim())
+    const vR = nodeVoltage(r, probes.ch1!) - nodeVoltage(r, probes.ch1n!)
+    expect(vR).toBeGreaterThan(2.7)  // ≈ 5 − Vf ≈ 3.2 V across the resistor
+    expect(vR).toBeLessThan(3.6)     // → I = V/R ≈ 6–7 mA, the copy's numbers
+  }, 30000)
+
+  it('divider: CH1 differential across the top R and CH2 single-ended midpoint (same 2.5 V two ways)', () => {
+    const ex = EXAMPLES.find((e) => e.id === 'divider')!
+    const { probes } = toCircuit(ex.schematic)
+    expect(probes.ch1).toBeDefined()
+    expect(probes.ch1n).not.toBe('0')          // differential across R1
+    expect(probes.ch2).toBeDefined()
+    expect(probes.ch2n ?? '0').toBe('0')       // single-ended across R2
+    expect(probes.ch2).toBe(probes.ch1n)       // both land on the midpoint node
+  })
+
+  it('signal-sine: one clean trace — W1 to a single-ended CH1 through only the scope-input load', () => {
+    const ex = EXAMPLES.find((e) => e.id === 'signal-sine')!
+    // the sole passive is the scope's 1 MΩ input impedance, drawn explicitly (no filtering)
+    const passives = ex.schematic.components.filter((c) => ['resistor', 'capacitor', 'inductor'].includes(c.kind))
+    expect(passives.map((p) => p.value)).toEqual([1e6])
+    const { probes } = toCircuit(ex.schematic)
+    expect(probes.ch1).toBe('in')  // the W1 node itself
+    expect(probes.ch1n).toBe('0')
+    expect(probes.ch2).toBeUndefined()
+  })
 })
 
 describe('TIA-3 photodiode example', () => {

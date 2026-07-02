@@ -8,7 +8,37 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
-## Next session: start here (updated 2026-07-02, batch 4)
+## Next session: start here (updated 2026-07-02, batch 5 — QUICKSTART FROZEN for the beta)
+
+**The finished, andre-approved Quickstart copy is IN (`docs/specs/quickstart-copy.md`) and the
+Quickstart is FROZEN for the alumni beta** — copy/structure changes now go through the handoff log.
+- **Copy swap** — all 11 pages carry the polished course-neutral text verbatim (one action per
+  page, every instrument step a do-this/watch-that loop). The two teaching SVGs (single-ended vs
+  differential on the divider page, dBFS on the signal page) and the signal-flow visual are kept
+  per the spec's reuse rule. "Press Run" wording gone (the copy states the generator is live by
+  default). The build capstone is the copy's short form (the 8-step supply-rails walkthrough is no
+  longer in the Quickstart).
+- **Three example probe configs** (`core/examples.ts`):
+  - NEW `flashlight` — supply-driven V+ → 470 Ω → red LED, **CH1 differential across the resistor**
+    (1+ on V+, 1− on the R/LED junction). Real-ngspice `.op` test pins the copy's numbers: ≈3.2 V
+    drop ⇒ ≈6–7 mA. Turning the supply down dims the board glow and drops the reading, per page 3.
+  - `divider` probes reworked — **CH1 differential across the top R + CH2 single-ended midpoint**
+    (the "same 2.5 V, two ways" lesson); added to the FB-2 DIFFERENTIAL exemptions with
+    `flashlight`. Blurb rewritten (also scrubs the "Lab-1 starter" course ref — the only one found
+    in example blurbs).
+  - NEW `signal-sine` — W1 → 1+ **through only an explicit 1 MΩ "scope input" resistor** (a bare
+    source→probe wire trips toCircuit's "W1 not connected" warning; the 1 MΩ is honest — it IS the
+    scope's input impedance). One clean CH1 trace, single-ended; used by page 5.
+  - `rc-lp` W1 preset flipped **sine → square** so page 6's "square in, rounded output" is what
+    loads (τ visible on every edge); the `.ac` Bode sweep is shape-independent, page 7 unaffected.
+- **Verified** — 291/291 (6 new tests) incl. the 12-bit canary, build clean; live Chrome: tour
+  lands on "Build a flashlight", the load button drops the supply-driven circuit with the
+  differential probe pair, blurbs course-neutral. Remaining "press Run" strings in the codebase are
+  the instruments' *stopped-state* overlays (accurate) — untouched.
+
+---
+
+## Earlier on 2026-07-02 (batch 4)
 
 **QS-4 (Quickstart redesign — paginated, orientation-first) is DONE**, rebuilt to andre's LOCKED
 reader-aligned chapter order (the entry below describes the first build; the locked-order rebuild

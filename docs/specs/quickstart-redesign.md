@@ -25,11 +25,21 @@ then frequency → amplifiers → devices → build for real. Order locked with 
    circuit → ADC in); "what you'll be able to do." Buttons: **"Take the tour"** (starts ch. 3) and **"Jump to
    an instrument."** Neutral, simulation-honest voice.
 2. **The bench at a glance.** The instrument-map table (real ↔ app, Open buttons) + one signal-flow diagram.
-3. **The flashlight — the opener.** The simplest possible circuit: a supply drives an **LED** through a
-   resistor and it lights up. **Reuse the existing LED example/components — use the LED, do NOT build a
-   filament/bulb component; "turning on the supply" is the switch, so no switch component either.** The
-   visceral first "aha": you built a circuit and it does something (ARB-2 LED glow). Mirrors the reader's
-   opening ("A Flashlight's Tale").
+3. **The flashlight — the opener + the first real measurement.** The simplest circuit: a supply drives an
+   **LED** through a series resistor and it lights up. **Reuse the existing LED example/components — use the
+   LED, do NOT build a filament/bulb component; "turning on the supply" is the switch, so no switch
+   component.** The visceral first "aha": you built a circuit and it *does* something (ARB-2 LED glow).
+   **Then make it a lesson, not a light show (andre 2026-07-02 — "we cannot miss this one"):**
+   - The brightness tracks **current**, but you can't *see* current — so measure it. Put **CH1
+     differentially across the series resistor** (both probes on live nodes, neither at ground) → read the
+     drop (~3 V across 470 Ω on a 5 V supply). This is the **first differential measurement** (in action;
+     the divider formalizes single-vs-diff next page).
+   - **Ask the student to calculate the current: I = V_R / R** (~6 mA). *That* current is what lights the LED.
+   - **Do-observe loop (answers "how do they KNOW brightness changes"):** turn the supply down / drop the
+     PWM duty → the LED visibly dims; re-measure (~1 V) and re-calculate (~2 mA). The eye said "dimmer," the
+     math says "2 mA not 6," and they agree — the student has *quantified* brightness themselves.
+   Needs the LED example probed with **CH1 differential across the resistor**. Mirrors the reader's opening
+   ("A Flashlight's Tale").
 4. **The voltage divider — first measurement (~2 min).** Load `divider`, open the Supply, open the Voltmeter,
    read ~5 V / ~2.5 V. **Fold single-ended-vs-differential in HERE.**
 5. **Generate a signal → spectrum + digitization** (andre: a separate module **right after the divider**).
@@ -73,6 +83,12 @@ then frequency → amplifiers → devices → build for real. Order locked with 
   *courses/labs* that must go.)
 - Keep each step's "load X → open Y → read Z" pattern (it's reliable because the examples preset generators +
   Volts/div and reset the tool to Select).
+- **ACTIVE LEARNING — no step may just send the user somewhere (andre, 2026-07-02).** Every "open an
+  instrument" step must pair the jump with an explicit **do-this / watch-that** task, so the instrument is a
+  sandbox and the Quickstart page is the coach — e.g. *not* "Open the Signal Generator," but "Open the Signal
+  Generator, **drag the frequency up and watch the period shrink, switch to a square wave**, then come back."
+  The **return-to-Quickstart pulse** closes the loop. Passive "go look at this" is a bug, not a step. (The
+  richer version — coach prompts that appear *on the instrument itself* — is **QS-5**, post-beta.)
 
 ## Out of scope
 - No `core/` change; no `core/signal.ts`; no new runtime dependency. No video/screenshots (still QS-3 future).
