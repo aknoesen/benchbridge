@@ -304,7 +304,7 @@ describe('moveSelectionBy (box group move incl. loose wires)', () => {
   })
 })
 
-import { bridgeWiresForMove } from './schematic' // (moveComponentWithWires/attachedWireEnds/computeNets already imported above)
+import { bridgeWiresForMove, deleteComponentsWithWires } from './schematic' // (moveComponentWithWires/attachedWireEnds/computeNets already imported above)
 describe('touch-connections rubber-band into a wire on move (no silent break)', () => {
   // R1.b and R2.a touch at (6,2) with NO wire between them.
   const base: Schematic = {
@@ -333,5 +333,87 @@ describe('touch-connections rubber-band into a wire on move (no silent break)', 
 
   it('a zero move adds no wire', () => {
     expect(bridgeWiresForMove(base, new Set(['R3']), 0, 0)).toEqual([])
+  })
+})
+
+describe('deleteComponentsWithWires', () => {
+  // Voltage divider: W1 —w0→ R1(4,0..6,0) —w1→ R2(8,0..10,0) —w2→ GND, probe wired to the midpoint.
+  const divider: Schematic = {
+    components: [
+      { id: 'W1', kind: 'awg1', gx: 0, gy: 0 },
+      { id: 'R1', kind: 'resistor', gx: 4, gy: 0, value: 1000 },
+      { id: 'R2', kind: 'resistor', gx: 8, gy: 0, value: 1000 },
+      { id: 'G1', kind: 'ground', gx: 12, gy: 0 },
+      { id: 'P1', kind: 'scope1', gx: 6, gy: 4 },
+    ],
+    wires: [
+      { x1: 0, y1: 0, x2: 4, y2: 0 },  // w0: W1 → R1.a
+      { x1: 6, y1: 0, x2: 8, y2: 0 },  // w1: R1.b → R2.a (midpoint)
+      { x1: 10, y1: 0, x2: 12, y2: 0 },// w2: R2.b → GND
+      { x1: 6, y1: 0, x2: 6, y2: 4 },  // w3: midpoint → probe
+    ],
+  }
+
+  it('deleting a resistor takes its hookup wires, keeps the rest', () => {
+    const out = deleteComponentsWithWires(divider, new Set(['R1']))
+    expect(out.components.map((c) => c.id)).toEqual(['W1', 'R2', 'G1', 'P1'])
+    // w0, w1, w3 all had an endpoint on an R1 pin ((4,0) or (6,0)) → gone. Only R2→GND survives.
+    expect(out.wires).toEqual([{ x1: 10, y1: 0, x2: 12, y2: 0 }])
+  })
+
+  it('keeps a junction wire serving two surviving parts', () => {
+    // Delete R2: w1 (R2.a) and w2 (R2.b) go. w3 midpoint→probe survives because its (6,0) end sits
+    // on R1.b, a surviving terminal. w0 untouched.
+    const out = deleteComponentsWithWires(divider, new Set(['R2']))
+    expect(out.wires).toEqual([
+      { x1: 0, y1: 0, x2: 4, y2: 0 },
+      { x1: 6, y1: 0, x2: 6, y2: 4 },
+    ])
+  })
+
+  it('cascades along a multi-segment route but stops at a live junction', () => {
+    // R1(0,0..2,0) —a→(4,0) —b→(4,4) bend, and (4,0) —c→ R2.a(6,0): deleting R1 removes a; at the
+    // freed (4,0) two survivors (b, c) still meet → both stay (they join the probe stub to R2).
+    const sch: Schematic = {
+      components: [
+        { id: 'R1', kind: 'resistor', gx: 0, gy: 0, value: 1000 },
+        { id: 'R2', kind: 'resistor', gx: 6, gy: 0, value: 1000 },
+      ],
+      wires: [
+        { x1: 2, y1: 0, x2: 4, y2: 0 }, // a: R1.b → junction
+        { x1: 4, y1: 0, x2: 4, y2: 4 }, // b: junction → elsewhere
+        { x1: 4, y1: 0, x2: 6, y2: 0 }, // c: junction → R2.a
+      ],
+    }
+    const out = deleteComponentsWithWires(sch, new Set(['R1']))
+    expect(out.wires).toEqual([
+      { x1: 4, y1: 0, x2: 4, y2: 4 },
+      { x1: 4, y1: 0, x2: 6, y2: 0 },
+    ])
+    // …but with segment c absent, b is a dead chain hanging off a → both a and b are pruned.
+    const noC: Schematic = { components: sch.components, wires: sch.wires.slice(0, 2) }
+    const out2 = deleteComponentsWithWires(noC, new Set(['R1']))
+    expect(out2.wires).toEqual([])
+  })
+
+  it('spares a wire on a touch-connection shared with a survivor', () => {
+    // R1.b and R2.a share (2,0) as a touch connection; a wire from (2,0) feeds a probe. Deleting R1
+    // must NOT remove that wire — it still serves R2.
+    const sch: Schematic = {
+      components: [
+        { id: 'R1', kind: 'resistor', gx: 0, gy: 0, value: 1000 },
+        { id: 'R2', kind: 'resistor', gx: 2, gy: 0, value: 1000 },
+        { id: 'P1', kind: 'scope1', gx: 2, gy: 4 },
+      ],
+      wires: [{ x1: 2, y1: 0, x2: 2, y2: 4 }],
+    }
+    const out = deleteComponentsWithWires(sch, new Set(['R1']))
+    expect(out.wires).toEqual([{ x1: 2, y1: 0, x2: 2, y2: 4 }])
+  })
+
+  it('multi-delete removes both parts, their wires, and explicitly selected wires', () => {
+    const out = deleteComponentsWithWires(divider, new Set(['R1', 'R2']), new Set([0]))
+    expect(out.components.map((c) => c.id)).toEqual(['W1', 'G1', 'P1'])
+    expect(out.wires).toEqual([])
   })
 })

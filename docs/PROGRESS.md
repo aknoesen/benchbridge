@@ -10,6 +10,14 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Next session: start here (updated 2026-07-01)
 
+**Ad-hoc housekeeping (andre, 2026-07-01, after ARB-2):** deleting a schematic part now takes its
+hookup wires with it — no more dangling stubs (the voltage-divider confusion). New pure
+`deleteComponentsWithWires(s, ids, wireIdx)` in `core/schematic.ts` (direct-attach removal + a
+cascade that prunes multi-segment routes left fully dangling, stopping at junctions and surviving
+pins; a touch-connection point shared with a survivor is spared). Both editor delete paths (single +
+multi-select, incl. cut) route through it. 5 new tests (248/248), build clean, no `core/signal.ts`.
+
+
 **ARB-2 (active / live breadboard) is DONE** — built to Cowork's D1–D3 (see
 `docs/private/FABLE-ARB2-BRIEF.md`), with the two product forks resolved by andre: **hover readout**
 (probe UX) and a **log 0.1–20 mA brightness curve** (LED glow).

@@ -4,7 +4,8 @@
 import { useMemo, useRef, useState, useEffect, type ReactElement, type Dispatch, type SetStateAction } from 'react'
 import {
   Schematic, SchComponent, SchKind, terminalsOf, toCircuit, ampCategory, computeNets,
-  attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentWithWires, type WireEndRef,
+  attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentWithWires,
+  deleteComponentsWithWires, type WireEndRef,
 } from '../core/schematic'
 import { buildNetlist, TRANSISTOR_PARTS } from '../core/netlist'
 import { EXAMPLES } from '../core/examples'
@@ -446,15 +447,12 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     }
     if (selSet.size > 1) {
       const wi = new Set([...selWires].map((e) => Number(e.split(':')[0])))
-      setSch((s) => ({
-        components: s.components.filter((c) => !selSet.has(c.id)),
-        wires: s.wires.filter((_, i) => !wi.has(i)),
-      }))
+      setSch((s) => deleteComponentsWithWires(s, selSet, wi))
       setSelSet(new Set()); setSelWires(new Set()); setSelected(null)
       return
     }
     if (!selected) return
-    setSch((s) => ({ ...s, components: s.components.filter((c) => c.id !== selected) }))
+    setSch((s) => deleteComponentsWithWires(s, new Set([selected])))
     setSelSet(new Set()); setSelWires(new Set()); setSelected(null)
   }
   function rotate() {

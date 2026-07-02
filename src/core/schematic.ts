@@ -360,6 +360,52 @@ export function rotateComponentWithWires(s: Schematic, id: string): Schematic {
   }
 }
 
+// Deleting a part must take its hookup wires with it: connectivity is coordinate coincidence, so a
+// wire left behind still LOOKS attached but drives nothing — a dangling stub students misread as a
+// live connection. Removes the components in `ids` (plus any explicitly selected wires in
+// `wireIdx`), every wire whose endpoint sat on a deleted terminal, and then prunes wire chains the
+// removal left fully dangling. Pruning stops at surviving parts' pins and at junctions where two or
+// more remaining wires still meet (they interconnect whatever is on their far ends).
+export function deleteComponentsWithWires(
+  s: Schematic, ids: Set<string>, wireIdx: Set<number> = new Set(),
+): Schematic {
+  const keptTerms = new Set<string>()
+  const doomedTerms = new Set<string>()
+  for (const c of s.components) {
+    const dst = ids.has(c.id) ? doomedTerms : keptTerms
+    for (const t of terminalsOf(c)) dst.add(key(t.gx, t.gy))
+  }
+  const removed = new Set<number>(wireIdx)
+  // Direct pass: any wire endpoint on a deleted terminal dangles — unless a surviving component's
+  // terminal shares that grid point (a touch connection: the wire also serves the survivor).
+  const seed = (p: string) => doomedTerms.has(p) && !keptTerms.has(p)
+  s.wires.forEach((w, i) => {
+    if (seed(key(w.x1, w.y1)) || seed(key(w.x2, w.y2))) removed.add(i)
+  })
+  // Cascade: a removal can strand a multi-segment route at a bend. A surviving wire whose endpoint
+  // is a freed point (endpoint of a removed wire, not a surviving terminal) with no other surviving
+  // wire meeting it there is a stub — remove it and repeat until stable.
+  for (let changed = true; changed; ) {
+    changed = false
+    const freed = new Set<string>()
+    const degree = new Map<string, number>()
+    s.wires.forEach((w, i) => {
+      const pts = [key(w.x1, w.y1), key(w.x2, w.y2)]
+      if (removed.has(i)) pts.forEach((p) => freed.add(p))
+      else pts.forEach((p) => degree.set(p, (degree.get(p) ?? 0) + 1))
+    })
+    s.wires.forEach((w, i) => {
+      if (removed.has(i)) return
+      const stub = (p: string) => freed.has(p) && !keptTerms.has(p) && degree.get(p) === 1
+      if (stub(key(w.x1, w.y1)) || stub(key(w.x2, w.y2))) { removed.add(i); changed = true }
+    })
+  }
+  return {
+    components: s.components.filter((c) => !ids.has(c.id)),
+    wires: s.wires.filter((_, i) => !removed.has(i)),
+  }
+}
+
 export interface ToCircuitResult {
   circuit: Circuit
   warnings: string[]
