@@ -282,3 +282,85 @@ describe('breadboard INA125 auxiliary straps (SCH-7, Lab 8 Fig 1)', () => {
     expect(r.message).toContain('SLEEP')
   })
 })
+
+import { autoRouteJumpers } from './breadboard'
+
+describe('autoRouteJumpers (F-7/ARB-3 — manual/hint/auto routing engine)', () => {
+  const holes = buildHoles()
+  const unwired = () => { const b = correctBoard(); b.jumpers = []; return b }
+
+  it('2-pin passive nets: routes the placed RC to a Check-passing jumper set', () => {
+    const b = unwired()
+    const auto = autoRouteJumpers(rcSch, b, holes)
+    expect(checkEquivalence(rcSch, { ...b, jumpers: auto }, holes).ok).toBe(true)
+  })
+
+  it('spanning tree: n−1 jumpers per net, and a net already common in one column needs none', () => {
+    // R1.b and C1.a share column 3 (out already common through the column), so the three nets
+    // (in, out, gnd) each span exactly 2 pre-wired groups → exactly 3 jumpers, none intra-group.
+    const auto = autoRouteJumpers(rcSch, unwired(), holes)
+    expect(auto).toHaveLength(3)
+    const base = boardNets(holes, [])
+    for (const j of auto) expect(base.get(j.a)).not.toBe(base.get(j.b))
+  })
+
+  it('routes ground to a pre-wired GND rail (not part-to-part star wiring)', () => {
+    const auto = autoRouteJumpers(rcSch, unwired(), holes)
+    const base = boardNets(holes, [])
+    const gndGroup = base.get(PORT_TERMINAL['GND'])
+    const gnd = auto.filter((j) => base.get(j.a) === gndGroup || base.get(j.b) === gndGroup)
+    expect(gnd).toHaveLength(1)
+    const railEnd = base.get(gnd[0].a) === gndGroup ? gnd[0].a : gnd[0].b
+    expect(/^(TP|BN)\d+$/.test(railEnd)).toBe(true) // lands on a ground rail hole
+  })
+
+  // Voltage follower: W1 → +IN, OUT wired back to −IN (the feedback net), 1+ probes OUT.
+  // OP484 (default kit part) → 14-pin quad DIP; amp A: OUT=pin1, −IN=pin2, +IN=pin3.
+  const followerSch: Schematic = {
+    components: [
+      { id: 'W1', kind: 'awg1', gx: 0, gy: 0 },
+      { id: 'U1', kind: 'opamp', gx: 4, gy: 0, part: 'op484' },
+      { id: 'S1', kind: 'scope1', gx: 10, gy: 1 },
+    ],
+    wires: [
+      { x1: 0, y1: 0, x2: 4, y2: 0 },  // W1 → inP
+      { x1: 8, y1: 1, x2: 10, y2: 1 }, // out → 1+
+      { x1: 8, y1: 1, x2: 4, y2: 2 },  // feedback: out → inN
+    ],
+  }
+
+  it('op-amp feedback net + supply rails: the follower routes to a passing Check', () => {
+    const b: BoardLayout = { parts: [], ports: [], jumpers: [], dips: [{ id: 'U1', kind: 'opamp-quad', col: 5 }] }
+    const auto = autoRouteJumpers(followerSch, b, holes)
+    expect(checkEquivalence(followerSch, { ...b, jumpers: auto }, holes).ok).toBe(true)
+    // power pins reach the correct pre-wired rails: pin 4 (V+, f8) → top inner, pin 11 (V−, e8) → bottom inner
+    const nets = boardNets(holes, auto)
+    expect(nets.get('f8')).toBe(nets.get('TN1'))
+    expect(nets.get('e8')).toBe(nets.get('BP1'))
+  })
+
+  it('DIP multi-pin: a lone INA125 auto-routes rails + all five datasheet straps to a passing Check', () => {
+    const sch: Schematic = { components: [{ id: 'U1', kind: 'ina125', gx: 10, gy: 4 }], wires: [] }
+    const b: BoardLayout = { parts: [], ports: [], jumpers: [], dips: [{ id: 'U1', kind: 'ina125', col: 5 }] }
+    const auto = autoRouteJumpers(sch, b, holes)
+    expect(auto).toHaveLength(7) // V+, V− rails + SLEEP, VREFout→VREF2.5, IAref, Sense→Vo, VREFcom
+    expect(checkEquivalence(sch, { ...b, jumpers: auto }, holes).ok).toBe(true)
+  })
+
+  it('is deterministic and ignores existing student jumpers (pure function of the placement)', () => {
+    const r1 = autoRouteJumpers(rcSch, unwired(), holes)
+    const r2 = autoRouteJumpers(rcSch, unwired(), holes)
+    expect(r2).toEqual(r1)
+    const withStray = correctBoard() // has the student's own jumpers — must not change the result
+    expect(autoRouteJumpers(rcSch, withStray, holes)).toEqual(r1)
+  })
+
+  it('annotates every jumper for the hint overlay', () => {
+    const auto = autoRouteJumpers(rcSch, unwired(), holes)
+    for (const j of auto) expect(j.note.length).toBeGreaterThan(0)
+  })
+
+  it('does not alter checkEquivalence behaviour (manual fixture still checks ok)', () => {
+    expect(checkEquivalence(rcSch, correctBoard(), holes).ok).toBe(true)
+  })
+})

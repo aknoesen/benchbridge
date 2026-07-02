@@ -507,6 +507,196 @@ export function checkEquivalence(s: Schematic, board: BoardLayout, holes: Hole[]
   return { ok: true, message: '✓ Match — your board is electrically the schematic.' }
 }
 
+// ── F-7 / ARB-3: auto-routing — one valid inter-column jumper set from the placement ─────────────
+// Pure and deterministic: given the schematic and the current placement (existing jumpers ignored),
+// return a jumper set that makes `checkEquivalence` pass whenever the placement itself is solvable.
+// The router is a new PRODUCER of Jumper[] against the existing Check — boardNets / checkEquivalence
+// semantics are untouched. `manual` mode never calls it, `hint` overlays it (ghosted, annotated),
+// `auto` applies it read-only. See docs/specs/board-autoroute.md.
+//
+// Algorithm: pair each placed pin with its schematic net exactly as checkEquivalence does, group the
+// pins by the board's pre-wired groups (a terminal column, a rail, an M2K terminal — boardNets with
+// no jumpers), then for each net spanning ≥ 2 groups emit a spanning tree (n−1 jumpers). A net that
+// contains a supply hub (the V+/V−/GND terminal group, which POWER_WIRES pre-ties to its rail) is
+// star-routed onto that rail — each column gets its own short rail drop, the way a student actually
+// powers a board — instead of daisy-chained part-to-part. DIP rail pins and datasheet straps
+// (INA125) are routed as fixed board-level edges. Endpoints prefer free holes near the far end, so
+// the result reads as short tidy jumpers; correctness is defined by Check, not aesthetics.
+
+export interface AutoJumper extends Jumper { note: string } // note: the hint overlay's "why"
+
+export function autoRouteJumpers(s: Schematic, board: BoardLayout, holes: Hole[]): AutoJumper[] {
+  const exp = schematicExpectation(s)
+  const base = boardNets(holes, []) // pre-wired grouping only: columns, rails, terminals, POWER_WIRES
+  const holeByKey = new Map(holes.map((h) => [h.key, h]))
+
+  // Keys belonging to each pre-wired group (holes + the fixed M2K terminals), in a stable order.
+  const groupKeys = new Map<string, string[]>()
+  const addKey = (k: string) => {
+    const g = base.get(k)
+    if (!g) return
+    const arr = groupKeys.get(g)
+    if (arr) arr.push(k)
+    else groupKeys.set(g, [k])
+  }
+  for (const h of holes) addKey(h.key)
+  for (const t of TERMINALS) addKey(t.key)
+
+  // Geometry for endpoint choice (terminals sit just off the board, above/below the strips).
+  const posOf = (k: string): { x: number; y: number } => {
+    const h = holeByKey.get(k)
+    if (h) return { x: h.x, y: h.y }
+    const t = TERMINALS.find((tt) => tt.key === k)!
+    return { x: PAD + (t.col - 1) * PITCH, y: t.side === 'top' ? -PITCH : boardHeight() + PITCH }
+  }
+
+  // Holes already hosting a lead: part legs, DIP pins, TO-92 legs, the pre-wired power drops — and,
+  // as we route, our own jumper ends (a real hole takes one lead).
+  const used = new Set<string>()
+  for (const p of board.parts) { used.add(p.aHole); used.add(p.bHole) }
+  for (const d of board.dips ?? []) for (const k of dipPinHoles(d.kind, d.col) ?? []) used.add(k)
+  for (const t of board.transistors ?? []) for (const k of to92PinHoles(t.col, t.row) ?? []) used.add(k)
+  for (const w of POWER_WIRES) { used.add(w.a); used.add(w.b) }
+
+  // Best key in group `g` to land a jumper near `near`: prefer a free hole, then shortest distance;
+  // ties keep the first-seen key (stable hole order) so the result is deterministic.
+  const pickIn = (g: string, near: { x: number; y: number }): string => {
+    const keys = groupKeys.get(g) ?? []
+    let best: string | null = null
+    let bestD = Infinity
+    let bestFree = false
+    for (const k of keys) {
+      const free = holeByKey.has(k) ? !used.has(k) : true // terminals can take several leads
+      const p = posOf(k)
+      const dd = (p.x - near.x) ** 2 + (p.y - near.y) ** 2
+      if ((free && !bestFree) || (free === bestFree && dd < bestD)) { best = k; bestD = dd; bestFree = free }
+    }
+    return best ?? keys[0]
+  }
+
+  // Per-schematic-net pins: net → the placed board keys carrying it, with student-facing labels.
+  // Pairing mirrors checkEquivalence: part legs, DIP pinNets, TO-92 legs, then the named ports.
+  const netPins = new Map<string, { key: string; label: string }[]>()
+  const addPin = (net: string | undefined, key: string | undefined, label: string) => {
+    if (!net || !key) return
+    const arr = netPins.get(net)
+    if (arr) arr.push({ key, label })
+    else netPins.set(net, [{ key, label }])
+  }
+  const placedPart = new Map(board.parts.map((p) => [p.id, p]))
+  for (const p of exp.parts) {
+    const pl = placedPart.get(p.id)
+    if (!pl) continue
+    addPin(p.a, pl.aHole, `${p.id}.A`)
+    addPin(p.b, pl.bHole, `${p.id}.B`)
+  }
+  // Board-level requirements beyond the schematic nets: supply-rail pins + datasheet straps.
+  const fixed: { a: string; b: string; note: string }[] = []
+  const placedDip = new Map((board.dips ?? []).map((d) => [d.id, d]))
+  for (const d of exp.dips) {
+    const pl = placedDip.get(d.id)
+    if (!pl) continue
+    const hs = dipPinHoles(d.kind, pl.col) ?? []
+    d.pinNets.forEach((net, k) => addPin(net, hs[k], `${d.id} pin ${k + 1}`))
+    if (d.rails) {
+      const vnegPort = d.rails.vnegTo === 'GND' ? 'GND' : 'V-'
+      fixed.push({ a: hs[d.rails.vpos], b: PORT_TERMINAL['V+'], note: `${d.id} pin ${d.rails.vpos + 1} (V+) → the V+ rail (power)` })
+      fixed.push({ a: hs[d.rails.vneg], b: PORT_TERMINAL[vnegPort], note: `${d.id} pin ${d.rails.vneg + 1} (V−) → the ${vnegPort} rail (power)` })
+    }
+    for (const sp of d.straps ?? []) {
+      const to = typeof sp.to === 'number' ? hs[sp.to] : PORT_TERMINAL[sp.to]
+      fixed.push({ a: hs[sp.pin], b: to, note: `${d.id}: ${sp.label}` })
+    }
+  }
+  const placedTr = new Map((board.transistors ?? []).map((t) => [t.id, t]))
+  for (const tr of exp.transistors) {
+    const pl = placedTr.get(tr.id)
+    if (!pl) continue
+    const hs = to92PinHoles(pl.col, pl.row) ?? []
+    tr.pinNets.forEach((net, k) => addPin(net, hs[k], `${tr.id} ${to92Legend(tr.kind)[k]}`))
+  }
+  for (const p of exp.ports) addPin(p.net, PORT_TERMINAL[p.name], p.name)
+
+  // The pre-wired supply hubs: the group holding each supply terminal (which includes its rail).
+  const hubs = new Map<string, string>() // group id → supply name
+  for (const nm of ['V+', 'V-', 'GND']) {
+    const g = base.get(PORT_TERMINAL[nm])
+    if (g) hubs.set(g, nm)
+  }
+
+  // Union-find over the pre-wired groups mirrors the physical connectivity we have built so far,
+  // so an edge already satisfied (e.g. a strap whose net routing connected it) is never duplicated.
+  const uf = new Map<string, string>()
+  const find = (a: string): string => {
+    let r = a
+    for (;;) {
+      const p = uf.get(r)
+      if (p === undefined || p === r) return r
+      r = p
+    }
+  }
+  const connect = (a: string, b: string): boolean => {
+    const ra = find(a), rb = find(b)
+    if (ra === rb) return false
+    uf.set(ra, rb)
+    return true
+  }
+
+  const out: AutoJumper[] = []
+  const emit = (a: string, b: string, note: string) => {
+    out.push({ a, b, note })
+    if (holeByKey.has(a)) used.add(a)
+    if (holeByKey.has(b)) used.add(b)
+  }
+
+  for (const pins of netPins.values()) {
+    // The distinct pre-wired groups this net's pins land in.
+    const byGroup = new Map<string, { key: string; label: string }[]>()
+    for (const p of pins) {
+      const g = base.get(p.key)
+      if (!g) continue
+      const arr = byGroup.get(g)
+      if (arr) arr.push(p)
+      else byGroup.set(g, [p])
+    }
+    if (byGroup.size < 2) continue // already common through one column/rail — no jumper needed
+    const centroid = (g: string) => {
+      const ps = byGroup.get(g)!.map((p) => posOf(p.key))
+      return { x: ps.reduce((s2, p) => s2 + p.x, 0) / ps.length, y: ps.reduce((s2, p) => s2 + p.y, 0) / ps.length }
+    }
+    const labels = (g: string) => byGroup.get(g)!.map((p) => p.label).join(' + ')
+    const groups = [...byGroup.keys()].sort((a, b) => centroid(a).x - centroid(b).x || centroid(a).y - centroid(b).y)
+    const hub = groups.find((g) => hubs.has(g))
+    if (hub !== undefined) {
+      // Power/ground net: star each column onto the pre-wired rail (its own short rail drop).
+      const name = hubs.get(hub)!
+      for (const g of groups) {
+        if (g === hub || !connect(g, hub)) continue
+        const hubKey = pickIn(hub, centroid(g))
+        const src = pickIn(g, posOf(hubKey))
+        emit(src, hubKey, `${labels(g)} → the ${name} rail`)
+      }
+    } else {
+      // Signal net: chain neighbouring groups left→right — a spanning tree of short jumpers.
+      for (let i = 1; i < groups.length; i++) {
+        const gA = groups[i - 1], gB = groups[i]
+        if (!connect(gA, gB)) continue
+        const aKey = pickIn(gA, centroid(gB))
+        const bKey = pickIn(gB, posOf(aKey))
+        emit(aKey, bKey, `${labels(gA)} ↔ ${labels(gB)} — one node`)
+      }
+    }
+  }
+  for (const f of fixed) {
+    const ga = base.get(f.a), gb = base.get(f.b)
+    if (!ga || !gb || !connect(ga, gb)) continue
+    const bKey = pickIn(gb, posOf(f.a))
+    const aKey = pickIn(ga, posOf(bKey))
+    emit(aKey, bKey, f.note)
+  }
+  return out
+}
+
 // ── ARB-2: board-net → circuit-node map (the "active board" bridge) ─────────────────────────────
 // The live sim reads node voltages under toCircuit's RENAMED node names ('in'/'out'/'0'/netN/…),
 // while the board's connectivity is boardNets' net ids. This pure accessor bridges them: for every

@@ -2,10 +2,11 @@
 // it. Place the schematic's R/C/L parts and M2K ports by clicking holes, run jumpers, then Check
 // that the board is electrically the drawn circuit. Practice colours each node live; Bench hides
 // the nodes until Check. See docs/specs/breadboard.md.
-import { useMemo, useRef, useState, type Dispatch, type SetStateAction, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction, type CSSProperties, type ReactNode } from 'react'
 import {
   buildHoles, boardNets, boardWidth, boardHeight, PAD, PITCH, CHANNEL_SLOT,
-  schematicExpectation, checkEquivalence, boardNodeMap, type BoardLayout, type CheckResult,
+  schematicExpectation, checkEquivalence, boardNodeMap, autoRouteJumpers, type AutoJumper,
+  type BoardLayout, type CheckResult,
   dipPinHoles, dipCols, holeKey, DIP_TOP_ROW, DIP_BOT_ROW, DIP_DEFS, type DipPkg,
   to92PinHoles, to92Legend, TO92_ROW,
   TERMINALS, type Terminal, POWER_WIRES, PORT_TERMINAL, unboardable,
@@ -17,6 +18,10 @@ import { exportSvgToPng } from './exportImage'
 import './Instrument.css'
 
 type Mode = 'practice' | 'bench'
+// F-7/ARB-3: the inter-column jumper-routing state. `manual` = today's behaviour, `hint` = a
+// non-committing "show a valid wiring" overlay, `auto` = generated read-only jumpers. The value is
+// App-owned (the `boardRouting` key of the uiSettings toggle object) and arrives as a prop.
+export type BoardRouting = 'manual' | 'hint' | 'auto'
 type Tool =
   | { kind: 'select' }
   | { kind: 'jumper' }
@@ -161,15 +166,31 @@ interface Props {
   // Null/omitted (no valid drawn circuit) → the board renders passively, exactly as before.
   liveNodeVolts?: Map<string, number> | null
   liveLedCurrents?: Map<string, number> | null
+  // F-7/ARB-3: jumper-routing state + setter (App-owned setting; default manual = today's behaviour).
+  routing?: BoardRouting
+  onRoutingChange?: (r: BoardRouting) => void
 }
 
-export default function Breadboard({ schematic, setSchematic, board, setBoard, generators, onLoadGenerators, snapshotSchematic, liveNodeVolts, liveLedCurrents }: Props) {
+export default function Breadboard({ schematic, setSchematic, board, setBoard, generators, onLoadGenerators, snapshotSchematic, liveNodeVolts, liveLedCurrents, routing = 'manual', onRoutingChange }: Props) {
   const holes = useMemo(() => buildHoles(), [])
   const holeByKey = useMemo(() => new Map(holes.map((h) => [h.key, h])), [holes])
   const exp = useMemo(() => schematicExpectation(schematic), [schematic])
-  const nets = useMemo(() => boardNets(holes, board.jumpers), [holes, board.jumpers])
+  // F-7/ARB-3: the generated wiring. `hint` overlays it on demand; `auto` applies it read-only.
+  const autoJumpers = useMemo<AutoJumper[]>(
+    () => (routing === 'manual' ? [] : autoRouteJumpers(schematic, board, holes)),
+    [routing, schematic, board, holes],
+  )
+  // The wiring in effect: the student's own jumpers, or the generated set under `auto`. Everything
+  // downstream (nets, colouring, the probe map, Check) reads this, so `auto` behaves like a fully
+  // wired board while board.jumpers itself is never touched (switching back restores manual work).
+  const effJumpers = routing === 'auto' ? autoJumpers : board.jumpers
+  const effBoard = useMemo<BoardLayout>(
+    () => (routing === 'auto' ? { ...board, jumpers: autoJumpers } : board),
+    [routing, board, autoJumpers],
+  )
+  const nets = useMemo(() => boardNets(holes, effJumpers), [holes, effJumpers])
   // ARB-2: board-net → circuit-node bridge, so a hovered pin can look up its live sim voltage.
-  const nodeMap = useMemo(() => boardNodeMap(schematic, board, holes), [schematic, board, holes])
+  const nodeMap = useMemo(() => boardNodeMap(schematic, effBoard, holes), [schematic, effBoard, holes])
 
   const [mode, setMode] = useState<Mode>('practice')
   const [tool, setTool] = useState<Tool>({ kind: 'select' })
@@ -183,6 +204,14 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
   const [revealed, setRevealed] = useState(false)
   const svgRef = useRef<SVGSVGElement>(null)
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null) // for the jumper rubber-band
+  // F-7 hint mode: whether the "one valid wiring" ghost overlay is revealed. Never writes to
+  // board.jumpers and never touches the student's Check — it is a reference to reproduce.
+  const [showHint, setShowHint] = useState(false)
+  useEffect(() => { if (routing !== 'hint') setShowHint(false) }, [routing])
+  // Entering `auto` retires the Jumper tool: routing is generated, manual jumper drawing is off.
+  useEffect(() => {
+    if (routing === 'auto') { setTool((t) => (t.kind === 'jumper' ? { kind: 'select' } : t)); setPending(null) }
+  }, [routing])
 
   // ARB-2: the hovered pin's live DC voltage — board net → circuit node → settled sim value.
   // Null when there's no live sim, the pin is unwired, or its net is ambiguous (boardNodeMap drops
@@ -219,14 +248,14 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
   const activeColor = useMemo(() => {
     const used = new Set<string>()
     for (const p of board.parts) { used.add(nets.get(p.aHole)!); used.add(nets.get(p.bHole)!) }
-    for (const j of board.jumpers) { used.add(nets.get(j.a)!); used.add(nets.get(j.b)!) }
+    for (const j of effJumpers) { used.add(nets.get(j.a)!); used.add(nets.get(j.b)!) }
     for (const d of (board.dips ?? [])) for (const k of (dipPinHoles(d.kind, d.col) ?? [])) used.add(nets.get(k)!)
     for (const t of (board.transistors ?? [])) for (const k of (to92PinHoles(t.col, t.row) ?? [])) used.add(nets.get(k)!)
     const m = new Map<string, string>()
     let i = 0
     for (const n of used) { if (n) { m.set(n, NET_COLORS[i % NET_COLORS.length]); i++ } }
     return m
-  }, [board, nets])
+  }, [board, effJumpers, nets])
 
   const showNets = mode === 'practice' || revealed
   // Wire colouring follows the power convention: a jumper touching a terminal, OR sitting on the
@@ -264,14 +293,14 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
   // real M2K inputs float, so an un-wired − reads garbage — but differential is valid, so we warn
   // rather than block.
   const floatingMinus = useMemo(() => {
-    const wired = (k?: string) => !!k && board.jumpers.some((j) => j.a === k || j.b === k)
+    const wired = (k?: string) => !!k && effJumpers.some((j) => j.a === k || j.b === k)
     const out: string[] = []
     for (const [plus, minus, label] of [['1+', '1-', '1−'], ['2+', '2-', '2−']] as const) {
       if (wired(PORT_TERMINAL[plus]) && !wired(PORT_TERMINAL[minus]))
         out.push(`${label} input is floating — tie it to GND for a single-ended measurement, or to your reference node for a differential one.`)
     }
     return out
-  }, [board.jumpers])
+  }, [effJumpers])
 
   function onNode(key: string, isTerminal = false) {
     setCheck(null)
@@ -328,7 +357,9 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
     }
   }
 
-  function runCheck() { if (!boardable) return; setCheck(checkEquivalence(schematic, board, holes)); if (mode === 'bench') setRevealed(true) }
+  // Check reads the wiring in effect: under `auto` that is the generated jumper set (the spec's
+  // "Check reflects the generated wiring"); under manual/hint it is the student's own jumpers.
+  function runCheck() { if (!boardable) return; setCheck(checkEquivalence(schematic, effBoard, holes)); if (mode === 'bench') setRevealed(true) }
 
   // Track the pointer in SVG coordinates while a jumper is in progress, for the rubber-band preview.
   function onSvgMove(e: React.MouseEvent<SVGSVGElement>) {
@@ -432,6 +463,11 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                 ⚠ {floatingMinus.length === 1 ? floatingMinus[0] : `${floatingMinus.length} − inputs floating — tie each to a node`}
               </span>
             )}
+            {routing === 'auto' && (
+              <span style={{ fontSize: 12, color: 'var(--theory-color)', whiteSpace: 'nowrap' }}>
+                ⚙ Auto wiring — jumpers are generated (read-only)
+              </span>
+            )}
           </div>
           <div className="display-controls">
             <button className={`run-btn ${mode === 'practice' ? 'active' : ''}`} onClick={() => { setMode('practice'); setRevealed(false) }}>Practice</button>
@@ -503,7 +539,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                 </g>
               )
             })}
-            {board.jumpers.map((j, i) => {
+            {routing !== 'auto' && board.jumpers.map((j, i) => {
               const a = pos(j.a), b = pos(j.b)
               const col = wireColor(j.a, j.b)
               return (
@@ -514,6 +550,22 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                   {/* coloured by its node, so it matches the bus/column it joins */}
                   <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={col} strokeWidth={3} strokeLinecap="round" />
                   {/* junction dots = the only points it actually connects */}
+                  <circle cx={a.x} cy={a.y} r={4.6} fill={col} stroke="#000" strokeWidth={1} />
+                  <circle cx={b.x} cy={b.y} r={4.6} fill={col} stroke="#000" strokeWidth={1} />
+                </g>
+              )
+            })}
+            {/* F-7 auto mode: the generated wiring — clearly machine-made (dashed centre line) and
+                read-only (no delete click); hovering shows why the jumper exists */}
+            {routing === 'auto' && autoJumpers.map((j, i) => {
+              const a = pos(j.a), b = pos(j.b)
+              const col = wireColor(j.a, j.b)
+              return (
+                <g key={'aj' + i} style={{ cursor: 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}>
+                  <title>{`auto-routed (read-only): ${j.note}`}</title>
+                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#000" strokeOpacity={0.55} strokeWidth={5.5} strokeLinecap="round" />
+                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={col} strokeWidth={3} strokeLinecap="round" />
+                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#ffffff" strokeOpacity={0.4} strokeWidth={1} strokeDasharray="3 5" strokeLinecap="round" />
                   <circle cx={a.x} cy={a.y} r={4.6} fill={col} stroke="#000" strokeWidth={1} />
                   <circle cx={b.x} cy={b.y} r={4.6} fill={col} stroke="#000" strokeWidth={1} />
                 </g>
@@ -624,6 +676,21 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                     stroke={pending === t.key ? '#fff' : c} strokeWidth={pending === t.key ? 2 : 1.5} />
                   <circle cx={x} cy={y} r={3.1} fill={c} stroke="#000" strokeWidth={0.5} />
                   <text x={x} y={labelY} fontSize={9} fontWeight={700} fill={c} textAnchor="middle">{t.name}</text>
+                </g>
+              )
+            })}
+            {/* F-7 hint mode: one valid wiring as a ghost overlay — dashed, numbered (the "why" list
+                sits in the side panel), never written into board.jumpers, never part of Check */}
+            {routing === 'hint' && showHint && autoJumpers.map((j, i) => {
+              const a = pos(j.a), b = pos(j.b)
+              const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2
+              return (
+                <g key={'hj' + i} style={{ pointerEvents: 'none' }}>
+                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--theory-color)" strokeOpacity={0.85} strokeWidth={2.5} strokeDasharray="6 5" strokeLinecap="round" />
+                  <circle cx={a.x} cy={a.y} r={4} fill="none" stroke="var(--theory-color)" strokeWidth={1.5} />
+                  <circle cx={b.x} cy={b.y} r={4} fill="none" stroke="var(--theory-color)" strokeWidth={1.5} />
+                  <circle cx={mx} cy={my} r={7} fill="#101418" stroke="var(--theory-color)" strokeWidth={1} />
+                  <text x={mx} y={my + 3} fontSize={9} fontWeight={800} fill="var(--theory-color)" textAnchor="middle">{i + 1}</text>
                 </g>
               )
             })}
@@ -805,10 +872,48 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
           terminal carry that terminal's colour.
         </div>
 
+        {/* F-7/ARB-3: the three-state routing control. One valid wiring comes from the pure
+            autoRouteJumpers engine; `hint` reveals it as a ghost, `auto` applies it read-only. */}
+        <div className="section-title">Jumper wiring</div>
+        <div className="wave-selector">
+          <button className={routing === 'manual' ? 'active' : ''} title="You run every jumper yourself (default)"
+            onClick={() => onRoutingChange?.('manual')}>Manual</button>
+          <button className={routing === 'hint' ? 'active' : ''} title="Wire it yourself, with a reveal-a-valid-wiring hint"
+            onClick={() => onRoutingChange?.('hint')}>Hint</button>
+          <button className={routing === 'auto' ? 'active' : ''} title="Place parts only — jumpers are generated read-only"
+            onClick={() => onRoutingChange?.('auto')}>Auto</button>
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: 4 }}>
+          {routing === 'manual'
+            ? 'You place the parts and run every inter-column jumper yourself; Check verifies your wiring.'
+            : routing === 'hint'
+            ? 'You still wire it yourself — but you can reveal one valid wiring as a ghost overlay to compare against. It never fills in your jumpers, and Check still grades your own wiring.'
+            : 'Place the parts only: the inter-column jumpers are generated for you and shown read-only. Check reflects the generated wiring. Your own jumpers are kept and come back in Manual/Hint.'}
+        </div>
+        {routing === 'hint' && (
+          <>
+            <button className={`run-btn ${showHint ? 'active' : ''}`} style={{ marginTop: 6 }}
+              onClick={() => setShowHint((v) => !v)}>
+              {showHint ? 'Hide the wiring hint' : 'Show a valid wiring'}
+            </button>
+            {showHint && (autoJumpers.length === 0 ? (
+              <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.6 }}>
+                Nothing to wire yet — place the parts first; the hint routes whatever is on the board.
+              </div>
+            ) : (
+              <ol style={{ fontSize: 10, color: 'var(--theory-color)', lineHeight: 1.7, margin: '6px 0 0', paddingLeft: 18 }}>
+                {autoJumpers.map((j, i) => <li key={i}>{j.note}</li>)}
+              </ol>
+            ))}
+          </>
+        )}
+
         <div className="section-title">Tools</div>
         <div className="wave-selector">
           <button className={tool.kind === 'select' ? 'active' : ''} onClick={() => { setTool({ kind: 'select' }); setPending(null) }}>Select</button>
-          <button className={tool.kind === 'jumper' ? 'active' : ''} onClick={() => { setTool({ kind: 'jumper' }); setPending(null) }}>Jumper</button>
+          {routing !== 'auto' && (
+            <button className={tool.kind === 'jumper' ? 'active' : ''} onClick={() => { setTool({ kind: 'jumper' }); setPending(null) }}>Jumper</button>
+          )}
           <button onClick={() => { setBoard({ parts: [], jumpers: [], ports: [], dips: [], transistors: [] }); setCheck(null); setPending(null) }}>Clear</button>
         </div>
 

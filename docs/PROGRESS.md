@@ -8,7 +8,62 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
-## Next session: start here (updated 2026-07-01)
+## Next session: start here (updated 2026-07-02)
+
+**ARB-3 / F-7 (breadboard auto-routing: manual / hint / auto) is DONE** — built by the Cowork agent
+per `docs/specs/board-autoroute.md`; Claude Code to build+commit on the host.
+- **Engine** — new pure `autoRouteJumpers(s, board, holes): AutoJumper[]` (AutoJumper = Jumper + a
+  `note` string for the hint overlay) at the end of `core/breadboard.ts`. Pairs each placed pin with
+  its schematic net exactly as `checkEquivalence` does (part legs, DIP pinNets, TO-92 legs, ports),
+  groups pins by the board's pre-wired groups (`boardNets(holes, [])`: columns/rails/terminals/
+  POWER_WIRES), and emits a spanning tree (n−1 jumpers) per net over a global union-find (no
+  duplicate edges across nets/rails/straps). Nets containing a supply hub (the V+/V−/GND terminal
+  group) are **star-routed onto the pre-wired rail** (each column its own short rail drop); DIP rail
+  pins + datasheet straps (INA125) route as fixed board-level edges. Endpoints prefer free holes
+  nearest the far end (short tidy jumpers; one lead per hole tracked). Deterministic; ignores
+  existing `board.jumpers`. **`boardNets` / `checkEquivalence` / expectation semantics untouched.**
+- **Setting** — `boardRouting: 'manual'|'hint'|'auto'` (default `manual`) lives as one named key in
+  a new **`uiSettings`** object in `App.tsx` (the feature-toggle-framework seed), persisted under
+  `m2k-ui-settings-v1`; passed to `Breadboard` as `routing`/`onRoutingChange`.
+- **UI** — three-way Manual/Hint/Auto control in the board side panel. `manual` unchanged. `hint`:
+  a "Show a valid wiring" toggle overlays the generated set as green dashed ghosts with numbered
+  chips + a per-jumper "why" list in the side panel; never writes `board.jumpers`, Check still
+  grades the student's wiring. `auto`: generated jumpers render read-only (dashed centre-line marks
+  them machine-made, no delete click), the Jumper tool is hidden, and **Check/nets/colouring/probe
+  all read the effective (generated) wiring** via `effBoard`; the student's own jumpers are kept in
+  state and return when switching back.
+- **Tests** — 8 new cases in `breadboard.test.ts` (RC passes Check from zero jumpers; spanning-tree
+  count incl. the already-common-column case; GND lands on a TP/BN rail hole; OP484 follower
+  feedback net + V+/V− rails; lone INA125 = 7 jumpers = 2 rails + 5 straps, Check-passing;
+  determinism + independence from stray student jumpers; annotations non-empty; manual fixture
+  unchanged). **256/256 green** in the sandbox (incl. the 12-bit canary test); run via a shadow tree
+  because the sandbox mount served stale file views (see caveat below). Host `npm run build` (tsc)
+  **not run here** — CC must verify.
+- **Caveats for CC:** (1) the sandbox bash mount showed stale/truncated views of freshly edited
+  files — trust the host tree (`git status`/`git diff`), the real files are complete; (2) Save-lab
+  in `auto` mode still saves the student's own (possibly empty) jumpers, not the generated set —
+  flagged as a product question, not changed; (3) browser pass pending as usual (hint ghost
+  legibility, auto badge, setting persists across reload).
+- **Host verification (CC, 2026-07-02):** `npm run build` clean; full suite green on the host incl.
+  the pinned 12-bit canary. Live Chrome pass on the `led-pwm` circuit (R1 b10–b15, D1 c20–c24):
+  *manual* unchanged — Check fails with "R1 pin A and W1 should be the same node — run a jumper";
+  *hint* overlays 5 numbered green dashed ghosts with the per-jumper why-list ("1+ ↔ R1.A — one
+  node" … "D1.B → the GND rail") and leaves `board.jumpers` empty + the student's failed Check
+  standing; *auto* hides the Jumper tool, shows the "⚙ Auto wiring — jumpers are generated
+  (read-only)" badge, and Check passes ("✓ Match"); `boardRouting: 'auto'` survives a reload
+  (`m2k-ui-settings-v1`), and `board.jumpers` stays `[]` throughout (caveat 2 behaves as designed).
+  No-circuit Spectrum floor sits on the −104 dBFS theory line at 12-bit (canary eyeballed too).
+
+
+**Example added (Cowork spec `docs/specs/led-pwm-example.md`, 2026-07-01):** `led-pwm` — "PWM-driven
+LED (breadboard glow)", the one-click home for the ARB-2 board glow. W1 (0–5 V 1 kHz square) → 470 Ω
+→ red LED (Vf 1.8) → GND, 1+ on the drive; group Passive. Built to the spec's schematic verbatim
+(coords verified). Tests: the FB-2 sweep picks it up automatically + a dedicated end-to-end `.tran`
+(real ngspice, driven via `applyGeneratorParams` exactly as App does) reading ~3 mA average forward
+current at 50 % duty via `ledAverageCurrents` — mid-glow on the log curve. 253/253, build clean, no
+`core/signal.ts`. ⚠ Browser pass pending (load → CH1 square, transfer → glow, duty sweep dims) —
+headless caveat as usual. Follow-up idea (spec's optional stretch, NOT built): a `board?: Board`
+preset on `Example` so an example can land pre-placed on the breadboard and glow immediately.
 
 **Ad-hoc housekeeping (andre, 2026-07-01, after ARB-2):** deleting a schematic part now takes its
 hookup wires with it — no more dangling stubs (the voltage-divider confusion). New pure

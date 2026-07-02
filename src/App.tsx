@@ -11,7 +11,7 @@ import Oscilloscope from './components/Oscilloscope'
 import NetworkAnalyzer from './components/NetworkAnalyzer'
 import CurveTracer from './components/CurveTracer'
 import SchematicEditor from './components/SchematicEditor'
-import Breadboard from './components/Breadboard'
+import Breadboard, { type BoardRouting } from './components/Breadboard'
 import About from './components/About'
 import Welcome from './components/Welcome'
 import Quickstart from './components/Quickstart'
@@ -112,6 +112,28 @@ function loadBoardOrient(): BoardOrient {
   return 'stacked'
 }
 
+// F-7/ARB-3: App-level UI feature toggles — the seed of the future per-assignment toggle framework
+// (see docs/specs/board-autoroute.md "Forward note"). One named key per toggle with its default
+// here, persisted like the workspace; the later assignment layer adds a per-key default + lock,
+// not a rewrite. Do NOT scatter feature booleans through components — new toggles join this object.
+interface UiSettings {
+  boardRouting: BoardRouting // breadboard inter-column jumper routing: manual (default) / hint / auto
+}
+const DEFAULT_UI_SETTINGS: UiSettings = { boardRouting: 'manual' }
+const UI_SETTINGS_KEY = 'm2k-ui-settings-v1'
+
+function loadUiSettings(): UiSettings {
+  const s: UiSettings = { ...DEFAULT_UI_SETTINGS }
+  try {
+    const raw = localStorage.getItem(UI_SETTINGS_KEY)
+    if (raw) {
+      const d = JSON.parse(raw)
+      if (d.boardRouting === 'manual' || d.boardRouting === 'hint' || d.boardRouting === 'auto') s.boardRouting = d.boardRouting
+    }
+  } catch { /* ignore corrupt storage */ }
+  return s
+}
+
 export default function App() {
   const stored0 = (() => {
     try { const r = localStorage.getItem(WORKSPACE_KEY); if (r) return JSON.parse(r) as { active?: ActiveInstrument; presetId?: string | null } } catch { /* ignore */ }
@@ -134,6 +156,11 @@ export default function App() {
   const [running, setRunning] = useState(true)
   const [schematic, setSchematic] = useState<Schematic>(loadStoredSchematic)
   const [board, setBoard] = useState<BoardLayout>(loadStoredBoard)
+
+  // F-7/ARB-3: the UI feature-toggle object (currently just boardRouting), persisted like the
+  // workspace so a session remembers it.
+  const [uiSettings, setUiSettings] = useState<UiSettings>(loadUiSettings)
+  useEffect(() => { try { localStorage.setItem(UI_SETTINGS_KEY, JSON.stringify(uiSettings)) } catch { /* quota */ } }, [uiSettings])
 
   // F-6: Board-view layout (split ratio + orientation), persisted so a user's chosen division sticks.
   const [boardSplit, setBoardSplit] = useState<number>(loadBoardSplit)
@@ -494,6 +521,8 @@ export default function App() {
                   snapshotSchematic={snapshotSchematic}
                   generators={{ w1: params, w2: params2 }}
                   liveNodeVolts={boardSim?.nodeV ?? null} liveLedCurrents={boardSim?.ledI ?? null}
+                  routing={uiSettings.boardRouting}
+                  onRoutingChange={(r: BoardRouting) => setUiSettings((s) => ({ ...s, boardRouting: r }))}
                   onLoadGenerators={(w1, w2) => { setParams({ ...DEFAULT_PARAMS, ...w1 }); setParams2({ ...DEFAULT_PARAMS2, ...w2 }) }} />
               </div>
             </div>
