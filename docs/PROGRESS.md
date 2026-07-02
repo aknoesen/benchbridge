@@ -8,7 +8,35 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
-## Next session: start here (updated 2026-07-02, batch 3)
+## Next session: start here (updated 2026-07-02, batch 4)
+
+**QS-4 (Quickstart redesign — paginated, orientation-first) is DONE** per
+`docs/specs/quickstart-redesign.md`. `Quickstart.tsx` re-architected; **App.tsx untouched** (same
+`onGoTo`/`onLoadExample` props, same nav entry, gold-pulse `.nav-hint` unaffected).
+- **Structure** — 9 pages on a spine: orientation → bench-at-a-glance → first-measurement (quick
+  win) → 4 Tour pages (Signal Gen+Scope · Spectrum+digitization · Network · Curve Tracer, grouped
+  under a "Tour the bench" menu label) → build capstone → where-next. A left chapter-menu rail
+  swaps one page at a time (in-app view swap, no long scroll); Next/Back walk the spine; the menu
+  is the progress indicator (current gold, visited ✓, per-chapter ~time chips). Page + visited
+  persist module-level so instrument visits resume where the user left off (replaces the old
+  scroll-position memory).
+- **Content** — QS-1/QS-2 step cards + both SVGs (single-ended/differential, dBFS) reused
+  verbatim, re-sequenced per spec: divider quick-win early with the single-ended-vs-differential
+  lecture folded in after it; Spectrum+digitization its own tour page; the 8-step supply-rails
+  build moved into the capstone, which ends on Breadboard → Check; a new "Where next" page with
+  six one-click example loaders. NEW: the orientation screen (neutral simulation-honest voice
+  matching the front page, one-big-idea line, a new signal-flow SVG DAC-out → circuit → ADC-in,
+  "Take the 5-minute tour" → quick win / "Jump to an instrument" → bench map).
+- **Verified** — 285/285 incl. canary, build clean; live Chrome: orientation first with both
+  branch buttons, menu paging + ✓ ticks + Tour group, Next/Back order, and **no horizontal
+  overflow at an 869-px window** (measured scrollWidth == clientWidth). NOT re-clicked: the
+  load-example action buttons (verbatim reuse of the proven handlers; clicking them would have
+  clobbered andre's live schematic state). andre reviews the deployed result and will tweak
+  chapter order/copy after — structure over copy, per the handoff.
+
+---
+
+## Earlier on 2026-07-02 (batch 3)
 
 **ARB-5b (rotate a placed part) + the bezel finish are DONE — one commit, host-verified (285/285
 incl. the 12-bit canary, build clean, live Chrome pass).**

@@ -176,6 +176,7 @@ Spec: `docs/specs/quickstart.md`
 | QS-1 | In-app Quickstart panel (nav button + Welcome link): M2K↔app bridge + Lab 1 walkthrough (divider on Power Supply + Voltmeter), with step buttons that load examples and jump to instruments | examples.ts | DONE |
 | QS-2 | Guided instrument sequence after the Voltmeter: Signal Gen + Scope (YT then XY, Zener I-V showcase) → Network Analyzer + digitization/dBFS explainer (with diagram) → circuit/sim → board transfer. See spec. | QS-1 | DONE |
 | QS-3 | (Future) figures/screenshots; hook Lab prelab `<!-- TWIN: -->` markers to deep-link steps | QS-2 | TODO |
+| QS-4 | **Quickstart redesign** (`docs/specs/quickstart-redesign.md`) — paginated, orientation-first: a chapter menu drives one page at a time (no long scroll), Tour submenu (Signal Gen+Scope · Spectrum · Network · Curve Tracer), Next/Back walk the spine, menu doubles as progress (visited ✓). New orientation screen (one big idea + signal-flow visual + tour/jump branch buttons, neutral simulation-honest voice); quick-win divider early with single-ended-vs-differential folded in; supply-rails 8-step moved to the build capstone ending on Breadboard → Check. All QS-1/QS-2 step content + SVGs reused verbatim. | QS-2 | DONE |
 
 Notes:
 - **Goal:** get a general (non-CC) user going. Open an example → see it framed → understand
