@@ -351,6 +351,115 @@ export function nextBoardSeq(b: BoardLayout): number {
   return n
 }
 
+// ── ARB-2b MOVE: pure snap / validate / commit helpers ──────────────────────────────────────────
+// Board-grid arithmetic for translating a placed item by whole holes. Rows live on the ROWS slot
+// grid (gaps at the rail spacers + centre channel), so a shift that lands in a gap returns null —
+// exactly like the real board, a leg can't seat in the channel.
+const ROW_BY_SLOT = new Map(ROWS.map((r) => [r.slot, r.row]))
+const SLOT_BY_ROW = new Map(ROWS.map((r) => [r.row, r.slot]))
+
+export function parseHoleKey(k: string): { row: Row; col: number } | null {
+  const m = /^([A-Za-z]+)(\d+)$/.exec(k)
+  if (!m) return null
+  const row = m[1] as Row, col = Number(m[2])
+  if (!SLOT_BY_ROW.has(row) || col < 1 || col > COLS) return null
+  return { row, col }
+}
+
+// Shift a hole by whole row-slots / columns. Null when the target is off-grid (channel, rail
+// spacer, or past an edge).
+export function shiftHole(k: string, dSlots: number, dCols: number): string | null {
+  const p = parseHoleKey(k)
+  if (!p) return null
+  const row = ROW_BY_SLOT.get(SLOT_BY_ROW.get(p.row)! + dSlots)
+  const col = p.col + dCols
+  if (!row || col < 1 || col > COLS) return null
+  return holeKey(row, col)
+}
+
+// Every hole currently seating a component leg/pin, optionally ignoring one item (the one moving).
+export function occupiedHoles(b: BoardLayout, excludeId?: string): Set<string> {
+  const out = new Set<string>()
+  for (const p of b.parts) if (p.id !== excludeId) { out.add(p.aHole); out.add(p.bHole) }
+  for (const d of b.dips ?? []) if (d.id !== excludeId) for (const k of dipPinHoles(d.kind, d.col) ?? []) out.add(k)
+  for (const t of b.transistors ?? []) if (t.id !== excludeId) for (const k of to92PinHoles(t.col, t.row) ?? []) out.add(k)
+  return out
+}
+
+export const MIN_RESISTOR_HOLES = 4 // a through-hole resistor's legs span ~5 holes (0.5")
+
+// Validate a 2-pin drop target. Null when the drop is legal, else a student-facing reason.
+// Occupancy counts other components' legs/pins only — jumper endpoints never block.
+export function canDropPart(kind: SchKind, aHole: string, bHole: string, b: BoardLayout, excludeId?: string): string | null {
+  const a = parseHoleKey(aHole), bb = parseHoleKey(bHole)
+  if (!a || !bb) return 'off the board — both legs need a hole'
+  if (aHole === bHole) return 'both legs in one hole'
+  if (kind === 'resistor') {
+    const ax = PAD + (a.col - 1) * PITCH, ay = PAD + SLOT_BY_ROW.get(a.row)! * PITCH
+    const bx = PAD + (bb.col - 1) * PITCH, by = PAD + SLOT_BY_ROW.get(bb.row)! * PITCH
+    if (Math.hypot(bx - ax, by - ay) / PITCH < MIN_RESISTOR_HOLES)
+      return `too tight: a resistor's legs span ~5 holes (0.5") — keep them at least ${MIN_RESISTOR_HOLES} holes apart`
+  }
+  const used = occupiedHoles(b, excludeId)
+  if (used.has(aHole) || used.has(bHole)) return 'that spot is taken — a target hole already seats another part'
+  return null
+}
+
+export function canDropDip(kind: DipPkg, col: number, b: BoardLayout, excludeId?: string): string | null {
+  const pins = dipPinHoles(kind, col)
+  if (!pins) return 'off the board — the chip must straddle the channel within the columns'
+  const used = occupiedHoles(b, excludeId)
+  for (const k of pins) if (used.has(k)) return 'that spot is taken — a target hole already seats another part'
+  return null
+}
+
+export function canDropTransistor(col: number, row: Row | undefined, b: BoardLayout, excludeId?: string): string | null {
+  const r = row ?? TO92_ROW
+  if (ROWS.find((x) => x.row === r)?.kind !== 'term') return 'a TO-92 sits in a terminal row (a–j)'
+  const pins = to92PinHoles(col, r)
+  if (!pins) return 'off the board — the three legs need adjacent columns'
+  const used = occupiedHoles(b, excludeId)
+  for (const k of pins) if (used.has(k)) return 'that spot is taken — a target hole already seats another part'
+  return null
+}
+
+// Jumpers with an endpoint on any of `holes` are deleted (andre 2026-07-02: a moved part takes no
+// wiring with it — the student re-wires the moved part from a clean slate). Pure.
+export function removeJumpersTouching(jumpers: Jumper[], holes: Iterable<string>): Jumper[] {
+  const s = new Set(holes)
+  return jumpers.filter((j) => !s.has(j.a) && !s.has(j.b))
+}
+
+// Committed moves: relocate the item, delete the jumpers on its OLD holes, and bump it to the top
+// of the z-order (BUG-1: the last-moved item renders on top). Callers validate with canDrop* first.
+export function movePart(b: BoardLayout, id: string, aHole: string, bHole: string): BoardLayout {
+  const p = b.parts.find((x) => x.id === id)
+  if (!p) return b
+  return {
+    ...b,
+    parts: b.parts.map((x) => (x.id === id ? { ...x, aHole, bHole, seq: nextBoardSeq(b) } : x)),
+    jumpers: removeJumpersTouching(b.jumpers, [p.aHole, p.bHole]),
+  }
+}
+export function moveDip(b: BoardLayout, id: string, col: number): BoardLayout {
+  const d = (b.dips ?? []).find((x) => x.id === id)
+  if (!d) return b
+  return {
+    ...b,
+    dips: (b.dips ?? []).map((x) => (x.id === id ? { ...x, col, seq: nextBoardSeq(b) } : x)),
+    jumpers: removeJumpersTouching(b.jumpers, dipPinHoles(d.kind, d.col) ?? []),
+  }
+}
+export function moveTransistor(b: BoardLayout, id: string, col: number, row?: Row): BoardLayout {
+  const t = (b.transistors ?? []).find((x) => x.id === id)
+  if (!t) return b
+  return {
+    ...b,
+    transistors: (b.transistors ?? []).map((x) => (x.id === id ? { ...x, col, row: row ?? x.row, seq: nextBoardSeq(b) } : x)),
+    jumpers: removeJumpersTouching(b.jumpers, to92PinHoles(t.col, t.row) ?? []),
+  }
+}
+
 // What the schematic expects on the board: its R/C/L parts (with each leg's net) and its ports.
 export interface SchematicExpectation {
   parts: { id: string; kind: SchKind; a: string; b: string }[]

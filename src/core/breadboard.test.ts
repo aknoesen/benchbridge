@@ -34,6 +34,75 @@ import { checkEquivalence, boardNodeMap, PORT_TERMINAL, to92PinHoles, type Board
 import { normalizeBoardOrder, nextBoardSeq } from './breadboard'
 import { type Schematic } from './schematic'
 
+import { shiftHole, canDropPart, canDropDip, canDropTransistor, movePart, moveDip, moveTransistor, occupiedHoles } from './breadboard'
+
+describe('board move helpers (ARB-2b: drag to reposition)', () => {
+  const board = (): BoardLayout => ({
+    parts: [
+      { id: 'R1', kind: 'resistor', aHole: 'b5', bHole: 'b10', seq: 0 },
+      { id: 'C1', kind: 'capacitor', aHole: 'c20', bHole: 'c24', seq: 1 },
+    ],
+    jumpers: [
+      { a: 'a5', b: 'TT0' },    // touches R1's aHole column but NOT its hole — must survive a move
+      { a: 'b5', b: 'a12' },    // endpoint ON R1's old aHole — must be removed by the move
+      { a: 'c24', b: 'TB2' },   // endpoint on C1 — untouched by an R1 move
+    ],
+    ports: [],
+  })
+
+  it('shiftHole translates on the slot grid and refuses the channel / spacers / edges', () => {
+    expect(shiftHole('b5', 1, 2)).toBe('c7')
+    expect(shiftHole('e5', 1, 0)).toBeNull()   // slot 8 = centre channel
+    expect(shiftHole('e5', 2, 0)).toBe('f5')   // jumping the channel lands in the bottom bank
+    expect(shiftHole('a1', 0, -1)).toBeNull()  // off the left edge
+    expect(shiftHole('TP3', -1, 0)).toBeNull() // above the top rail
+  })
+
+  it('movePart relocates the legs, removes ONLY the jumpers on its old holes, bumps z-order', () => {
+    const b = board()
+    const m = movePart(b, 'R1', 'g5', 'g10')
+    const r1 = m.parts.find((p) => p.id === 'R1')!
+    expect([r1.aHole, r1.bHole]).toEqual(['g5', 'g10'])
+    expect(r1.seq).toBe(2) // moved item renders on top (BUG-1 last-touched)
+    expect(m.jumpers).toEqual([{ a: 'a5', b: 'TT0' }, { a: 'c24', b: 'TB2' }])
+    expect(b.parts[0].aHole).toBe('b5') // pure: input board untouched
+  })
+
+  it('canDropPart rejects a too-tight resistor span and an occupied target hole', () => {
+    const b = board()
+    expect(canDropPart('resistor', 'g5', 'g7', b, 'R1')).toMatch(/too tight/i)
+    expect(canDropPart('resistor', 'c20', 'c25', b, 'R1')).toMatch(/taken/i) // c20 is C1's leg
+    expect(canDropPart('resistor', 'g5', 'g10', b, 'R1')).toBeNull()
+    // the moving part's own holes never block it (shift by one column overlaps itself)
+    expect(canDropPart('resistor', 'b6', 'b11', b, 'R1')).toBeNull()
+  })
+
+  it('canDropDip / canDropTransistor reject overruns and occupied pins, moveDip clears old-pin jumpers', () => {
+    const b: BoardLayout = {
+      parts: [{ id: 'Rx', kind: 'resistor', aHole: 'e18', bHole: 'e26', seq: 2 }], ports: [],
+      jumpers: [{ a: 'f3', b: 'TT1' }], // on U1 pin 1 (f3) — must go when U1 moves
+      dips: [{ id: 'U1', kind: 'opamp-quad', col: 3, seq: 0 }],
+      transistors: [{ id: 'Q1', kind: 'mosfet', col: 20, row: 'b', seq: 1 }],
+    }
+    expect(canDropDip('opamp-quad', 28, b, 'U1')).toMatch(/off the board/i)  // 7 cols from 28 overruns
+    expect(canDropDip('opamp-quad', 16, b, 'U1')).toMatch(/taken/i)          // pin row e hits Rx's leg at e18
+    expect(canDropDip('opamp-quad', 8, b, 'U1')).toBeNull()                  // clear span
+    expect(canDropTransistor(29, 'b', b, 'Q1')).toMatch(/off the board/i)
+    expect(canDropTransistor(5, 'TP' as never, b, 'Q1')).toMatch(/terminal row/i)
+    expect(canDropTransistor(10, 'g', b, 'Q1')).toBeNull()
+    const m = moveDip(b, 'U1', 10)
+    expect(m.dips![0].col).toBe(10)
+    expect(m.jumpers).toEqual([]) // the f3 jumper sat on U1's old pin 1
+  })
+
+  it('occupiedHoles collects legs and pins, excluding the moving item', () => {
+    const b = board()
+    const occ = occupiedHoles(b, 'R1')
+    expect(occ.has('c20')).toBe(true)
+    expect(occ.has('b5')).toBe(false) // R1 excluded
+  })
+})
+
 describe('board z-order helpers (BUG-1: placement-order stacking)', () => {
   it('normalizeBoardOrder fills missing seq in the legacy render order (parts, dips, transistors)', () => {
     const b: BoardLayout = {

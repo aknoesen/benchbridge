@@ -8,6 +8,8 @@ import {
   schematicExpectation, checkEquivalence, boardNodeMap, autoRouteJumpers, type AutoJumper,
   type BoardLayout, type CheckResult, type PlacedPart, type PlacedDip, type PlacedTransistor,
   normalizeBoardOrder, nextBoardSeq,
+  MIN_RESISTOR_HOLES, parseHoleKey, shiftHole, canDropPart, canDropDip, canDropTransistor,
+  movePart, moveDip, moveTransistor,
   dipPinHoles, dipCols, holeKey, DIP_TOP_ROW, DIP_BOT_ROW, DIP_DEFS, type DipPkg,
   to92PinHoles, to92Legend, TO92_ROW,
   TERMINALS, type Terminal, POWER_WIRES, PORT_TERMINAL, unboardable,
@@ -34,7 +36,6 @@ const NET_COLORS = ['#f0a030', '#40c0e0', '#44dd88', '#e06fd0', '#d0d040', '#7a8
 // A ¼ W axial resistor's body is ~0.25"; with its leads bent down it spans about 5 holes (0.5") and
 // can be crammed to ~4 holes at the tightest. Enforce that floor so legs can't sit unrealistically
 // close (e.g. adjacent holes). Pitch is 0.1" per hole.
-const MIN_RESISTOR_HOLES = 4
 // DIP pin functions / names / rail pins now live in core (DIP_DEFS, keyed by DipPkg) so the board
 // render and the equivalence check share one source of truth (F-4).
 // TO-92 discrete transistors (SCH-8). Leg order matches to92Legend / the schematic terminal order.
@@ -350,6 +351,16 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
   const [revealed, setRevealed] = useState(false)
   const svgRef = useRef<SVGSVGElement>(null)
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null) // for the jumper rubber-band
+  // ARB-2b MOVE: an in-progress component drag (Select tool, pointer-down on a part body). Below
+  // the click threshold pointer-up is a plain click (delete, as today); past it the part is "in
+  // hand" and pointer-up commits or snaps back. dSlots/dCols is the current whole-hole translation.
+  const [drag, setDrag] = useState<null | {
+    type: 'part' | 'dip' | 'tr'; id: string
+    startX: number; startY: number
+    dSlots: number; dCols: number
+    moved: boolean
+  }>(null)
+  const justDraggedRef = useRef(false)
   // F-7 hint mode: whether the "one valid wiring" ghost overlay is revealed. Never writes to
   // board.jumpers and never touches the student's Check — it is a reference to reproduce.
   const [showHint, setShowHint] = useState(false)
@@ -509,14 +520,73 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
   // "Check reflects the generated wiring"); under manual/hint it is the student's own jumpers.
   function runCheck() { if (!boardable) return; setCheck(checkEquivalence(schematic, effBoard, holes)); if (mode === 'bench') setRevealed(true) }
 
-  // Track the pointer in SVG coordinates while a jumper is in progress, for the rubber-band preview.
-  function onSvgMove(e: React.MouseEvent<SVGSVGElement>) {
-    if (tool.kind !== 'jumper' || !pending) { if (cursor) setCursor(null); return }
-    const svg = svgRef.current
-    const ctm = svg?.getScreenCTM()
-    if (!ctm) return
+  // Pointer position in SVG coordinates (shared by the jumper rubber-band and the move drag).
+  function svgPoint(e: { clientX: number; clientY: number }): { x: number; y: number } | null {
+    const ctm = svgRef.current?.getScreenCTM()
+    if (!ctm) return null
     const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse())
+    return { x: p.x, y: p.y }
+  }
+
+  // Track the pointer while a jumper rubber-band or an ARB-2b move drag is in progress.
+  function onSvgMove(e: React.MouseEvent<SVGSVGElement>) {
+    const p = svgPoint(e)
+    if (!p) return
+    if (drag) {
+      // Whole-hole translation of the drag; `moved` flips once past the click threshold so a plain
+      // click (delete, as today) is never mistaken for a move.
+      const dCols = Math.round((p.x - drag.startX) / PITCH)
+      const dSlots = Math.round((p.y - drag.startY) / PITCH)
+      const moved = drag.moved || Math.hypot(p.x - drag.startX, p.y - drag.startY) > 5
+      if (moved !== drag.moved || dCols !== drag.dCols || dSlots !== drag.dSlots)
+        setDrag({ ...drag, dCols, dSlots, moved })
+      return
+    }
+    if (tool.kind !== 'jumper' || !pending) { if (cursor) setCursor(null); return }
     setCursor({ x: p.x, y: p.y })
+  }
+
+  // ARB-2b: the drag's snapped target — the candidate hole set, its validity, and the committed
+  // board if dropped here. Recomputed only when the pointer crosses a hole boundary.
+  const dragTarget = useMemo(() => {
+    if (!drag || !drag.moved || (drag.dCols === 0 && drag.dSlots === 0)) return null
+    if (drag.type === 'part') {
+      const p = board.parts.find((x) => x.id === drag.id); if (!p) return null
+      const aHole = shiftHole(p.aHole, drag.dSlots, drag.dCols), bHole = shiftHole(p.bHole, drag.dSlots, drag.dCols)
+      if (!aHole || !bHole) return { holes: [], err: 'off the board (a leg would leave the grid)', commit: null }
+      return { holes: [aHole, bHole], err: canDropPart(p.kind, aHole, bHole, board, p.id), commit: () => movePart(board, p.id, aHole, bHole) }
+    }
+    if (drag.type === 'dip') {
+      const d = (board.dips ?? []).find((x) => x.id === drag.id); if (!d) return null
+      const col = d.col + drag.dCols // a DIP always straddles the channel — horizontal moves only
+      return { holes: dipPinHoles(d.kind, col) ?? [], err: canDropDip(d.kind, col, board, d.id), commit: () => moveDip(board, d.id, col) }
+    }
+    const t = (board.transistors ?? []).find((x) => x.id === drag.id); if (!t) return null
+    const col = t.col + drag.dCols
+    const anchor = shiftHole(holeKey(t.row ?? TO92_ROW, t.col), drag.dSlots, 0)
+    const row = anchor ? parseHoleKey(anchor)!.row : undefined
+    if (drag.dSlots !== 0 && !row) return { holes: [], err: 'off the board (no terminal row there)', commit: null }
+    const rr = row ?? t.row ?? TO92_ROW
+    return { holes: to92PinHoles(col, rr) ?? [], err: canDropTransistor(col, rr, board, t.id), commit: () => moveTransistor(board, t.id, col, rr) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag, board])
+
+  // Commit or cancel the move on pointer-up anywhere over the board.
+  function onSvgUp() {
+    if (!drag) return
+    if (drag.moved) {
+      // The click event that follows this mouse-up must not delete the part we just dragged.
+      justDraggedRef.current = true
+      setTimeout(() => { justDraggedRef.current = false }, 0)
+      if (dragTarget && !dragTarget.err && dragTarget.commit) {
+        snapshotSchematic?.() // one undo step per committed drag (restores position + jumpers)
+        setBoard(dragTarget.commit())
+        setCheck(null)
+      } else if (dragTarget) {
+        setCheck({ ok: false, message: `Move cancelled — ${dragTarget.err}. The part snapped back.` })
+      }
+    }
+    setDrag(null)
   }
 
   // F-3 save/load: a "lab" bundle holds the circuit AND its board layout in one .json, so opening
@@ -601,7 +671,8 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2
     return (
       <g key={p.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
-        onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, parts: bb.parts.filter((x) => x.id !== p.id) })); setCheck(null) } }}>
+        onMouseDown={(e) => { if (tool.kind !== 'select') return; const p0 = svgPoint(e); if (!p0) return; e.preventDefault(); setDrag({ type: 'part', id: p.id, startX: p0.x, startY: p0.y, dSlots: 0, dCols: 0, moved: false }) }}
+        onClick={() => { if (justDraggedRef.current) return; if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, parts: bb.parts.filter((x) => x.id !== p.id) })); setCheck(null) } }}>
         {p.kind === 'led' && liveLedCurrents?.has(p.id) && (
           <title>{`${p.id}: ${(liveLedCurrents.get(p.id)! * 1000).toFixed(2)} mA average forward current`}</title>
         )}
@@ -629,7 +700,8 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
     const by = tl.y + INSET, bh = (br.y - tl.y) - 2 * INSET
     return (
       <g key={d.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
-        onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, dips: (bb.dips ?? []).filter((x) => x.id !== d.id) })); setCheck(null) } }}>
+        onMouseDown={(e) => { if (tool.kind !== 'select') return; const p0 = svgPoint(e); if (!p0) return; e.preventDefault(); setDrag({ type: 'dip', id: d.id, startX: p0.x, startY: p0.y, dSlots: 0, dCols: 0, moved: false }) }}
+        onClick={() => { if (justDraggedRef.current) return; if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, dips: (bb.dips ?? []).filter((x) => x.id !== d.id) })); setCheck(null) } }}>
         {/* silver legs, one shaded trapezoid per pin seating into its socket */}
         {pins.map((k, i) => {
           const h = pos(k)
@@ -675,7 +747,8 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
     const halfW = (legs[2].x - legs[0].x) / 2 + 7
     return (
       <g key={t.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
-        onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, transistors: (bb.transistors ?? []).filter((x) => x.id !== t.id) })); setCheck(null) } }}>
+        onMouseDown={(e) => { if (tool.kind !== 'select') return; const p0 = svgPoint(e); if (!p0) return; e.preventDefault(); setDrag({ type: 'tr', id: t.id, startX: p0.x, startY: p0.y, dSlots: 0, dCols: 0, moved: false }) }}
+        onClick={() => { if (justDraggedRef.current) return; if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, transistors: (bb.transistors ?? []).filter((x) => x.id !== t.id) })); setCheck(null) } }}>
         {/* legs: one short metallic lead from each hole up to the package face */}
         {legs.map((lp, i) => {
           const net = nets.get(pins[i])!
@@ -749,7 +822,8 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
         </div>
         <div className="plotly-display" style={{ overflow: 'auto', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 8 }}>
           <svg ref={svgRef} viewBox={`0 0 ${W2} ${H2}`} width={W2} height={H2} style={{ maxWidth: '100%', height: 'auto' }}
-            onMouseMove={onSvgMove} onMouseLeave={() => cursor && setCursor(null)}>
+            onMouseMove={onSvgMove} onMouseUp={onSvgUp}
+            onMouseLeave={() => { if (cursor) setCursor(null); if (drag) setDrag(null) /* leave = snap back */ }}>
             <BoardDefs />
             {/* ARB-4: the whole scene sits on a dark bench bezel, so the cream board reads as a
                 thing ON the bench (not a light-theme seam) and the exported PNG is self-contained */}
@@ -922,6 +996,22 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                   strokeDasharray="5 4" strokeLinecap="round" />
               </g>
             )}
+            {/* ARB-2b: move-drag ghost — the snapped target holes ring green (legal) or red
+                (illegal, will snap back), with a dashed outline where the body would sit */}
+            {drag?.moved && dragTarget && dragTarget.holes.length > 0 && (() => {
+              const ok = !dragTarget.err
+              const col = ok ? 'var(--theory-color)' : '#ff5555'
+              const pts = dragTarget.holes.map((k) => pos(k))
+              const minX = Math.min(...pts.map((q) => q.x)), maxX = Math.max(...pts.map((q) => q.x))
+              const minY = Math.min(...pts.map((q) => q.y)), maxY = Math.max(...pts.map((q) => q.y))
+              return (
+                <g pointerEvents="none">
+                  <rect x={minX - 9} y={minY - 9} width={maxX - minX + 18} height={maxY - minY + 18} rx={5}
+                    fill={col} fillOpacity={0.08} stroke={col} strokeWidth={1.5} strokeDasharray="5 4" />
+                  {pts.map((q, i) => <circle key={i} cx={q.x} cy={q.y} r={5} fill="none" stroke={col} strokeWidth={1.8} />)}
+                </g>
+              )
+            })()}
             {/* ARB-2 hover probe: the pin's live DC voltage from the running sim (like a bench DMM) */}
             {probeKey && probeVolts !== null && (() => {
               const p = pos(probeKey)
@@ -1144,7 +1234,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
             : tool.kind === 'placeDip' ? `Placing ${tool.id}: click a hole in row ${DIP_TOP_ROW} (top-left pin); the chip drops across the channel.`
             : tool.kind === 'placeTransistor' ? `Placing ${tool.id}: click a hole in row ${TO92_ROW} (left leg); the TO-92's 3 legs drop into adjacent columns.`
             : tool.kind === 'jumper' ? 'Jumper: click two points — a hole or an M2K terminal — to wire them together.'
-            : 'Select: click a placed part or jumper to remove it.'}
+            : 'Select: click a placed part or jumper to remove it; drag a part to move it (its jumpers are removed — re-wire it).'}
         </div>
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 6 }}>
           {mode === 'practice' ? 'Practice: each node is coloured as you wire; hover a hole to highlight its node.'

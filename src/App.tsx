@@ -192,27 +192,32 @@ export default function App() {
     window.addEventListener('pointerup', up)
   }
 
-  // Shared schematic undo/redo history (one stack owned here, so every editor of the schematic —
-  // the Circuit editor and the Board tab's lab load — pushes to the same history). Callers snapshot
-  // explicitly before a discrete edit; setSchematic itself stays raw (drags must not flood history).
+  // Shared schematic+board undo/redo history (one stack owned here, so every editor of the lab —
+  // the Circuit editor and the Board tab's placement/move/lab-load — pushes to the same history).
+  // Each entry is the whole lab state (schematic + board), so an ARB-2b board move is one Ctrl-Z.
+  // Callers snapshot explicitly before a discrete edit; the setters stay raw (drags must not flood
+  // history).
   const schematicRef = useRef(schematic); schematicRef.current = schematic
-  const histPast = useRef<Schematic[]>([])
-  const histFuture = useRef<Schematic[]>([])
+  const boardRef = useRef(board); boardRef.current = board
+  const histPast = useRef<{ s: Schematic; b: BoardLayout }[]>([])
+  const histFuture = useRef<{ s: Schematic; b: BoardLayout }[]>([])
   const HIST_MAX = 100
   function snapshotSchematic() {
-    histPast.current.push(schematicRef.current)
+    histPast.current.push({ s: schematicRef.current, b: boardRef.current })
     if (histPast.current.length > HIST_MAX) histPast.current.shift()
     histFuture.current = []
   }
   function undoSchematic() {
     if (!histPast.current.length) return
-    histFuture.current.push(schematicRef.current)
-    setSchematic(histPast.current.pop()!)
+    histFuture.current.push({ s: schematicRef.current, b: boardRef.current })
+    const e = histPast.current.pop()!
+    setSchematic(e.s); setBoard(e.b)
   }
   function redoSchematic() {
     if (!histFuture.current.length) return
-    histPast.current.push(schematicRef.current)
-    setSchematic(histFuture.current.pop()!)
+    histPast.current.push({ s: schematicRef.current, b: boardRef.current })
+    const e = histFuture.current.pop()!
+    setSchematic(e.s); setBoard(e.b)
   }
   // One-shot scope request: an example sets this on load (XY mode + Volts/div framing for I-V
   // curves); the Oscilloscope consumes it and clears it. null = nothing pending.
