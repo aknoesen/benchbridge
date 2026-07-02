@@ -42,7 +42,13 @@ function PartBody({ kind, value, ax, ay, bx, by, glow }: { kind: SchKind; value?
   const mx = (ax + bx) / 2, my = (ay + by) / 2
   const len = Math.hypot(bx - ax, by - ay) || 1
   const angle = (Math.atan2(by - ay, bx - ax) * 180) / Math.PI
-  const h = Math.max(7, (len - 18) / 2) // half body length (leads take ~9px each side)
+  // PL-1: a real part's BODY is a fixed size — only the leads stretch. Scaling the body-edge (±h)
+  // with the span left gaps between the leads and the fixed-size bodies (LED dome, ceramic disc) at
+  // wide placements. Fixed half-width per kind; clamped down only when the holes are very close.
+  const FIXED_HALF: Partial<Record<SchKind, number>> = {
+    resistor: 16, capacitor: 12, inductor: 14, diode: 12, zener: 12, led: 9, photodiode: 9,
+  }
+  const h = Math.min(FIXED_HALF[kind] ?? 12, Math.max(6, len / 2 - 3))
   const lead = (
     <>
       <line x1={-len / 2} y1={0} x2={-h} y2={0} stroke="#b9bcc2" strokeWidth={1.6} />
