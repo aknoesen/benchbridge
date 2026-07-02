@@ -142,7 +142,7 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
           <b style={{ color: GOLD }}>The one big idea:</b> every panel here mirrors a real bench
           instrument, so everything you learn — wiring a probe, setting a trigger, reading a Bode
           plot — transfers directly to the hardware bench. It currently models the Analog Devices
-          ADALM2000 (M2K) and its parts kit, the instrument used in EEC1.
+          ADALM2000 (M2K) and its parts kit.
         </p>
         <div style={card}><SignalFlow /></div>
         <p style={note}>
