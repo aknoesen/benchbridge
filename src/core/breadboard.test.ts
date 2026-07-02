@@ -31,7 +31,46 @@ describe('breadboard nets (F-1)', () => {
 })
 
 import { checkEquivalence, boardNodeMap, PORT_TERMINAL, to92PinHoles, type BoardLayout } from './breadboard'
+import { normalizeBoardOrder, nextBoardSeq } from './breadboard'
 import { type Schematic } from './schematic'
+
+describe('board z-order helpers (BUG-1: placement-order stacking)', () => {
+  it('normalizeBoardOrder fills missing seq in the legacy render order (parts, dips, transistors)', () => {
+    const b: BoardLayout = {
+      parts: [{ id: 'R1', kind: 'resistor', aHole: 'b1', bHole: 'b5' }],
+      jumpers: [], ports: [],
+      dips: [{ id: 'U1', kind: 'opamp-quad', col: 5 }],
+      transistors: [{ id: 'Q1', kind: 'mosfet', col: 20, row: 'b' }],
+    }
+    const n = normalizeBoardOrder(b)
+    expect(n.parts[0].seq).toBe(0)
+    expect(n.dips![0].seq).toBe(1)
+    expect(n.transistors![0].seq).toBe(2)
+    expect(b.parts[0].seq).toBeUndefined() // pure: input untouched
+  })
+
+  it('keeps existing seq values and fills only the missing ones above them', () => {
+    const b: BoardLayout = {
+      parts: [
+        { id: 'R1', kind: 'resistor', aHole: 'b1', bHole: 'b5', seq: 7 },
+        { id: 'R2', kind: 'resistor', aHole: 'c1', bHole: 'c5' },
+      ],
+      jumpers: [], ports: [],
+    }
+    const n = normalizeBoardOrder(b)
+    expect(n.parts[0].seq).toBe(7)
+    expect(n.parts[1].seq).toBe(8)
+  })
+
+  it('nextBoardSeq is one past the highest seq (0 for a fresh board)', () => {
+    expect(nextBoardSeq({ parts: [], jumpers: [], ports: [] })).toBe(0)
+    expect(nextBoardSeq({
+      parts: [{ id: 'R1', kind: 'resistor', aHole: 'b1', bHole: 'b5', seq: 3 }],
+      jumpers: [], ports: [],
+      transistors: [{ id: 'Q1', kind: 'mosfet', col: 20, seq: 9 }],
+    })).toBe(10)
+  })
+})
 
 describe('to92PinHoles (ARB-1 polish: TO-92 placeable in any term row)', () => {
   it('defaults to the top-bank term row b, and honours an explicit row', () => {

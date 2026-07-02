@@ -6,7 +6,8 @@ import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateActio
 import {
   buildHoles, boardNets, boardWidth, boardHeight, PAD, PITCH, CHANNEL_SLOT,
   schematicExpectation, checkEquivalence, boardNodeMap, autoRouteJumpers, type AutoJumper,
-  type BoardLayout, type CheckResult,
+  type BoardLayout, type CheckResult, type PlacedPart, type PlacedDip, type PlacedTransistor,
+  normalizeBoardOrder, nextBoardSeq,
   dipPinHoles, dipCols, holeKey, DIP_TOP_ROW, DIP_BOT_ROW, DIP_DEFS, type DipPkg,
   to92PinHoles, to92Legend, TO92_ROW,
   TERMINALS, type Terminal, POWER_WIRES, PORT_TERMINAL, unboardable,
@@ -473,7 +474,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
       // Carry the schematic part's value so the board render can draw a value-correct body
       // (resistor colour bands, ceramic vs electrolytic cap). ARB-1 polish.
       const part = { id: tool.id, kind: tool.partKind, aHole: pending, bHole: key, value: schematic.components.find((c) => c.id === tool.id)?.value }
-      setBoard((b) => ({ ...b, parts: [...b.parts.filter((p) => p.id !== tool.id), part] }))
+      setBoard((b) => ({ ...b, parts: [...b.parts.filter((p) => p.id !== tool.id), { ...part, seq: nextBoardSeq(b) }] }))
       setPending(null); setTool({ kind: 'select' })
       return
     }
@@ -485,7 +486,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
         return
       }
       const dip = { id: tool.id, kind: tool.partKind, col: h.col }
-      setBoard((b) => ({ ...b, dips: [...(b.dips ?? []).filter((d) => d.id !== tool.id), dip] }))
+      setBoard((b) => ({ ...b, dips: [...(b.dips ?? []).filter((d) => d.id !== tool.id), { ...dip, seq: nextBoardSeq(b) }] }))
       setTool({ kind: 'select' })
       return
     }
@@ -498,7 +499,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
         return
       }
       const tr = { id: tool.id, kind: tool.partKind, col: h.col, row: h.row }
-      setBoard((b) => ({ ...b, transistors: [...(b.transistors ?? []).filter((t) => t.id !== tool.id), tr] }))
+      setBoard((b) => ({ ...b, transistors: [...(b.transistors ?? []).filter((t) => t.id !== tool.id), { ...tr, seq: nextBoardSeq(b) }] }))
       setTool({ kind: 'select' })
       return
     }
@@ -568,7 +569,8 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
         if (isLab) {
           snapshotSchematic?.()
           setSchematic({ components: s.components, wires: s.wires })
-          setBoard({ parts: b.parts, jumpers: b.jumpers, ports: Array.isArray(b.ports) ? b.ports : [], dips: Array.isArray(b.dips) ? b.dips : [], transistors: Array.isArray(b.transistors) ? b.transistors : [] })
+          // normalizeBoardOrder: labs saved before the z-order field stack as they used to (BUG-1)
+          setBoard(normalizeBoardOrder({ parts: b.parts, jumpers: b.jumpers, ports: Array.isArray(b.ports) ? b.ports : [], dips: Array.isArray(b.dips) ? b.dips : [], transistors: Array.isArray(b.transistors) ? b.transistors : [] }))
           const g = d.generators
           if (g && g.w1 && g.w2 && onLoadGenerators) onLoadGenerators(g.w1, g.w2)
           setTool({ kind: 'select' }); setPending(null)
@@ -589,6 +591,113 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
     }
     reader.readAsText(f)
     e.target.value = '' // allow re-loading the same file
+  }
+
+  // ── BUG-1 z-order: one render function per component class so the board can stack ALL placed
+  // components by placement order (`seq`, last placed/moved on top) in a single sorted pass; the
+  // wire layers then draw above every component. Bodies unchanged — only the layering moved. ────
+  function renderPart(p: PlacedPart): ReactNode {
+    const a = pos(p.aHole), b = pos(p.bHole)
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2
+    return (
+      <g key={p.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
+        onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, parts: bb.parts.filter((x) => x.id !== p.id) })); setCheck(null) } }}>
+        {p.kind === 'led' && liveLedCurrents?.has(p.id) && (
+          <title>{`${p.id}: ${(liveLedCurrents.get(p.id)! * 1000).toFixed(2)} mA average forward current`}</title>
+        )}
+        <PartBody kind={p.kind} value={p.value ?? schematic.components.find((c) => c.id === p.id)?.value}
+          ax={a.x} ay={a.y} bx={b.x} by={b.y}
+          glow={p.kind === 'led' ? ledBrightness(liveLedCurrents?.get(p.id) ?? 0) : undefined} />
+        {/* pin dots at the two holes, coloured by net when nets are shown */}
+        <circle cx={a.x} cy={a.y} r={3} fill={(showNets && activeColor.get(nets.get(p.aHole)!)) || '#cfcfcf'} stroke="#000" strokeWidth={0.5} />
+        <circle cx={b.x} cy={b.y} r={3} fill={(showNets && activeColor.get(nets.get(p.bHole)!)) || '#cfcfcf'} stroke="#000" strokeWidth={0.5} />
+        <text x={mx} y={my + 16} fontSize={8} fill={LABEL_INK} textAnchor="middle">{p.id}</text>
+      </g>
+    )
+  }
+  function renderDip(d: PlacedDip): ReactNode {
+    const pins = dipPinHoles(d.kind, d.col); if (!pins) return null
+    const n = dipCols(d.kind)
+    const def = DIP_DEFS[d.kind]
+    // Display the real part name (from the current schematic), falling back to the package.
+    const dipName = exp.dips.find((e) => e.id === d.id)?.name ?? d.name ?? def?.name ?? d.kind
+    const tl = pos(holeKey(DIP_TOP_ROW, d.col)), br = pos(holeKey(DIP_BOT_ROW, d.col + n - 1))
+    // ARB-4: like the real package, the moulded body sits BETWEEN the two pin rows and the
+    // silver legs reach out to the sockets. Same anchor holes as always — geometry frozen.
+    const bx = tl.x - 7, bw = (br.x - tl.x) + 14
+    const INSET = 4.5
+    const by = tl.y + INSET, bh = (br.y - tl.y) - 2 * INSET
+    return (
+      <g key={d.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
+        onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, dips: (bb.dips ?? []).filter((x) => x.id !== d.id) })); setCheck(null) } }}>
+        {/* silver legs, one shaded trapezoid per pin seating into its socket */}
+        {pins.map((k, i) => {
+          const h = pos(k)
+          const isBottom = i < n
+          const edgeY = isBottom ? by + bh : by
+          const holeY = isBottom ? h.y + 1 : h.y - 1
+          return <path key={'leg' + i} d={`M ${h.x - 2.1} ${edgeY} L ${h.x + 2.1} ${edgeY} L ${h.x + 1.2} ${holeY} L ${h.x - 1.2} ${holeY} Z`}
+            fill="url(#arb4-leg)" stroke="#00000044" strokeWidth={0.4} />
+        })}
+        {/* glossy black body with a top specular sheen */}
+        <rect x={bx} y={by} width={bw} height={bh} rx={3} fill="url(#arb4-dip)" stroke="#000000" strokeWidth={0.8} filter="url(#arb4-shadow)" />
+        <rect x={bx + 4} y={by + 2.5} width={bw - 8} height={3.4} rx={1.7} fill="#ffffff" opacity={0.1} />
+        {/* notch on the left edge + pin-1 dimple mark the datasheet orientation */}
+        <path d={`M ${bx + 5} ${by + bh / 2 - 5} a 5 5 0 0 0 0 10`} fill="#101013" stroke="#3a3a40" strokeWidth={1} />
+        <circle cx={bx + 7} cy={by + bh - 5.5} r={2} fill="#0b0b0d" stroke="#404046" strokeWidth={0.6} />
+        {pins.map((k, i) => {
+          const h = pos(k); const net = nets.get(k)!
+          const col = (showNets && activeColor.get(net)) || '#cfcfcf'
+          const isBottom = i < n           // pins 1..n on the bottom row, n+1..2n on top
+          const numY = isBottom ? h.y + 12 : h.y - 7
+          const rails = def?.rails
+          const numCol = rails && i === rails.vpos ? '#e04040' : rails && i === rails.vneg ? '#4a9eff' : '#6b6255'
+          return (
+            <g key={i}>
+              <circle cx={h.x} cy={h.y} r={3.2} fill={col} stroke="#000" strokeWidth={0.5}>
+                <title>{`pin ${i + 1}: ${(def?.fn ?? [])[i] ?? ''}`}</title>
+              </circle>
+              <text x={h.x} y={numY} fontSize={9} fontWeight={800} fill={numCol} textAnchor="middle">{i + 1}</text>
+            </g>
+          )
+        })}
+        <text x={(bx + bx + bw) / 2} y={by + bh / 2 + 3} fontSize={8} fill="#c3c6cc" textAnchor="middle">{d.id} · {dipName}</text>
+      </g>
+    )
+  }
+  function renderTransistor(t: PlacedTransistor): ReactNode {
+    const pins = to92PinHoles(t.col, t.row); if (!pins) return null
+    const legs = pins.map((k) => pos(k))
+    const labels = to92Legend(t.kind)
+    const cx = legs[1].x
+    const legTopY = legs[0].y - 13       // where the legs disappear into the body
+    const bodyBot = legTopY, bodyTop = bodyBot - 24
+    const halfW = (legs[2].x - legs[0].x) / 2 + 7
+    return (
+      <g key={t.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
+        onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, transistors: (bb.transistors ?? []).filter((x) => x.id !== t.id) })); setCheck(null) } }}>
+        {/* legs: one short metallic lead from each hole up to the package face */}
+        {legs.map((lp, i) => {
+          const net = nets.get(pins[i])!
+          const col = (showNets && activeColor.get(net)) || '#cfcfcf'
+          return (
+            <g key={i}>
+              <rect x={lp.x - 0.85} y={legTopY} width={1.7} height={lp.y - legTopY} rx={0.85} fill="url(#arb4-leg)" />
+              <circle cx={lp.x} cy={lp.y} r={3.2} fill={col} stroke="#000" strokeWidth={0.5}>
+                <title>{`${t.id} ${labels[i]}`}</title>
+              </circle>
+              <text x={lp.x} y={lp.y + 12} fontSize={9} fontWeight={800} fill={LABEL_INK} textAnchor="middle">{labels[i]}</text>
+            </g>
+          )
+        })}
+        {/* TO-92 package: flat front (bottom edge), rounded back (top) — datasheet face order */}
+        <path d={`M ${cx - halfW} ${bodyBot} L ${cx + halfW} ${bodyBot} L ${cx + halfW} ${bodyTop + 7} A ${halfW} 7 0 0 0 ${cx - halfW} ${bodyTop + 7} Z`}
+          fill="url(#arb4-to92)" stroke="#0a0a0c" strokeWidth={1} filter="url(#arb4-shadow)" />
+        <path d={`M ${cx - halfW + 4} ${bodyTop + 6} A ${halfW - 4} 5 0 0 1 ${cx + halfW - 4} ${bodyTop + 6}`}
+          fill="none" stroke="#ffffff" strokeOpacity={0.12} strokeWidth={2} />{/* top sheen */}
+        <text x={cx} y={(bodyBot + bodyTop) / 2 + 5} fontSize={8} fill="#c3c6cc" textAnchor="middle">{t.id} · {TR_NAME[t.kind] ?? t.kind}</text>
+      </g>
+    )
   }
 
   return (
@@ -725,6 +834,16 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                 </g>
               )
             })}
+            {/* BUG-1 z-order: all placed components render in ONE pass sorted by placement order
+                (`seq` — the last-placed or last-moved item stacks on top), and every wire layer
+                draws AFTER them, so a part never hides under a chip and wires never hide under
+                parts. Check/nets ignore the order entirely. */}
+            {([
+              ...board.parts.map((p) => ({ seq: p.seq ?? 0, el: renderPart(p) })),
+              ...(board.dips ?? []).map((d) => ({ seq: d.seq ?? 0, el: renderDip(d) })),
+              ...(board.transistors ?? []).map((t) => ({ seq: t.seq ?? 0, el: renderTransistor(t) })),
+            ] as { seq: number; el: ReactNode }[])
+              .sort((x, y) => x.seq - y.seq).map((x) => x.el)}
             {/* standard power distribution — always present, coloured by terminal, not deletable */}
             {POWER_WIRES.map((w, i) => {
               const a = pos(w.a), b = pos(w.b)
@@ -752,109 +871,6 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                 <g key={'aj' + i} style={{ cursor: 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}>
                   <title>{`auto-routed (read-only): ${j.note}`}</title>
                   <JumperWire ax={a.x} ay={a.y} bx={b.x} by={b.y} color={wireColor(j.a, j.b)} dashedCore />
-                </g>
-              )
-            })}
-            {board.parts.map((p) => {
-              const a = pos(p.aHole), b = pos(p.bHole)
-              const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2
-              return (
-                <g key={p.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
-                  onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, parts: bb.parts.filter((x) => x.id !== p.id) })); setCheck(null) } }}>
-                  {p.kind === 'led' && liveLedCurrents?.has(p.id) && (
-                    <title>{`${p.id}: ${(liveLedCurrents.get(p.id)! * 1000).toFixed(2)} mA average forward current`}</title>
-                  )}
-                  <PartBody kind={p.kind} value={p.value ?? schematic.components.find((c) => c.id === p.id)?.value}
-                    ax={a.x} ay={a.y} bx={b.x} by={b.y}
-                    glow={p.kind === 'led' ? ledBrightness(liveLedCurrents?.get(p.id) ?? 0) : undefined} />
-                  {/* pin dots at the two holes, coloured by net when nets are shown */}
-                  <circle cx={a.x} cy={a.y} r={3} fill={(showNets && activeColor.get(nets.get(p.aHole)!)) || '#cfcfcf'} stroke="#000" strokeWidth={0.5} />
-                  <circle cx={b.x} cy={b.y} r={3} fill={(showNets && activeColor.get(nets.get(p.bHole)!)) || '#cfcfcf'} stroke="#000" strokeWidth={0.5} />
-                  <text x={mx} y={my + 16} fontSize={8} fill={LABEL_INK} textAnchor="middle">{p.id}</text>
-                </g>
-              )
-            })}
-            {(board.dips ?? []).map((d) => {
-              const pins = dipPinHoles(d.kind, d.col); if (!pins) return null
-              const n = dipCols(d.kind)
-              const def = DIP_DEFS[d.kind]
-              // Display the real part name (from the current schematic), falling back to the package.
-              const dipName = exp.dips.find((e) => e.id === d.id)?.name ?? d.name ?? def?.name ?? d.kind
-              const tl = pos(holeKey(DIP_TOP_ROW, d.col)), br = pos(holeKey(DIP_BOT_ROW, d.col + n - 1))
-              // ARB-4: like the real package, the moulded body sits BETWEEN the two pin rows and the
-              // silver legs reach out to the sockets. Same anchor holes as always — geometry frozen.
-              const bx = tl.x - 7, bw = (br.x - tl.x) + 14
-              const INSET = 4.5
-              const by = tl.y + INSET, bh = (br.y - tl.y) - 2 * INSET
-              return (
-                <g key={d.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
-                  onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, dips: (bb.dips ?? []).filter((x) => x.id !== d.id) })); setCheck(null) } }}>
-                  {/* silver legs, one shaded trapezoid per pin seating into its socket */}
-                  {pins.map((k, i) => {
-                    const h = pos(k)
-                    const isBottom = i < n
-                    const edgeY = isBottom ? by + bh : by
-                    const holeY = isBottom ? h.y + 1 : h.y - 1
-                    return <path key={'leg' + i} d={`M ${h.x - 2.1} ${edgeY} L ${h.x + 2.1} ${edgeY} L ${h.x + 1.2} ${holeY} L ${h.x - 1.2} ${holeY} Z`}
-                      fill="url(#arb4-leg)" stroke="#00000044" strokeWidth={0.4} />
-                  })}
-                  {/* glossy black body with a top specular sheen */}
-                  <rect x={bx} y={by} width={bw} height={bh} rx={3} fill="url(#arb4-dip)" stroke="#000000" strokeWidth={0.8} filter="url(#arb4-shadow)" />
-                  <rect x={bx + 4} y={by + 2.5} width={bw - 8} height={3.4} rx={1.7} fill="#ffffff" opacity={0.1} />
-                  {/* notch on the left edge + pin-1 dimple mark the datasheet orientation */}
-                  <path d={`M ${bx + 5} ${by + bh / 2 - 5} a 5 5 0 0 0 0 10`} fill="#101013" stroke="#3a3a40" strokeWidth={1} />
-                  <circle cx={bx + 7} cy={by + bh - 5.5} r={2} fill="#0b0b0d" stroke="#404046" strokeWidth={0.6} />
-                  {pins.map((k, i) => {
-                    const h = pos(k); const net = nets.get(k)!
-                    const col = (showNets && activeColor.get(net)) || '#cfcfcf'
-                    const isBottom = i < n           // pins 1..n on the bottom row, n+1..2n on top
-                    const numY = isBottom ? h.y + 12 : h.y - 7
-                    const rails = def?.rails
-                    const numCol = rails && i === rails.vpos ? '#e04040' : rails && i === rails.vneg ? '#4a9eff' : '#6b6255'
-                    return (
-                      <g key={i}>
-                        <circle cx={h.x} cy={h.y} r={3.2} fill={col} stroke="#000" strokeWidth={0.5}>
-                          <title>{`pin ${i + 1}: ${(def?.fn ?? [])[i] ?? ''}`}</title>
-                        </circle>
-                        <text x={h.x} y={numY} fontSize={9} fontWeight={800} fill={numCol} textAnchor="middle">{i + 1}</text>
-                      </g>
-                    )
-                  })}
-                  <text x={(bx + bx + bw) / 2} y={by + bh / 2 + 3} fontSize={8} fill="#c3c6cc" textAnchor="middle">{d.id} · {dipName}</text>
-                </g>
-              )
-            })}
-            {(board.transistors ?? []).map((t) => {
-              const pins = to92PinHoles(t.col, t.row); if (!pins) return null
-              const legs = pins.map((k) => pos(k))
-              const labels = to92Legend(t.kind)
-              const cx = legs[1].x
-              const legTopY = legs[0].y - 13       // where the legs disappear into the body
-              const bodyBot = legTopY, bodyTop = bodyBot - 24
-              const halfW = (legs[2].x - legs[0].x) / 2 + 7
-              return (
-                <g key={t.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
-                  onClick={() => { if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, transistors: (bb.transistors ?? []).filter((x) => x.id !== t.id) })); setCheck(null) } }}>
-                  {/* legs: one short metallic lead from each hole up to the package face */}
-                  {legs.map((lp, i) => {
-                    const net = nets.get(pins[i])!
-                    const col = (showNets && activeColor.get(net)) || '#cfcfcf'
-                    return (
-                      <g key={i}>
-                        <rect x={lp.x - 0.85} y={legTopY} width={1.7} height={lp.y - legTopY} rx={0.85} fill="url(#arb4-leg)" />
-                        <circle cx={lp.x} cy={lp.y} r={3.2} fill={col} stroke="#000" strokeWidth={0.5}>
-                          <title>{`${t.id} ${labels[i]}`}</title>
-                        </circle>
-                        <text x={lp.x} y={lp.y + 12} fontSize={9} fontWeight={800} fill={LABEL_INK} textAnchor="middle">{labels[i]}</text>
-                      </g>
-                    )
-                  })}
-                  {/* TO-92 package: flat front (bottom edge), rounded back (top) — datasheet face order */}
-                  <path d={`M ${cx - halfW} ${bodyBot} L ${cx + halfW} ${bodyBot} L ${cx + halfW} ${bodyTop + 7} A ${halfW} 7 0 0 0 ${cx - halfW} ${bodyTop + 7} Z`}
-                    fill="url(#arb4-to92)" stroke="#0a0a0c" strokeWidth={1} filter="url(#arb4-shadow)" />
-                  <path d={`M ${cx - halfW + 4} ${bodyTop + 6} A ${halfW - 4} 5 0 0 1 ${cx + halfW - 4} ${bodyTop + 6}`}
-                    fill="none" stroke="#ffffff" strokeOpacity={0.12} strokeWidth={2} />{/* top sheen */}
-                  <text x={cx} y={(bodyBot + bodyTop) / 2 + 5} fontSize={8} fill="#c3c6cc" textAnchor="middle">{t.id} · {TR_NAME[t.kind] ?? t.kind}</text>
                 </g>
               )
             })}

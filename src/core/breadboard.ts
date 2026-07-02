@@ -319,16 +319,37 @@ export function to92Legend(kind: SchKind): string[] {
   return kind === 'mosfet' ? ['D', 'G', 'S'] : ['C', 'B', 'E']
 }
 
-export interface PlacedPart { id: string; kind: SchKind; value?: number; aHole: string; bHole: string }
+// `seq` is the item's placement order (BUG-1 z-order): the board renders components sorted by it,
+// so the last-placed (or last-moved) item stacks on top. Purely presentational — Check/nets ignore it.
+export interface PlacedPart { id: string; kind: SchKind; value?: number; aHole: string; bHole: string; seq?: number }
 export interface PlacedPort { port: string; hole: string }
 // A placed DIP is anchored by its top-left pin column; pin holes derive via dipPinHoles(). `kind` is
 // the board DIP package (F-4), not the schematic kind. `name` is the display label (the real part).
-export interface PlacedDip { id: string; kind: DipPkg; col: number; name?: string }
+export interface PlacedDip { id: string; kind: DipPkg; col: number; name?: string; seq?: number }
 // A placed TO-92 transistor anchored by its left leg column; leg holes derive via to92PinHoles().
-export interface PlacedTransistor { id: string; kind: SchKind; col: number; row?: Row }
+export interface PlacedTransistor { id: string; kind: SchKind; col: number; row?: Row; seq?: number }
 export interface BoardLayout { parts: PlacedPart[]; jumpers: Jumper[]; ports: PlacedPort[]; dips?: PlacedDip[]; transistors?: PlacedTransistor[] }
 
 export const emptyBoard = (): BoardLayout => ({ parts: [], jumpers: [], ports: [], dips: [], transistors: [] })
+
+// ── BUG-1 z-order helpers ────────────────────────────────────────────────────────────────────────
+// Boards saved before `seq` existed get order = array sequence in the old fixed render order
+// (parts, then DIPs, then transistors), so a loaded lab stacks exactly as it used to. Items that
+// already carry a seq keep it; only the missing ones are filled, above the highest existing value.
+export function normalizeBoardOrder(b: BoardLayout): BoardLayout {
+  let n = nextBoardSeq(b)
+  const fill = <T extends { seq?: number }>(arr: T[]): T[] =>
+    arr.map((it) => (typeof it.seq === 'number' ? it : { ...it, seq: n++ }))
+  return { ...b, parts: fill(b.parts), dips: fill(b.dips ?? []), transistors: fill(b.transistors ?? []) }
+}
+
+// The next placement-order value: one past the highest seq on the board (0 for a fresh board).
+export function nextBoardSeq(b: BoardLayout): number {
+  let n = 0
+  for (const it of [...b.parts, ...(b.dips ?? []), ...(b.transistors ?? [])])
+    if (typeof it.seq === 'number') n = Math.max(n, it.seq + 1)
+  return n
+}
 
 // What the schematic expects on the board: its R/C/L parts (with each leg's net) and its ports.
 export interface SchematicExpectation {

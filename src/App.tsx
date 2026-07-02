@@ -17,7 +17,7 @@ import Welcome from './components/Welcome'
 import Quickstart from './components/Quickstart'
 import ErrorBoundary from './components/ErrorBoundary'
 import { EXAMPLES } from './core/examples'
-import { type BoardLayout, PLACEABLE_KINDS, DIP_KINDS, autoRouteJumpers, buildHoles } from './core/breadboard'
+import { type BoardLayout, PLACEABLE_KINDS, DIP_KINDS, autoRouteJumpers, buildHoles, normalizeBoardOrder } from './core/breadboard'
 import Voltmeter from './components/Voltmeter'
 import PowerSupply from './components/PowerSupply'
 import './App.css'
@@ -81,7 +81,8 @@ function loadStoredBoard(): BoardLayout {
     const raw = localStorage.getItem(BOARD_KEY)
     if (raw) {
       const d = JSON.parse(raw)
-      if (Array.isArray(d.parts) && Array.isArray(d.jumpers) && Array.isArray(d.ports)) return d
+      // normalizeBoardOrder: boards stored before the z-order field stack as they used to (BUG-1)
+      if (Array.isArray(d.parts) && Array.isArray(d.jumpers) && Array.isArray(d.ports)) return normalizeBoardOrder(d)
     }
   } catch { /* ignore corrupt storage */ }
   return { parts: [], jumpers: [], ports: [] }
