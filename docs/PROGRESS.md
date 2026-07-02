@@ -10,9 +10,19 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ## Next session: start here (updated 2026-07-02, batch 4)
 
-**QS-4 (Quickstart redesign — paginated, orientation-first) is DONE** per
-`docs/specs/quickstart-redesign.md`. `Quickstart.tsx` re-architected; **App.tsx untouched** (same
-`onGoTo`/`onLoadExample` props, same nav entry, gold-pulse `.nav-hint` unaffected).
+**QS-4 (Quickstart redesign — paginated, orientation-first) is DONE**, rebuilt to andre's LOCKED
+reader-aligned chapter order (the entry below describes the first build; the locked-order rebuild
+supersedes its sequence): orientation → bench map → **flashlight opener** (led-pwm: LED lights via
+the ARB-2 board glow with Auto wiring, then dim via duty cycle — no bulb/switch component) →
+divider quick win → **signal→Spectrum+digitization** (standalone W1 → spectrum, the original
+pedagogy) → **RC in time** (scope) → **RC in frequency** (Bode, "same circuit, two views") →
+**op-amps** (NEW page: inv-amp ×−2 on the scope + drive-into-clipping beat) → **I-V curves**
+(Zener XY + Curve Tracer families merged) → build capstone → where-next. Flat 11-chapter menu (no
+Tour submenu — spec allows flat). Course-neutral (no course names / lab numbers — one EEC1 mention
+in the first orientation copy was scrubbed). Live-verified: menu order, "Take the tour" → the
+flashlight, ticks, Next/Back. Cowork will supply/refine finished copy — structure is the deliverable.
+`Quickstart.tsx` only; **App.tsx untouched** (same `onGoTo`/`onLoadExample` props, same nav entry,
+gold-pulse `.nav-hint` unaffected).
 - **Structure** — 9 pages on a spine: orientation → bench-at-a-glance → first-measurement (quick
   win) → 4 Tour pages (Signal Gen+Scope · Spectrum+digitization · Network · Curve Tracer, grouped
   under a "Tour the bench" menu label) → build capstone → where-next. A left chapter-menu rail

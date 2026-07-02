@@ -1,10 +1,11 @@
 // Quickstart panel (Track H / QS-4) — paginated, orientation-first onboarding. A chapter menu
-// drives a one-page-at-a-time view (no long scroll): an orientation screen first, then the bench
-// map, a 2-minute quick win, a modular instrument tour (submenu), the build-it capstone, and a
-// where-next page. Next/Back walk the spine; the menu doubles as the progress indicator. All step
-// content and SVG diagrams are reused from QS-1/QS-2 — re-sequenced, not rewritten. The step
-// buttons drive the app (load example + jump to instrument) exactly as before. Static content
-// only; touches no core/ signal math. See docs/specs/quickstart-redesign.md.
+// drives a one-page-at-a-time view (no long scroll); Next/Back walk the spine; the menu doubles as
+// the progress indicator. Chapter order is andre-locked (2026-07-02): a reader-aligned arc —
+// orientation → bench map → flashlight opener → divider → signal/spectrum → RC in time → RC in
+// frequency → op-amps → I-V curves → build capstone → where next. Step content and SVG diagrams
+// are reused from QS-1/QS-2 (re-sequenced, not rewritten); the step buttons drive the app (load
+// example + jump to instrument) exactly as before. Course-neutral: no course names or lab numbers.
+// Static content only; touches no core/ signal math. See docs/specs/quickstart-redesign.md.
 import { useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import './Instrument.css'
@@ -17,23 +18,22 @@ interface Props {
 }
 
 type PageId =
-  | 'orientation' | 'bench' | 'first'
-  | 'tour-scope' | 'tour-spectrum' | 'tour-network' | 'tour-tracer'
-  | 'build' | 'next'
+  | 'orientation' | 'bench' | 'flashlight' | 'divider' | 'spectrum'
+  | 'rc-time' | 'rc-freq' | 'opamps' | 'iv' | 'build' | 'next'
 
 // The guided-tour spine: Next/Back walk this order; the menu can jump anywhere.
-const SPINE: PageId[] = ['orientation', 'bench', 'first', 'tour-scope', 'tour-spectrum', 'tour-network', 'tour-tracer', 'build', 'next']
+const SPINE: PageId[] = ['orientation', 'bench', 'flashlight', 'divider', 'spectrum', 'rc-time', 'rc-freq', 'opamps', 'iv', 'build', 'next']
 
-// `sub: true` marks the four Tour pages — they render indented under the "Tour the bench" group
-// label in the menu, and sit inside the spine between 'first' and 'build'.
-const CHAPTERS: { id: PageId; title: string; time?: string; sub?: boolean }[] = [
+const CHAPTERS: { id: PageId; title: string; time?: string }[] = [
   { id: 'orientation', title: 'Start here', time: '~1 min' },
   { id: 'bench', title: 'The bench at a glance', time: '~1 min' },
-  { id: 'first', title: 'Your first measurement', time: '~2 min' },
-  { id: 'tour-scope', title: 'Signal Gen + Scope', time: '~2 min', sub: true },
-  { id: 'tour-spectrum', title: 'Spectrum + digitization', time: '~2 min', sub: true },
-  { id: 'tour-network', title: 'Network Analyzer', time: '~1 min', sub: true },
-  { id: 'tour-tracer', title: 'Curve Tracer', time: '~2 min', sub: true },
+  { id: 'flashlight', title: 'A flashlight', time: '~2 min' },
+  { id: 'divider', title: 'Your first measurement', time: '~2 min' },
+  { id: 'spectrum', title: 'Signals + the spectrum', time: '~2 min' },
+  { id: 'rc-time', title: 'A filter, in time', time: '~2 min' },
+  { id: 'rc-freq', title: 'The same filter, in frequency', time: '~1 min' },
+  { id: 'opamps', title: 'Op-amps', time: '~2 min' },
+  { id: 'iv', title: 'I-V curves', time: '~2 min' },
   { id: 'build', title: 'Build it for real', time: '~5 min' },
   { id: 'next', title: 'Where next' },
 ]
@@ -78,8 +78,6 @@ const BRIDGE: { real: string; panel: string; id: string }[] = [
 
 // The one signal-flow picture: sources (DAC out) → your circuit → readers (ADC in).
 function SignalFlow() {
-  const box: CSSProperties = {}
-  void box
   return (
     <svg viewBox="0 0 760 150" style={{ width: '100%', height: 'auto' }} role="img"
       aria-label="Signal flow: the supplies and W1/W2 generators drive your circuit; the scope, voltmeter, spectrum and network analyzers read it back.">
@@ -127,7 +125,7 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
   }
   const spineIdx = SPINE.indexOf(page)
 
-  // ── the chapter pages (content reused from QS-1/QS-2, re-sequenced) ───────────────────────────
+  // ── the chapter pages (content reused from QS-1/QS-2, re-sequenced per the locked arc) ────────
 
   function pageOrientation() {
     return (
@@ -148,9 +146,9 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
         <p style={note}>
           That's the whole machine: <b>DAC out</b> (supplies + W1/W2) turns numbers into voltages,
           your circuit responds, and <b>ADC in</b> (scope, voltmeter, analyzers) turns voltages back
-          into numbers. You'll be able to power and probe circuits, watch waveforms live, sweep
-          filters, trace transistor curves — and then transfer a working design onto a breadboard
-          and have the app <b>Check</b> your wiring.
+          into numbers. You'll be able to light an LED, power and probe circuits, watch waveforms
+          live, sweep filters, trace transistor curves — and then transfer a working design onto a
+          breadboard and have the app <b>Check</b> your wiring.
         </p>
         <p style={{ ...note, marginTop: 8 }}>
           <b style={{ color: GOLD }}>To be clear:</b> this is a fast <b>simulation</b> — it is not
@@ -158,7 +156,7 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
           for the bench or for Analog Devices' Scopy software.
         </p>
         <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
-          <button style={goBtn} onClick={() => setPage('first')}>Take the 5-minute tour →</button>
+          <button style={goBtn} onClick={() => setPage('flashlight')}>Take the tour →</button>
           <button style={secondaryBtn} onClick={() => setPage('bench')}>Jump to an instrument →</button>
         </div>
       </>
@@ -192,7 +190,48 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
     )
   }
 
-  function pageFirst() {
+  function pageFlashlight() {
+    return (
+      <>
+        <h2 style={h2}>A flashlight — the simplest circuit that does something</h2>
+        <p style={{ marginTop: 4 }}>
+          A source pushes current through a resistor into an <b>LED</b>, and it lights up. That's a
+          flashlight — the whole idea of a circuit in three parts. Here the drive is a square wave,
+          which switches the LED on and off faster than the eye can see, so its brightness follows
+          the <i>average</i> current: that's <b>PWM dimming</b>, the way real devices dim LEDs.
+        </p>
+        <Step n={1}>
+          <b>Load the LED circuit.</b> W1 drives a 470 Ω resistor into a red LED. The circuit
+          simulates the moment it lands.
+          <div style={{ marginTop: 8 }}>
+            <button style={goBtn} onClick={() => { onLoadExample('led-pwm'); onGoTo('schematic') }}>Load the LED circuit →</button>
+          </div>
+        </Step>
+        <Step n={2}>
+          <b>Watch it light up.</b> Open the Board view and place the two parts (the side panel
+          lists them — click a part, then click board holes for its legs). Set <b>Jumper wiring</b>{' '}
+          to <b>Auto</b> and the wiring is generated for you — and the LED <b>glows</b> with the
+          simulated current, like the real part would.
+          <div style={{ marginTop: 8 }}>
+            <button style={goBtn} onClick={() => onGoTo('breadboard')}>Open the Board →</button>
+          </div>
+        </Step>
+        <Step n={3}>
+          <b>Dim it.</b> Open the Signal Generator and drag the <b>duty cycle</b> down — the LED
+          spends less of each cycle on, the average current drops, and the glow dims smoothly.
+          <div style={{ marginTop: 8 }}>
+            <button style={goBtn} onClick={() => onGoTo('siggen')}>Open Signal Generator →</button>
+          </div>
+        </Step>
+        <p style={note}>
+          No switch component needed — the source itself is the switch. From here on, everything is
+          this same loop with better instruments: drive a circuit, look at what it does.
+        </p>
+      </>
+    )
+  }
+
+  function pageDivider() {
     return (
       <>
         <h2 style={h2}>Your first measurement — a voltage divider</h2>
@@ -273,8 +312,7 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
           Both divider channels are <i>single-ended</i> — each reads one node relative to ground,
           because its <b>−</b> input is wired to ground. Move a <b>−</b> input onto another node
           instead and that channel becomes <i>differential</i>, reading the voltage between the two
-          points. The diode I-V example uses a differential pair to read the voltage <i>across</i>{' '}
-          the diode, which has neither end at ground.
+          points — a number no single-ended reading gives you.
         </p>
         <p style={{ fontSize: 12.5, color: '#ffbf00', marginTop: 8 }}>
           Always connect <b>both</b> inputs, on purpose. The − input is <b>not</b> internally grounded —
@@ -286,47 +324,29 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
     )
   }
 
-  function pageTourScope() {
+  function pageSpectrum() {
     return (
       <>
-        <h2 style={h2}>Tour: Signal Generator + Oscilloscope</h2>
+        <h2 style={h2}>Generate a signal — and see its spectrum</h2>
         <p style={{ marginTop: 4 }}>
-          The two <b>W</b> outputs are your signal sources; the Oscilloscope shows voltage <i>vs time</i>.
-          Set a wave on W1, watch it on the scope — that is normal time-base (<b>YT</b>) mode, with
-          Time/div setting the window and each channel its own Volts/div.
+          A waveform lives in two worlds: <i>time</i> (the shape you'd sketch) and <i>frequency</i>{' '}
+          (the tones it's made of). The Signal Generator makes the waveform; the Spectrum Analyzer
+          shows its frequency content — a square wave, for instance, is a stack of odd harmonics.
         </p>
         <Step n={1}>
-          <b>Load a signal to work with.</b> The divider from the last step has no generator — this
-          loads a W1-driven circuit (an RC filter) and opens the scope, so you have a live waveform.
-          <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => { onLoadExample('rc-lp'); onGoTo('scope') }}>Load a W1 signal → Oscilloscope →</button></div>
-        </Step>
-        <Step n={2}>
-          <b>Set a signal.</b> Open the Signal Generator, pick a wave / frequency / amplitude on W1
-          (W2 is the second source), and press Run.
+          <b>Set a signal.</b> Open the Signal Generator: W1 defaults to a 1 kHz square wave. Pick a
+          wave shape, frequency, and amplitude, and press Run. (No circuit needed — the analyzers can
+          read the generator directly.)
           <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('siggen')}>Open Signal Generator →</button></div>
         </Step>
-        <Step n={3}>
-          <b>See it in time.</b> Open the Oscilloscope — voltage vs time (YT). Time/div zooms the
-          window; the trigger holds the wave steady.
-          <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('scope')}>Open Oscilloscope →</button></div>
+        <Step n={2}>
+          <b>See its spectrum.</b> Open the Spectrum Analyzer — for a square wave you'll see the
+          fundamental and its odd harmonics (1, 3, 5 kHz…), each a clean peak, with a noise floor
+          far below.
+          <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('spectrum')}>Open Spectrum Analyzer →</button></div>
         </Step>
-        <Step n={4}>
-          <b>Switch to XY — trace an I-V curve.</b> XY mode plots CH1 (X = voltage across the part)
-          against CH2 (Y = its current), drawing the device's I-V curve directly. The <b>Zener</b> is
-          the showcase: you see the forward turn-on (~0.7 V) <i>and</i> the reverse breakdown
-          (~−3.3 V). This loads it straight into XY; use the scope's XY/YT toggle to switch back.
-          <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => { onLoadExample('zener-iv'); onGoTo('scope') }}>Load Zener I-V (XY) →</button></div>
-        </Step>
-      </>
-    )
-  }
-
-  function pageTourSpectrum() {
-    return (
-      <>
-        <h2 style={h2}>Tour: Spectrum — and how the M2K digitizes</h2>
-        <p style={{ marginTop: 4 }}>
-          Behind every reading is digitization: the M2K samples voltages with a <b>12-bit ADC</b>, and
+        <p style={{ marginTop: 14 }}>
+          That floor is digitization at work: the M2K samples voltages with a <b>12-bit ADC</b>, and
           the Spectrum Analyzer shows levels in <b>dBFS</b> — decibels relative to <i>full scale</i>.
           <b> 0 dBFS</b> is the ADC's full-scale peak (here ±2.5 V). Rounding each sample to one of the
           ADC's steps adds a little noise, which sets a <i>floor</i> you cannot see below — and more bits
@@ -368,52 +388,127 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
           The gap between your tone and the floor is the dynamic range you actually have. The Spectrum
           Analyzer's <b>Learning Mode</b> lets you drop the bit depth to 8 or 4 and watch the floor rise —
           the clearest way to feel what "12-bit" buys you.
-          <span style={{ display: 'block', marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('spectrum')}>Open Spectrum Analyzer →</button></span>
         </p>
       </>
     )
   }
 
-  function pageTourNetwork() {
+  function pageRcTime() {
     return (
       <>
-        <h2 style={h2}>Tour: Network Analyzer</h2>
+        <h2 style={h2}>A filter, in time</h2>
         <p style={{ marginTop: 4 }}>
-          The Network Analyzer sweeps frequency and plots gain (and phase) against it — a <b>Bode</b>{' '}
-          plot. Load the RC low-pass and you will see it pass low frequencies and roll off above ~1 kHz
-          (the −3 dB corner).
+          Now put a circuit between the generator and the scope. An <b>RC low-pass</b> lets slow
+          wiggles through and smooths out fast ones. The Oscilloscope shows voltage <i>vs time</i>{' '}
+          (<b>YT</b> mode) — with Time/div setting the window and each channel its own Volts/div —
+          so you can see the input and the filtered output together.
         </p>
         <Step n={1}>
-          <b>Sweep a filter.</b> Load the RC low-pass and open the Network Analyzer to see its Bode curve.
-          <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => { onLoadExample('rc-lp'); onGoTo('network') }}>Load RC low-pass → Network Analyzer →</button></div>
+          <b>Load the RC low-pass.</b> W1 drives the filter; the scope shows CH2 = the input and
+          CH1 = the output, live.
+          <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => { onLoadExample('rc-lp'); onGoTo('scope') }}>Load RC low-pass → Oscilloscope →</button></div>
+        </Step>
+        <Step n={2}>
+          <b>Play with the signal.</b> Open the Signal Generator and raise W1's frequency: the output
+          shrinks and lags as the filter fights the faster input. Try a square wave and watch the
+          corners round off — that's high frequencies being removed, visible in time.
+          <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('siggen')}>Open Signal Generator →</button></div>
+        </Step>
+        <Step n={3}>
+          <b>Hold it steady.</b> On the scope, Time/div zooms the window and the <b>trigger</b> holds
+          the wave still — the same controls as the bench instrument.
+          <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('scope')}>Open Oscilloscope →</button></div>
         </Step>
       </>
     )
   }
 
-  function pageTourTracer() {
+  function pageRcFreq() {
     return (
       <>
-        <h2 style={h2}>Tour: the Curve Tracer</h2>
+        <h2 style={h2}>The same filter, in frequency</h2>
         <p style={{ marginTop: 4 }}>
-          A transistor isn't one number, it's a <i>family</i> of output curves. The Curve Tracer sweeps
-          the drain/collector voltage and overlays one curve per gate/base step, so you read the device's
-          character at a glance: a MOSFET's triode-to-saturation <b>I<sub>d</sub> vs V<sub>ds</sub></b> at
-          each V<sub>gs</sub>, or a BJT's <b>I<sub>c</sub> vs V<sub>ce</sub></b> at each base step.
+          You just watched the RC low-pass shrink a fast signal, one frequency at a time. The{' '}
+          <b>Network Analyzer</b> does that experiment for you across a whole sweep and plots gain
+          (and phase) against frequency — a <b>Bode</b> plot. Same circuit, second view: flat where
+          it passes, rolling off above the corner (−3 dB at ~1 kHz).
+        </p>
+        <Step n={1}>
+          <b>Sweep the filter.</b> Load the RC low-pass and open the Network Analyzer to see its Bode
+          curve — the whole story your scope experiment sampled point by point.
+          <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => { onLoadExample('rc-lp'); onGoTo('network') }}>Load RC low-pass → Network Analyzer →</button></div>
+        </Step>
+        <p style={note}>
+          This time↔frequency pairing is the working rhythm of the bench: sketch it on the scope,
+          characterize it on the analyzer. Any circuit you draw here can be viewed both ways.
+        </p>
+      </>
+    )
+  }
+
+  function pageOpamps() {
+    return (
+      <>
+        <h2 style={h2}>Op-amps — gain you can set with two resistors</h2>
+        <p style={{ marginTop: 4 }}>
+          Passive parts can only shrink a signal; an <b>op-amp</b> gives you gain. The classic
+          inverting amplifier sets its gain with just two resistors — gain = −R<sub>f</sub>/R
+          <sub>in</sub> — and the op-amp here is a real kit part (the OP484), simulated with its real
+          bandwidth and rail limits, not a textbook ideal.
+        </p>
+        <Step n={1}>
+          <b>Load the inverting amp.</b> Gain ×−2 (20 kΩ / 10 kΩ). On the scope, CH2 is the input
+          and CH1 the output: twice as tall and flipped upside-down — the minus sign, live.
+          <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => { onLoadExample('inv-amp'); onGoTo('scope') }}>Load inverting amp → Oscilloscope →</button></div>
+        </Step>
+        <Step n={2}>
+          <b>Find its limits.</b> Open the Signal Generator and raise the amplitude until the output
+          flattens against the supply rails — <b>clipping</b>, exactly what the real part does. Back
+          the amplitude off and it's clean again.
+          <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('siggen')}>Open Signal Generator →</button></div>
+        </Step>
+        <p style={note}>
+          The non-inverting amp, integrator, differentiator, and summing amp are all in the Examples
+          menu, each built from the same kit op-amp.
+        </p>
+      </>
+    )
+  }
+
+  function pageIv() {
+    return (
+      <>
+        <h2 style={h2}>I-V curves — a part's whole character in one picture</h2>
+        <p style={{ marginTop: 4 }}>
+          Resistors are straight lines on an I-V plot; interesting parts aren't. Sweep the voltage
+          across a device while measuring its current and you get its <b>I-V curve</b> — the
+          fingerprint that says diode, Zener, or transistor.
+        </p>
+        <Step n={1}>
+          <b>Trace a Zener, live.</b> The scope's <b>XY mode</b> plots CH1 (X = voltage across the
+          part) against CH2 (Y = its current), drawing the I-V curve directly. The <b>Zener</b> is
+          the showcase: you see the forward turn-on (~0.7 V) <i>and</i> the reverse breakdown
+          (~−3.3 V). This loads it straight into XY; use the scope's XY/YT toggle to switch back.
+          <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => { onLoadExample('zener-iv'); onGoTo('scope') }}>Load Zener I-V (XY) →</button></div>
+        </Step>
+        <p style={{ marginTop: 14 }}>
+          A transistor goes further: it isn't one curve but a <i>family</i> — one output curve per
+          gate/base step. The <b>Curve Tracer</b> sweeps the drain/collector voltage and overlays the
+          family: a MOSFET's <b>I<sub>d</sub> vs V<sub>ds</sub></b> at each V<sub>gs</sub>, or a
+          BJT's <b>I<sub>c</sub> vs V<sub>ce</sub></b> at each base step.
         </p>
         <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 8 }}>
           Under the hood it's the real bench trick: <b>W1</b> ramps the drain/collector voltage, <b>W2</b>{' '}
           sets a constant gate/base bias, and a <b>sense resistor</b> turns current into a voltage the ADC
           can read (I = V<sub>sense</sub> / R<sub>sense</sub>). The real M2K traces one curve at a time; the
-          twin automates the stepped passes and draws the whole labelled family in one shot. Tune the
-          <b> sweep max</b>, <b>ramp</b>, and <b>step list</b> to spread or add curves.
+          twin automates the stepped passes and draws the whole labelled family in one shot.
         </p>
-        <Step n={1}>
+        <Step n={2}>
           <b>Load the MOSFET family.</b> The <b>ZVN2110A</b> NMOS swept at five gate steps. This loads
           it and opens the Curve Tracer, where the family draws itself (auto-run).
           <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => { onLoadExample('nmos-curve-family'); onGoTo('curvetracer') }}>Load MOSFET curve family → Curve Tracer →</button></div>
         </Step>
-        <Step n={2}>
+        <Step n={3}>
           <b>Swap the device, retrace.</b> Load the <b>2N3904</b> NPN family and the same panel
           redraws as <b>I<sub>c</sub> vs V<sub>ce</sub></b>. That's the real payoff: change the
           transistor in any tracer circuit (W1 + W2 + sense resistor), retrace, and you immediately
@@ -488,7 +583,7 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
         <Step n={8}>
           <b>Save it for your records.</b> In the Voltmeter, press <b>Export PNG</b> to save the
           readings (title and per-channel labels are included). Annotate your name on top, the same
-          way you would a bench screenshot, and submit it.
+          way you would a bench screenshot.
           <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('voltmeter')}>Open Voltmeter →</button></div>
         </Step>
 
@@ -554,31 +649,10 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
   }
 
   const PAGE_RENDER: Record<PageId, () => ReactNode> = {
-    orientation: pageOrientation, bench: pageBench, first: pageFirst,
-    'tour-scope': pageTourScope, 'tour-spectrum': pageTourSpectrum,
-    'tour-network': pageTourNetwork, 'tour-tracer': pageTourTracer,
-    build: pageBuild, next: pageNext,
-  }
-
-  // ── the chapter menu (doubles as the progress indicator) ──────────────────────────────────────
-  function menuItem(c: (typeof CHAPTERS)[number]) {
-    const current = page === c.id
-    const seen = visitedStore.has(c.id)
-    return (
-      <button key={c.id} onClick={() => setPage(c.id)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left',
-          padding: c.sub ? '5px 8px 5px 22px' : '6px 8px', fontSize: c.sub ? 12 : 12.5,
-          background: current ? 'rgba(255,191,0,0.14)' : 'transparent',
-          border: 'none', borderLeft: current ? `3px solid ${GOLD}` : '3px solid transparent',
-          color: current ? GOLD : seen ? 'var(--text-primary)' : 'var(--text-secondary)',
-          fontWeight: current ? 700 : 500, cursor: 'pointer', borderRadius: 3,
-        }}>
-        <span style={{ flex: 1 }}>{c.title}</span>
-        {seen && !current && <span style={{ color: 'var(--theory-color)', fontSize: 11 }}>✓</span>}
-        {c.time && <span style={{ color: 'var(--text-secondary)', fontSize: 10.5 }}>{c.time}</span>}
-      </button>
-    )
+    orientation: pageOrientation, bench: pageBench, flashlight: pageFlashlight,
+    divider: pageDivider, spectrum: pageSpectrum,
+    'rc-time': pageRcTime, 'rc-freq': pageRcFreq,
+    opamps: pageOpamps, iv: pageIv, build: pageBuild, next: pageNext,
   }
 
   return (
@@ -586,19 +660,27 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
       <div className="display-area">
         <div className="display-header"><span className="display-title">Quickstart</span></div>
         <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-          {/* chapter menu rail */}
+          {/* chapter menu rail — doubles as the progress indicator */}
           <nav style={{ width: 200, flex: '0 0 auto', overflowY: 'auto', padding: '14px 6px', borderRight: '1px solid var(--border)' }}>
-            {CHAPTERS.filter((c) => !c.sub).map((c) => (
-              c.id === 'build'
-                ? [
-                    <div key="tour-head" style={{ padding: '8px 8px 2px', fontSize: 11, letterSpacing: 0.6, color: 'var(--text-secondary)', textTransform: 'uppercase' as const }}>
-                      Tour the bench
-                    </div>,
-                    ...CHAPTERS.filter((s) => s.sub).map(menuItem),
-                    menuItem(c),
-                  ]
-                : menuItem(c)
-            ))}
+            {CHAPTERS.map((c) => {
+              const current = page === c.id
+              const seen = visitedStore.has(c.id)
+              return (
+                <button key={c.id} onClick={() => setPage(c.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left',
+                    padding: '6px 8px', fontSize: 12.5,
+                    background: current ? 'rgba(255,191,0,0.14)' : 'transparent',
+                    border: 'none', borderLeft: current ? `3px solid ${GOLD}` : '3px solid transparent',
+                    color: current ? GOLD : seen ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontWeight: current ? 700 : 500, cursor: 'pointer', borderRadius: 3,
+                  }}>
+                  <span style={{ flex: 1 }}>{c.title}</span>
+                  {seen && !current && <span style={{ color: 'var(--theory-color)', fontSize: 11 }}>✓</span>}
+                  {c.time && <span style={{ color: 'var(--text-secondary)', fontSize: 10.5 }}>{c.time}</span>}
+                </button>
+              )
+            })}
           </nav>
           {/* one chapter at a time */}
           <div key={page} style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: 'clamp(14px, 2.5vw, 24px)', lineHeight: 1.65, color: 'var(--text-primary)' }}>
