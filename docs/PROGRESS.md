@@ -55,14 +55,26 @@ per `docs/specs/board-autoroute.md`; Claude Code to build+commit on the host.
   No-circuit Spectrum floor sits on the −104 dBFS theory line at 12-bit (canary eyeballed too).
 
 
+**Example added (spec `docs/specs/tia-ac-example.md`, built by CC 2026-07-02):** `tia-ac` —
+"Transimpedance amp — AC (current → voltage, OP484)", the time-domain complement to `tia-photodiode`
+(DC op-point only). W1 (0.2 V 1 kHz sine) through Rin 10 k injects an emulated modulated photocurrent
+into the OP484 virtual-ground summing node; Rf 100 k + Cf 100 p → V_out = −(Rf/Rin)·V_W1, ±2 V
+inverted, ~16 kHz band-limit; group Amplifiers, entry per the spec verbatim. Dedicated end-to-end
+`.tran` test (real ngspice via `applyGeneratorParams` + `sampleNodeTransient`): amplitude ∈ [1.6,
+2.4] V, centred (<0.2 V), gain ∈ [9, 11], out·in dot-product < 0 (inversion); the FB-2 sweep covers
+nets/probes automatically. Chrome-verified on the scope: CH1 clean inverted ±2 V sine at 1 V/div,
+CH2 the 0.2 V drive at 0.1 V/div, CH2 auto-enabled by the in-sim gating. No model/netlist change,
+no `core/signal.ts`.
+
 **Example added (Cowork spec `docs/specs/led-pwm-example.md`, 2026-07-01):** `led-pwm` — "PWM-driven
 LED (breadboard glow)", the one-click home for the ARB-2 board glow. W1 (0–5 V 1 kHz square) → 470 Ω
 → red LED (Vf 1.8) → GND, 1+ on the drive; group Passive. Built to the spec's schematic verbatim
 (coords verified). Tests: the FB-2 sweep picks it up automatically + a dedicated end-to-end `.tran`
 (real ngspice, driven via `applyGeneratorParams` exactly as App does) reading ~3 mA average forward
 current at 50 % duty via `ledAverageCurrents` — mid-glow on the log curve. 253/253, build clean, no
-`core/signal.ts`. ⚠ Browser pass pending (load → CH1 square, transfer → glow, duty sweep dims) —
-headless caveat as usual. Follow-up idea (spec's optional stretch, NOT built): a `board?: Board`
+`core/signal.ts`. Browser pass (CC, 2026-07-02): loads, transfers to the board, and auto-routes to a
+passing Check (it was the ARB-3 live-verification circuit); the glow/duty-sweep eyeball is still
+worth a moment on a bench with the sim running. Follow-up idea (spec's optional stretch, NOT built): a `board?: Board`
 preset on `Example` so an example can land pre-placed on the breadboard and glow immediately.
 
 **Ad-hoc housekeeping (andre, 2026-07-01, after ARB-2):** deleting a schematic part now takes its

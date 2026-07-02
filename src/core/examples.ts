@@ -324,6 +324,48 @@ export const EXAMPLES: Example[] = [
     },
   },
   {
+    id: 'tia-ac', name: 'Transimpedance amp — AC (current → voltage, OP484)', group: 'Amplifiers',
+    blurb: 'A transimpedance amplifier excited in the TIME DOMAIN — the AC complement to the ' +
+      '"Photodiode TIA" example (which is a DC operating point + Network-Analyzer Bode). A photodiode’s ' +
+      'signal is a current, so here W1 through a 10 k resistor (Rin) injects a known modulated current ' +
+      'I ≈ V_W1 / Rin into the op-amp’s virtual-ground summing node — an EMULATED modulated ' +
+      'photocurrent. The kit OP484 (rail-to-rail, auto ±5 V) converts it to a voltage: ' +
+      'V_out = −(Rf/Rin)·V_W1, i.e. transimpedance Rf = 100 kΩ. With the default 0.2 V 1 kHz ' +
+      'sine, CH1 (out) is a clean inverted ±2 V sine and CH2 shows the drive. Raise W1’s frequency ' +
+      'toward the Cf·Rf corner (≈ 16 kHz, Cf 100 pF) and the output rolls off; open the Network ' +
+      'Analyzer to see the same −20 dB/decade band-limit. Boards as an OP484 DIP.',
+    w1: { waveType: 'sine', frequency: 1000, amplitude: 0.2, offset: 0, dutyCycle: 50, samplingRate: 100000, duration: 0.016 },
+    ch1Vdiv: 1, ch2Vdiv: 0.1,
+    schematic: {
+      components: [
+        { id: 'W1', kind: 'awg1', gx: 2, gy: 6 },
+        { id: 'Rin', kind: 'resistor', gx: 4, gy: 6, value: 10000 },      // W1 -> summing node: I = V_W1/Rin (emulated photocurrent)
+        { id: 'U1', kind: 'opamp', gx: 10, gy: 4, part: 'op484' },        // inP(10,4) inN(10,6) out(14,5)
+        { id: 'Cf', kind: 'capacitor', gx: 10, gy: 8, value: 100e-12 },   // feedback cap: sets ~16 kHz bandwidth
+        { id: 'Rf', kind: 'resistor', gx: 10, gy: 10, value: 100000 },    // feedback R = transimpedance (100 kΩ)
+        { id: 'G1', kind: 'ground', gx: 8, gy: 4 },                       // inP -> ground (virtual ground = 0 V)
+        { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },                      // 1+ on out
+        { id: 'P2', kind: 'scope2', gx: 2, gy: 8 },                       // 2+ on the W1 drive
+        { id: 'A1', kind: 'adc1n', gx: 6, gy: 4 },                        // 1- to ground (inP node)
+        { id: 'A2', kind: 'adc2n', gx: 6, gy: 2 },                        // 2- to ground (single-ended CH2)
+      ],
+      wires: [
+        { x1: 2, y1: 6, x2: 4, y2: 6 },    // W1 -> Rin.a
+        { x1: 2, y1: 6, x2: 2, y2: 8 },    // input -> 2+
+        { x1: 6, y1: 6, x2: 10, y2: 6 },   // Rin.b -> inN (summing node)
+        { x1: 10, y1: 4, x2: 8, y2: 4 },   // inP -> ground
+        { x1: 10, y1: 6, x2: 10, y2: 8 },  // inN -> Cf.a
+        { x1: 10, y1: 8, x2: 10, y2: 10 }, // Cf.a -> Rf.a (parallel feedback, summing-node side)
+        { x1: 14, y1: 5, x2: 14, y2: 8 },  // out -> down
+        { x1: 14, y1: 8, x2: 12, y2: 8 },  // -> Cf.b (out side)
+        { x1: 12, y1: 8, x2: 12, y2: 10 }, // Cf.b -> Rf.b
+        { x1: 14, y1: 5, x2: 16, y2: 5 },  // out -> 1+
+        { x1: 6, y1: 4, x2: 8, y2: 4 },    // 1- -> ground (inP node)
+        { x1: 6, y1: 2, x2: 6, y2: 4 },    // 2- -> ground
+      ],
+    },
+  },
+  {
     id: 'rlc-bandpass', name: 'RLC band-pass (~1.6 kHz)', group: 'Passive',
     blurb: 'Series L-C with output across R. Peaks at resonance (Q ≈ 10). Note: the 100 mH inductor is above the kit\'s 10 mH max, so the inspector flags it "not in your parts kit" — a simulation-only demo (everything else loads as kit values).',
     w1: sine(1600), ch1Vdiv: 0.2,
@@ -529,6 +571,36 @@ export const EXAMPLES: Example[] = [
         { x1: 6, y1: 4, x2: 8, y2: 4 },
         { x1: 6, y1: 4, x2: 6, y2: 2 },
         { x1: 6, y1: 6, x2: 6, y2: 8 },  // sense R -> ground (explicit, so moves follow)
+      ],
+    },
+  },
+  {
+    id: 'led-pwm', name: 'PWM-driven LED (breadboard glow)', group: 'Passive',
+    blurb: 'A red LED and a 470 Ω current-limiting resistor driven by W1 as a 0–5 V square wave — the ' +
+      'classic "dim an LED with PWM" demo. Load it, open the Breadboard, transfer the parts, and run: ' +
+      'the LED lights up. Its brightness follows the TIME-AVERAGE forward current, so change the W1 duty ' +
+      'cycle (Signal Generator) and the glow dims/brightens smoothly — perceived brightness is log-scaled, ' +
+      'so 50 % duty is mid-glow, not half-off. CH1 shows the PWM drive square. The glow is a Breadboard-view ' +
+      'feature: it reads the live sim current, so nothing lights until the parts are on the board and ' +
+      'a valid circuit is simulating. Boards as a through-hole 5 mm LED + a 470 Ω resistor.',
+    // 0–5 V square (amplitude = peak → swing is offset ± amplitude). On-current ≈ (5 − 1.8)/470 ≈ 6.8 mA;
+    // 50 % duty → ~3.4 mA average = mid-glow on the log brightness curve. 1 V/div frames the 5 V square.
+    w1: { waveType: 'square', frequency: 1000, amplitude: 2.5, offset: 2.5, dutyCycle: 50, samplingRate: 100000, duration: 0.016 },
+    ch1Vdiv: 1,
+    schematic: {
+      components: [
+        { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
+        { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 470 },  // a=(4,4) b=(6,4) — current limit
+        { id: 'D1', kind: 'led', gx: 6, gy: 4, value: 1.8 },       // anode=(6,4)=R1.b  cathode=(8,4); Vf 1.8 → red
+        { id: 'G1', kind: 'ground', gx: 8, gy: 6 },
+        { id: 'P1', kind: 'scope1', gx: 2, gy: 2 },                // 1+ on the W1 node (see the PWM square)
+        { id: 'A1', kind: 'adc1n', gx: 10, gy: 6 },                // 1- to ground (single-ended CH1)
+      ],
+      wires: [
+        { x1: 2, y1: 4, x2: 4, y2: 4 },   // W1 -> R1.a (R1.b at (6,4) coincides with the LED anode)
+        { x1: 8, y1: 4, x2: 8, y2: 6 },   // LED cathode -> ground
+        { x1: 2, y1: 4, x2: 2, y2: 2 },   // W1 input -> 1+
+        { x1: 8, y1: 6, x2: 10, y2: 6 },  // ground -> 1-
       ],
     },
   },
