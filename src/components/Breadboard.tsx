@@ -9,7 +9,7 @@ import {
   type BoardLayout, type CheckResult, type PlacedPart, type PlacedDip, type PlacedTransistor,
   normalizeBoardOrder, nextBoardSeq,
   MIN_RESISTOR_HOLES, parseHoleKey, shiftHole, canDropPart, canDropDip, canDropTransistor,
-  movePart, moveDip, moveTransistor,
+  movePart, moveDip, moveTransistor, materializeAutoJumpers,
   dipPinHoles, dipCols, holeKey, DIP_TOP_ROW, DIP_BOT_ROW, DIP_DEFS, type DipPkg,
   to92PinHoles, to92Legend, TO92_ROW,
   TERMINALS, type Terminal, POWER_WIRES, PORT_TERMINAL, unboardable,
@@ -597,7 +597,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
     // F-7 follow-up (andre 2026-07-02): a lab saved in `auto` mode bundles the generated wiring as
     // plain jumpers, so a reloaded/shared lab reproduces it and Check passes. The live board still
     // never mutates board.jumpers — the set is materialised only into the saved file.
-    const savedBoard = routing === 'auto' ? { ...board, jumpers: autoJumpers.map(({ a, b }) => ({ a, b })) } : board
+    const savedBoard = routing === 'auto' ? { ...board, jumpers: materializeAutoJumpers(autoJumpers) } : board
     const json = JSON.stringify({ kind: 'm2k-lab', version: 2, schematic, board: savedBoard, generators }, null, 2)
     const sfp = (window as unknown as {
       showSaveFilePicker?: (o: {
@@ -937,13 +937,22 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                 </g>
               )
             })}
-            {/* F-7 auto mode: the generated wiring — clearly machine-made (dashed centre line) and
-                read-only (no delete click); hovering shows why the jumper exists */}
+            {/* F-7 auto mode: the generated wiring — clearly machine-made (dashed centre line).
+                ARB-3b: the auto set is an editable SEED — clicking any generated jumper bakes the
+                whole set into the student's own jumpers minus the clicked one and drops the board
+                into Manual (one undo restores the pre-click Auto state). */}
             {routing === 'auto' && autoJumpers.map((j, i) => {
               const a = pos(j.a), b = pos(j.b)
               return (
-                <g key={'aj' + i} style={{ cursor: 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}>
-                  <title>{`auto-routed (read-only): ${j.note}`}</title>
+                <g key={'aj' + i} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
+                  onClick={() => {
+                    if (tool.kind !== 'select') return
+                    snapshotSchematic?.() // one Ctrl-Z undoes the whole take-over (bake + delete)
+                    setBoard((bb) => ({ ...bb, jumpers: materializeAutoJumpers(autoJumpers).filter((_, k) => k !== i) }))
+                    onRoutingChange?.('manual')
+                    setCheck(null)
+                  }}>
+                  <title>{`auto-routed — click to take over and edit (switches to Manual): ${j.note}`}</title>
                   <JumperWire ax={a.x} ay={a.y} bx={b.x} by={b.y} color={wireColor(j.a, j.b)} dashedCore />
                 </g>
               )
@@ -1200,7 +1209,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
             ? 'You place the parts and run every inter-column jumper yourself; Check verifies your wiring.'
             : routing === 'hint'
             ? 'You still wire it yourself — but you can reveal one valid wiring as a ghost overlay to compare against. It never fills in your jumpers, and Check still grades your own wiring.'
-            : 'Place the parts only: the inter-column jumpers are generated for you and shown read-only. Check reflects the generated wiring. Your own jumpers are kept and come back in Manual/Hint.'}
+            : 'Place the parts only: the inter-column jumpers are generated for you. Check reflects the generated wiring. Click a wire to take over and edit it (switches to Manual); your own jumpers are kept and come back in Manual/Hint.'}
         </div>
         {routing === 'hint' && (
           <>

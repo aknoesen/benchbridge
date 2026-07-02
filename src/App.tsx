@@ -17,7 +17,7 @@ import Welcome from './components/Welcome'
 import Quickstart from './components/Quickstart'
 import ErrorBoundary from './components/ErrorBoundary'
 import { EXAMPLES } from './core/examples'
-import { type BoardLayout, PLACEABLE_KINDS, DIP_KINDS, autoRouteJumpers, buildHoles, normalizeBoardOrder } from './core/breadboard'
+import { type BoardLayout, PLACEABLE_KINDS, DIP_KINDS, autoRouteJumpers, buildHoles, normalizeBoardOrder, materializeAutoJumpers } from './core/breadboard'
 import Voltmeter from './components/Voltmeter'
 import PowerSupply from './components/PowerSupply'
 import './App.css'
@@ -247,7 +247,7 @@ export default function App() {
     // in-memory board.jumpers is never mutated — the set is materialised only into storage.
     try {
       const toStore = uiSettings.boardRouting === 'auto'
-        ? { ...board, jumpers: autoRouteJumpers(schematic, board, buildHoles()).map(({ a, b }) => ({ a, b })) }
+        ? { ...board, jumpers: materializeAutoJumpers(autoRouteJumpers(schematic, board, buildHoles())) }
         : board
       localStorage.setItem(BOARD_KEY, JSON.stringify(toStore))
     } catch { /* quota */ }

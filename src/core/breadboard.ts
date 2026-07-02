@@ -351,6 +351,14 @@ export function nextBoardSeq(b: BoardLayout): number {
   return n
 }
 
+// ── ARB-3b: the ONE materialiser of generated wiring ────────────────────────────────────────────
+// Auto-mode Save/autosave and the click-to-take-over interaction all bundle the generated set into
+// plain student jumpers through this helper, so the two paths can never diverge. Strips the hint
+// `note` — a baked jumper is ordinary student wiring.
+export function materializeAutoJumpers(auto: AutoJumper[]): Jumper[] {
+  return auto.map(({ a, b }) => ({ a, b }))
+}
+
 // ── ARB-2b MOVE: pure snap / validate / commit helpers ──────────────────────────────────────────
 // Board-grid arithmetic for translating a placed item by whole holes. Rows live on the ROWS slot
 // grid (gaps at the rail spacers + centre channel), so a shift that lands in a gap returns null —

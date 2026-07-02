@@ -391,7 +391,7 @@ describe('breadboard INA125 auxiliary straps (SCH-7, Lab 8 Fig 1)', () => {
   })
 })
 
-import { autoRouteJumpers } from './breadboard'
+import { autoRouteJumpers, materializeAutoJumpers } from './breadboard'
 
 describe('autoRouteJumpers (F-7/ARB-3 — manual/hint/auto routing engine)', () => {
   const holes = buildHoles()
@@ -476,10 +476,22 @@ describe('autoRouteJumpers (F-7/ARB-3 — manual/hint/auto routing engine)', () 
     // Mirrors Save-lab / the autosave in `auto` mode: bundle the generated wiring as plain {a,b}
     // (no hint `note` leaks into the file), serialise, reload — Check passes on the loaded board.
     const b = unwired()
-    const saved = { ...b, jumpers: autoRouteJumpers(rcSch, b, holes).map(({ a, b: bb }) => ({ a, b: bb })) }
+    const saved = { ...b, jumpers: materializeAutoJumpers(autoRouteJumpers(rcSch, b, holes)) }
     const loaded = JSON.parse(JSON.stringify(saved)) as BoardLayout
     expect(loaded.jumpers.length).toBeGreaterThan(0)
     for (const j of loaded.jumpers) expect(Object.keys(j).sort()).toEqual(['a', 'b'])
     expect(checkEquivalence(rcSch, loaded, holes).ok).toBe(true)
+  })
+
+  it('ARB-3b take-over: bakes the generated set minus the clicked jumper into plain student wiring', () => {
+    const b = unwired()
+    const auto = autoRouteJumpers(rcSch, b, holes)
+    const baked = materializeAutoJumpers(auto)
+    expect(baked).toHaveLength(auto.length)
+    for (const j of baked) expect(Object.keys(j).sort()).toEqual(['a', 'b']) // no `note` leaks
+    // Clicking jumper 0: the take-over board holds the rest — Check now flags the missing wire…
+    expect(checkEquivalence(rcSch, { ...b, jumpers: baked.filter((_, k) => k !== 0) }, holes).ok).toBe(false)
+    // …and re-running it restores a passing board (normal Manual editing from here).
+    expect(checkEquivalence(rcSch, { ...b, jumpers: baked }, holes).ok).toBe(true)
   })
 })
