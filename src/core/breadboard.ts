@@ -325,12 +325,31 @@ export interface PlacedPart { id: string; kind: SchKind; value?: number; aHole: 
 export interface PlacedPort { port: string; hole: string }
 // A placed DIP is anchored by its top-left pin column; pin holes derive via dipPinHoles(). `kind` is
 // the board DIP package (F-4), not the schematic kind. `name` is the display label (the real part).
-export interface PlacedDip { id: string; kind: DipPkg; col: number; name?: string; seq?: number }
+// `flipped` (ARB-5b) = the chip is rotated 180° end-for-end: same holes, pin 1 at the top-right —
+// derive the pin→hole assignment via dipPinHolesPlaced().
+export interface PlacedDip { id: string; kind: DipPkg; col: number; name?: string; seq?: number; flipped?: boolean }
 // A placed TO-92 transistor anchored by its left leg column; leg holes derive via to92PinHoles().
-export interface PlacedTransistor { id: string; kind: SchKind; col: number; row?: Row; seq?: number }
+// `flipped` (ARB-5b) = package turned to face away: same three holes, leg order reversed.
+export interface PlacedTransistor { id: string; kind: SchKind; col: number; row?: Row; seq?: number; flipped?: boolean }
 export interface BoardLayout { parts: PlacedPart[]; jumpers: Jumper[]; ports: PlacedPort[]; dips?: PlacedDip[]; transistors?: PlacedTransistor[] }
 
 export const emptyBoard = (): BoardLayout => ({ parts: [], jumpers: [], ports: [], dips: [], transistors: [] })
+
+// ── ARB-5b: orientation-aware pin→hole assignment for PLACED items ──────────────────────────────
+// The hole SET never changes with orientation — only which pin sits in which hole. Everything that
+// pairs pins with nets (Check, the router, the node map, the render) must go through these.
+export function dipPinHolesPlaced(pl: Pick<PlacedDip, 'kind' | 'col' | 'flipped'>): string[] | null {
+  const H = dipPinHoles(pl.kind, pl.col)
+  if (!H || !pl.flipped) return H
+  // 180° end-for-end: pin 1 (bottom-left) moves to the top-right hole → index shifts by half.
+  const n = H.length / 2
+  return H.map((_, i) => H[(i + n) % H.length])
+}
+export function to92PinHolesPlaced(pl: Pick<PlacedTransistor, 'col' | 'row' | 'flipped'>): string[] | null {
+  const H = to92PinHoles(pl.col, pl.row)
+  if (!H || !pl.flipped) return H
+  return [...H].reverse() // package faces away: leg order reverses across the same three holes
+}
 
 // ── BUG-1 z-order helpers ────────────────────────────────────────────────────────────────────────
 // Boards saved before `seq` existed get order = array sequence in the old fixed render order
@@ -468,6 +487,45 @@ export function moveTransistor(b: BoardLayout, id: string, col: number, row?: Ro
   }
 }
 
+// ── ARB-5b ROTATE: turn a placed item to its next valid orientation ─────────────────────────────
+// 2-pin parts turn in 90° steps around their a-leg (the first orientation that fits wins — same
+// validation as a move); a DIP flips 180° end-for-end (same holes, pin 1 swaps ends); a TO-92 flips
+// its leg order. A committed rotate removes the jumpers on the item's previous holes (the locked
+// move rule — the student re-wires) and bumps it to the z-order top. Null = no orientation fits.
+export function rotatePartOnBoard(b: BoardLayout, id: string): BoardLayout | null {
+  const p = b.parts.find((x) => x.id === id)
+  if (p) {
+    const a = parseHoleKey(p.aHole), bb = parseHoleKey(p.bHole)
+    if (!a || !bb) return null
+    let vC = bb.col - a.col
+    let vS = SLOT_BY_ROW.get(bb.row)! - SLOT_BY_ROW.get(a.row)!
+    for (let k = 0; k < 3; k++) {
+      ;[vC, vS] = [vS, -vC] // 90° about the a-leg
+      const nb = shiftHole(p.aHole, vS, vC)
+      if (!nb || canDropPart(p.kind, p.aHole, nb, b, p.id) !== null) continue
+      return movePart(b, id, p.aHole, nb) // polarized parts: the leg→net mapping change is the point
+    }
+    return null
+  }
+  const d = (b.dips ?? []).find((x) => x.id === id)
+  if (d) {
+    return {
+      ...b,
+      dips: (b.dips ?? []).map((x) => (x.id === id ? { ...x, flipped: !x.flipped, seq: nextBoardSeq(b) } : x)),
+      jumpers: removeJumpersTouching(b.jumpers, dipPinHolesPlaced(d) ?? []),
+    }
+  }
+  const t = (b.transistors ?? []).find((x) => x.id === id)
+  if (t) {
+    return {
+      ...b,
+      transistors: (b.transistors ?? []).map((x) => (x.id === id ? { ...x, flipped: !x.flipped, seq: nextBoardSeq(b) } : x)),
+      jumpers: removeJumpersTouching(b.jumpers, to92PinHolesPlaced(t) ?? []),
+    }
+  }
+  return null
+}
+
 // What the schematic expects on the board: its R/C/L parts (with each leg's net) and its ports.
 export interface SchematicExpectation {
   parts: { id: string; kind: SchKind; a: string; b: string }[]
@@ -591,7 +649,7 @@ export function checkEquivalence(s: Schematic, board: BoardLayout, holes: Hole[]
   }
   for (const d of exp.dips) {
     const pl = placedDip.get(d.id)!
-    const holesForDip = dipPinHoles(d.kind, pl.col) ?? []
+    const holesForDip = dipPinHolesPlaced({ kind: d.kind, col: pl.col, flipped: pl.flipped }) ?? []
     d.pinNets.forEach((net, k) => {
       if (net === undefined) return // unused pin — no constraint
       schem.set(`${d.id}.p${k + 1}`, net)
@@ -623,7 +681,7 @@ export function checkEquivalence(s: Schematic, board: BoardLayout, holes: Hole[]
   }
   for (const tr of exp.transistors) {
     const pl = placedTr.get(tr.id)!
-    const holesForTr = to92PinHoles(pl.col, pl.row) ?? []
+    const holesForTr = to92PinHolesPlaced(pl) ?? []
     tr.pinNets.forEach((net, k) => {
       schem.set(`${tr.id}.p${k + 1}`, net)
       brd.set(`${tr.id}.p${k + 1}`, bn(holesForTr[k] ?? `?${tr.id}.${k}`))
@@ -734,7 +792,7 @@ export function autoRouteJumpers(s: Schematic, board: BoardLayout, holes: Hole[]
   for (const d of exp.dips) {
     const pl = placedDip.get(d.id)
     if (!pl) continue
-    const hs = dipPinHoles(d.kind, pl.col) ?? []
+    const hs = dipPinHolesPlaced({ kind: d.kind, col: pl.col, flipped: pl.flipped }) ?? []
     d.pinNets.forEach((net, k) => addPin(net, hs[k], `${d.id} pin ${k + 1}`))
     if (d.rails) {
       const vnegPort = d.rails.vnegTo === 'GND' ? 'GND' : 'V-'
@@ -750,7 +808,7 @@ export function autoRouteJumpers(s: Schematic, board: BoardLayout, holes: Hole[]
   for (const tr of exp.transistors) {
     const pl = placedTr.get(tr.id)
     if (!pl) continue
-    const hs = to92PinHoles(pl.col, pl.row) ?? []
+    const hs = to92PinHolesPlaced(pl) ?? []
     tr.pinNets.forEach((net, k) => addPin(net, hs[k], `${tr.id} ${to92Legend(tr.kind)[k]}`))
   }
   for (const p of exp.ports) addPin(p.net, PORT_TERMINAL[p.name], p.name)
@@ -897,14 +955,14 @@ export function boardNodeMap(s: Schematic, board: BoardLayout, holes: Hole[]): M
   for (const d of exp.dips) {
     const pl = placedDip.get(d.id)
     if (!pl) continue
-    const hs = dipPinHoles(d.kind, pl.col) ?? []
+    const hs = dipPinHolesPlaced({ kind: d.kind, col: pl.col, flipped: pl.flipped }) ?? []
     d.pinNets.forEach((net, k) => put(hs[k], net))
   }
   const placedTr = new Map((board.transistors ?? []).map((t) => [t.id, t]))
   for (const t of exp.transistors) {
     const pl = placedTr.get(t.id)
     if (!pl) continue
-    const hs = to92PinHoles(pl.col, pl.row) ?? []
+    const hs = to92PinHolesPlaced(pl) ?? []
     t.pinNets.forEach((net, k) => put(hs[k], net))
   }
   for (const p of exp.ports) put(PORT_TERMINAL[p.name], p.net)

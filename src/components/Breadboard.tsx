@@ -10,6 +10,7 @@ import {
   normalizeBoardOrder, nextBoardSeq,
   MIN_RESISTOR_HOLES, parseHoleKey, shiftHole, canDropPart, canDropDip, canDropTransistor,
   movePart, moveDip, moveTransistor, materializeAutoJumpers,
+  rotatePartOnBoard, dipPinHolesPlaced, to92PinHolesPlaced,
   dipPinHoles, dipCols, holeKey, DIP_TOP_ROW, DIP_BOT_ROW, DIP_DEFS, type DipPkg,
   to92PinHoles, to92Legend, TO92_ROW,
   TERMINALS, type Terminal, POWER_WIRES, PORT_TERMINAL, unboardable,
@@ -48,8 +49,7 @@ const BOARD_CREAM_BOT = '#e4d8b8'   // … to bottom edge
 const BOARD_BEVEL_TOP = '#fbf6e8'   // 1 px light bevel along the board's top edge
 const BOARD_BEVEL_BOT = '#cfc098'   // 1 px darker edge along the bottom
 const BOARD_BORDER = '#b7a87e'      // board outline stroke
-const BENCH_FILL = '#17181b'        // dark bench bezel behind the cream board (kills the theme seam)
-const BENCH_EDGE = '#2c2d31'
+const BENCH_FILL = '#17181b'        // the bench: panel background AND the export backdrop rect
 const GROOVE_TOP = '#a99a72'        // recessed centre channel: shadowed top lip …
 const GROOVE_BOT = '#e8ddbe'        // … down to the lit bottom lip
 const EDGE_INK = '#9c8f6b'          // faint moulded a–j / column-number legend
@@ -361,6 +361,8 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
     moved: boolean
   }>(null)
   const justDraggedRef = useRef(false)
+  // ARB-5b: the placed item under the pointer — `R` rotates it (mirrors the schematic editor).
+  const [hoverPartId, setHoverPartId] = useState<string | null>(null)
   // F-7 hint mode: whether the "one valid wiring" ghost overlay is revealed. Never writes to
   // board.jumpers and never touches the student's Check — it is a reference to reproduce.
   const [showHint, setShowHint] = useState(false)
@@ -386,8 +388,10 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
   const STRIP = 48                 // height of each fixed M2K terminal strip
   const OY = STRIP                 // board content shifts down to leave room for the top strip
   const H2 = STRIP + H + STRIP     // total SVG height (top strip + board + bottom strip)
-  const RM = 42                    // right margin so the rail labels (GND/V+/V−) are not clipped
-  const W2 = W + RM                // total SVG width
+  // Symmetric side margins: the rail labels (GND/V+/V−) need room on the right, and the same
+  // margin on the left keeps the BOARD itself centred in the SVG (the viewBox starts at −RM/2).
+  const RM = 52
+  const W2 = W + RM                // total SVG width (board + both margins)
   const railY = (slot: number) => PAD + slot * PITCH + OY
   const termByKey = useMemo(() => new Map(TERMINALS.map((t) => [t.key, t])), [])
   const termX = (t: Terminal) => PAD + (t.col - 1) * PITCH
@@ -519,6 +523,25 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
   // Check reads the wiring in effect: under `auto` that is the generated jumper set (the spec's
   // "Check reflects the generated wiring"); under manual/hint it is the student's own jumpers.
   function runCheck() { if (!boardable) return; setCheck(checkEquivalence(schematic, effBoard, holes)); if (mode === 'bench') setRevealed(true) }
+
+  // ARB-5b: `R` rotates the hovered placed part to its next valid orientation (2-pin: 90° steps
+  // about the a-leg; DIP: 180° pin-1 flip; TO-92: leg-order flip). Jumpers on its previous holes
+  // are removed (the locked move rule) and the rotate is one undo step.
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'r' || e.ctrlKey || e.metaKey || e.altKey) return
+      const el = e.target as HTMLElement | null
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
+      if (!hoverPartId || drag) return
+      e.preventDefault()
+      const nb = rotatePartOnBoard(board, hoverPartId)
+      if (nb) { snapshotSchematic?.(); setBoard(nb); setCheck(null) }
+      else setCheck({ ok: false, message: `Can't rotate ${hoverPartId} — no orientation fits there. Move it somewhere roomier first.` })
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoverPartId, board, drag])
 
   // Pointer position in SVG coordinates (shared by the jumper rubber-band and the move drag).
   function svgPoint(e: { clientX: number; clientY: number }): { x: number; y: number } | null {
@@ -671,6 +694,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2
     return (
       <g key={p.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
+        onMouseEnter={() => setHoverPartId(p.id)} onMouseLeave={() => setHoverPartId(null)}
         onMouseDown={(e) => { if (tool.kind !== 'select') return; const p0 = svgPoint(e); if (!p0) return; e.preventDefault(); setDrag({ type: 'part', id: p.id, startX: p0.x, startY: p0.y, dSlots: 0, dCols: 0, moved: false }) }}
         onClick={() => { if (justDraggedRef.current) return; if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, parts: bb.parts.filter((x) => x.id !== p.id) })); setCheck(null) } }}>
         {p.kind === 'led' && liveLedCurrents?.has(p.id) && (
@@ -687,7 +711,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
     )
   }
   function renderDip(d: PlacedDip): ReactNode {
-    const pins = dipPinHoles(d.kind, d.col); if (!pins) return null
+    const pins = dipPinHolesPlaced(d); if (!pins) return null // ARB-5b: flipped → pin 1 top-right
     const n = dipCols(d.kind)
     const def = DIP_DEFS[d.kind]
     // Display the real part name (from the current schematic), falling back to the package.
@@ -700,12 +724,14 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
     const by = tl.y + INSET, bh = (br.y - tl.y) - 2 * INSET
     return (
       <g key={d.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
+        onMouseEnter={() => setHoverPartId(d.id)} onMouseLeave={() => setHoverPartId(null)}
         onMouseDown={(e) => { if (tool.kind !== 'select') return; const p0 = svgPoint(e); if (!p0) return; e.preventDefault(); setDrag({ type: 'dip', id: d.id, startX: p0.x, startY: p0.y, dSlots: 0, dCols: 0, moved: false }) }}
         onClick={() => { if (justDraggedRef.current) return; if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, dips: (bb.dips ?? []).filter((x) => x.id !== d.id) })); setCheck(null) } }}>
-        {/* silver legs, one shaded trapezoid per pin seating into its socket */}
+        {/* silver legs, one shaded trapezoid per pin seating into its socket. Bottom/top comes
+            from the hole's actual position (a flipped chip maps low pin numbers to the TOP row). */}
         {pins.map((k, i) => {
           const h = pos(k)
-          const isBottom = i < n
+          const isBottom = h.y > by + bh / 2
           const edgeY = isBottom ? by + bh : by
           const holeY = isBottom ? h.y + 1 : h.y - 1
           return <path key={'leg' + i} d={`M ${h.x - 2.1} ${edgeY} L ${h.x + 2.1} ${edgeY} L ${h.x + 1.2} ${holeY} L ${h.x - 1.2} ${holeY} Z`}
@@ -714,13 +740,16 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
         {/* glossy black body with a top specular sheen */}
         <rect x={bx} y={by} width={bw} height={bh} rx={3} fill="url(#arb4-dip)" stroke="#000000" strokeWidth={0.8} filter="url(#arb4-shadow)" />
         <rect x={bx + 4} y={by + 2.5} width={bw - 8} height={3.4} rx={1.7} fill="#ffffff" opacity={0.1} />
-        {/* notch on the left edge + pin-1 dimple mark the datasheet orientation */}
-        <path d={`M ${bx + 5} ${by + bh / 2 - 5} a 5 5 0 0 0 0 10`} fill="#101013" stroke="#3a3a40" strokeWidth={1} />
-        <circle cx={bx + 7} cy={by + bh - 5.5} r={2} fill="#0b0b0d" stroke="#404046" strokeWidth={0.6} />
+        {/* notch + pin-1 dimple mark the datasheet orientation; a flipped chip (ARB-5b, 180°
+            end-for-end) shows them on the opposite end so the student can SEE it's backwards */}
+        {d.flipped
+          ? <path d={`M ${bx + bw - 5} ${by + bh / 2 + 5} a 5 5 0 0 0 0 -10`} fill="#101013" stroke="#3a3a40" strokeWidth={1} />
+          : <path d={`M ${bx + 5} ${by + bh / 2 - 5} a 5 5 0 0 0 0 10`} fill="#101013" stroke="#3a3a40" strokeWidth={1} />}
+        <circle cx={d.flipped ? bx + bw - 7 : bx + 7} cy={d.flipped ? by + 5.5 : by + bh - 5.5} r={2} fill="#0b0b0d" stroke="#404046" strokeWidth={0.6} />
         {pins.map((k, i) => {
           const h = pos(k); const net = nets.get(k)!
           const col = (showNets && activeColor.get(net)) || '#cfcfcf'
-          const isBottom = i < n           // pins 1..n on the bottom row, n+1..2n on top
+          const isBottom = h.y > by + bh / 2 // position-based: a flipped chip reverses the rows
           const numY = isBottom ? h.y + 12 : h.y - 7
           const rails = def?.rails
           const numCol = rails && i === rails.vpos ? '#e04040' : rails && i === rails.vneg ? '#4a9eff' : '#6b6255'
@@ -738,15 +767,16 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
     )
   }
   function renderTransistor(t: PlacedTransistor): ReactNode {
-    const pins = to92PinHoles(t.col, t.row); if (!pins) return null
+    const pins = to92PinHolesPlaced(t); if (!pins) return null // ARB-5b: flipped → leg order reversed
     const legs = pins.map((k) => pos(k))
     const labels = to92Legend(t.kind)
     const cx = legs[1].x
     const legTopY = legs[0].y - 13       // where the legs disappear into the body
     const bodyBot = legTopY, bodyTop = bodyBot - 24
-    const halfW = (legs[2].x - legs[0].x) / 2 + 7
+    const halfW = Math.abs(legs[2].x - legs[0].x) / 2 + 7 // flipped legs reverse L/R order
     return (
       <g key={t.id} style={{ cursor: tool.kind === 'select' ? 'pointer' : 'default', pointerEvents: tool.kind === 'select' ? 'auto' : 'none' }}
+        onMouseEnter={() => setHoverPartId(t.id)} onMouseLeave={() => setHoverPartId(null)}
         onMouseDown={(e) => { if (tool.kind !== 'select') return; const p0 = svgPoint(e); if (!p0) return; e.preventDefault(); setDrag({ type: 'tr', id: t.id, startX: p0.x, startY: p0.y, dSlots: 0, dCols: 0, moved: false }) }}
         onClick={() => { if (justDraggedRef.current) return; if (tool.kind === 'select') { setBoard((bb) => ({ ...bb, transistors: (bb.transistors ?? []).filter((x) => x.id !== t.id) })); setCheck(null) } }}>
         {/* legs: one short metallic lead from each hole up to the package face */}
@@ -823,13 +853,15 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
         {/* ARB-4 tidy (andre): the panel background IS the bench (full-bleed, no two-tone seam
             around the SVG bezel) and the board sits vertically centred, not top-anchored. */}
         <div className="plotly-display" style={{ overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 8, background: BENCH_FILL }}>
-          <svg ref={svgRef} viewBox={`0 0 ${W2} ${H2}`} width={W2} height={H2} style={{ maxWidth: '100%', height: 'auto' }}
+          <svg ref={svgRef} viewBox={`${-RM / 2} 0 ${W2} ${H2}`} width={W2} height={H2} style={{ maxWidth: '100%', height: 'auto' }}
             onMouseMove={onSvgMove} onMouseUp={onSvgUp}
             onMouseLeave={() => { if (cursor) setCursor(null); if (drag) setDrag(null) /* leave = snap back */ }}>
             <BoardDefs />
-            {/* ARB-4: the whole scene sits on a dark bench bezel, so the cream board reads as a
-                thing ON the bench (not a light-theme seam) and the exported PNG is self-contained */}
-            <rect x={0.75} y={0.75} width={W2 - 1.5} height={H2 - 1.5} rx={10} fill={BENCH_FILL} stroke={BENCH_EDGE} strokeWidth={1.5} />
+            {/* ARB-4: the bench backdrop. On screen it blends invisibly into the panel background
+                (same BENCH_FILL, full-bleed — no stroke, so no boxed-in rectangle); it stays in the
+                SVG so the exported PNG keeps a self-contained dark backdrop (the export canvas is
+                transparent otherwise). */}
+            <rect x={-RM / 2} y={0} width={W2} height={H2} fill={BENCH_FILL} />
             {/* fixed M2K adaptor-board connector strips, top & bottom (brushed navy) */}
             <rect x={2} y={2} width={W - 4} height={STRIP - 8} rx={5} fill="url(#arb4-strip)" stroke="#1d4d7a" />
             <rect x={2} y={OY + H + 6} width={W - 4} height={STRIP - 8} rx={5} fill="url(#arb4-strip)" stroke="#1d4d7a" />
@@ -1030,7 +1062,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
                 ? `${(probeVolts * 1000).toFixed(0)} mV`
                 : `${probeVolts.toFixed(2)} V`
               const w = 20 + label.length * 6.6
-              const x = p.x + 12 + w > W2 ? p.x - 12 - w : p.x + 12 // flip left near the right edge
+              const x = p.x + 12 + w > W2 - RM / 2 ? p.x - 12 - w : p.x + 12 // flip left near the right edge
               return (
                 <g pointerEvents="none">
                   <rect x={x} y={p.y - 27} width={w} height={18} rx={4}

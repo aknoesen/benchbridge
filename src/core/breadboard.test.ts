@@ -35,6 +35,53 @@ import { normalizeBoardOrder, nextBoardSeq } from './breadboard'
 import { type Schematic } from './schematic'
 
 import { shiftHole, canDropPart, canDropDip, canDropTransistor, movePart, moveDip, moveTransistor, occupiedHoles } from './breadboard'
+import { rotatePartOnBoard, dipPinHolesPlaced, to92PinHolesPlaced } from './breadboard'
+
+describe('board rotate (ARB-5b: R turns a placed part)', () => {
+  it('placed pin maps: a flipped DIP puts pin 1 at the top-right; a flipped TO-92 reverses legs', () => {
+    expect(dipPinHolesPlaced({ kind: 'lmc662', col: 5 })).toEqual(['f5', 'f6', 'f7', 'f8', 'e8', 'e7', 'e6', 'e5'])
+    expect(dipPinHolesPlaced({ kind: 'lmc662', col: 5, flipped: true })).toEqual(['e8', 'e7', 'e6', 'e5', 'f5', 'f6', 'f7', 'f8'])
+    expect(to92PinHolesPlaced({ col: 3, row: 'b' })).toEqual(['b3', 'b4', 'b5'])
+    expect(to92PinHolesPlaced({ col: 3, row: 'b', flipped: true })).toEqual(['b5', 'b4', 'b3'])
+  })
+
+  it('2-pin: rotates 90° about the a-leg to the first fit, drops old-hole jumpers, bumps z-order', () => {
+    const b: BoardLayout = {
+      parts: [{ id: 'R1', kind: 'resistor', aHole: 'b10', bHole: 'b15', seq: 0 }],
+      jumpers: [{ a: 'b15', b: 'TT0' }], ports: [],
+    }
+    const r = rotatePartOnBoard(b, 'R1')!
+    const p = r.parts[0]
+    // (dCol 5, dSlot 0): up is off-grid, so the first fit is the 180° flip to b5
+    expect([p.aHole, p.bHole]).toEqual(['b10', 'b5'])
+    expect(p.seq).toBe(1)
+    expect(r.jumpers).toEqual([]) // the b15 jumper sat on an old hole
+    expect(rotatePartOnBoard(b, 'R1')).toEqual(r) // deterministic (pure)
+  })
+
+  it('returns null when no orientation fits', () => {
+    const b: BoardLayout = {
+      parts: [
+        { id: 'R1', kind: 'resistor', aHole: 'a1', bHole: 'a5', seq: 0 },
+        { id: 'R2', kind: 'resistor', aHole: 'e1', bHole: 'e5', seq: 1 }, // blocks the only in-grid turn
+      ],
+      jumpers: [], ports: [],
+    }
+    expect(rotatePartOnBoard(b, 'R1')).toBeNull()
+  })
+
+  it('DIP/TO-92: toggles flipped in place and removes the jumpers on its pins', () => {
+    const b: BoardLayout = {
+      parts: [], ports: [],
+      jumpers: [{ a: 'f5', b: 'TT0' }, { a: 'a20', b: 'TT2' }],
+      dips: [{ id: 'U1', kind: 'lmc662', col: 5, seq: 0 }],
+    }
+    const r = rotatePartOnBoard(b, 'U1')!
+    expect(r.dips![0].flipped).toBe(true)
+    expect(r.jumpers).toEqual([{ a: 'a20', b: 'TT2' }]) // only U1's pin jumper dropped
+    expect(rotatePartOnBoard(r, 'U1')!.dips![0].flipped).toBe(false) // toggles back
+  })
+})
 
 describe('board move helpers (ARB-2b: drag to reposition)', () => {
   const board = (): BoardLayout => ({
@@ -445,6 +492,15 @@ describe('autoRouteJumpers (F-7/ARB-3 — manual/hint/auto routing engine)', () 
     const nets = boardNets(holes, auto)
     expect(nets.get('f8')).toBe(nets.get('TN1'))
     expect(nets.get('e8')).toBe(nets.get('BP1'))
+  })
+
+  it('ARB-5b: the whole chain honours a flipped DIP — router wires it, Check passes; the same wiring fails unflipped', () => {
+    const flipped: BoardLayout = { parts: [], ports: [], jumpers: [], dips: [{ id: 'U1', kind: 'opamp-quad', col: 5, flipped: true }] }
+    const auto = autoRouteJumpers(followerSch, flipped, holes)
+    expect(checkEquivalence(followerSch, { ...flipped, jumpers: auto }, holes).ok).toBe(true)
+    // pin 1 moved ends: wiring generated for the flipped chip must NOT satisfy the unflipped one
+    const unflipped: BoardLayout = { parts: [], ports: [], jumpers: auto, dips: [{ id: 'U1', kind: 'opamp-quad', col: 5 }] }
+    expect(checkEquivalence(followerSch, unflipped, holes).ok).toBe(false)
   })
 
   it('DIP multi-pin: a lone INA125 auto-routes rails + all five datasheet straps to a passing Check', () => {
