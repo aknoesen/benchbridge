@@ -820,7 +820,9 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
             <input ref={fileRef} type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={openLab} />
           </div>
         </div>
-        <div className="plotly-display" style={{ overflow: 'auto', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 8 }}>
+        {/* ARB-4 tidy (andre): the panel background IS the bench (full-bleed, no two-tone seam
+            around the SVG bezel) and the board sits vertically centred, not top-anchored. */}
+        <div className="plotly-display" style={{ overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 8, background: BENCH_FILL }}>
           <svg ref={svgRef} viewBox={`0 0 ${W2} ${H2}`} width={W2} height={H2} style={{ maxWidth: '100%', height: 'auto' }}
             onMouseMove={onSvgMove} onMouseUp={onSvgUp}
             onMouseLeave={() => { if (cursor) setCursor(null); if (drag) setDrag(null) /* leave = snap back */ }}>
@@ -1056,6 +1058,52 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
             {check.message}
           </div>
         )}
+        {/* Interactive controls live at the TOP of the panel (andre 2026-07-02) — frequent tool
+            switches must not need a scroll; the static reference material sits below. */}
+        <div className="section-title">Tools</div>
+        <div className="wave-selector">
+          <button className={tool.kind === 'select' ? 'active' : ''} onClick={() => { setTool({ kind: 'select' }); setPending(null) }}>Select</button>
+          {routing !== 'auto' && (
+            <button className={tool.kind === 'jumper' ? 'active' : ''} onClick={() => { setTool({ kind: 'jumper' }); setPending(null) }}>Jumper</button>
+          )}
+          <button onClick={() => { setBoard({ parts: [], jumpers: [], ports: [], dips: [], transistors: [] }); setCheck(null); setPending(null) }}>Clear</button>
+        </div>
+        {/* F-7/ARB-3: the three-state routing control. One valid wiring comes from the pure
+            autoRouteJumpers engine; `hint` reveals it as a ghost, `auto` applies it (ARB-3b: as an
+            editable seed — click a generated wire to take over). */}
+        <div className="section-title">Jumper wiring</div>
+        <div className="wave-selector">
+          <button className={routing === 'manual' ? 'active' : ''} title="You run every jumper yourself (default)"
+            onClick={() => onRoutingChange?.('manual')}>Manual</button>
+          <button className={routing === 'hint' ? 'active' : ''} title="Wire it yourself, with a reveal-a-valid-wiring hint"
+            onClick={() => onRoutingChange?.('hint')}>Hint</button>
+          <button className={routing === 'auto' ? 'active' : ''} title="Place parts only — jumpers are generated; click one to take over"
+            onClick={() => onRoutingChange?.('auto')}>Auto</button>
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: 4 }}>
+          {routing === 'manual'
+            ? 'You place the parts and run every inter-column jumper yourself; Check verifies your wiring.'
+            : routing === 'hint'
+            ? 'You still wire it yourself — but you can reveal one valid wiring as a ghost overlay to compare against. It never fills in your jumpers, and Check still grades your own wiring.'
+            : 'Place the parts only: the inter-column jumpers are generated for you. Check reflects the generated wiring. Click a wire to take over and edit it (switches to Manual); your own jumpers are kept and come back in Manual/Hint.'}
+        </div>
+        {routing === 'hint' && (
+          <>
+            <button className={`run-btn ${showHint ? 'active' : ''}`} style={{ marginTop: 6 }}
+              onClick={() => setShowHint((v) => !v)}>
+              {showHint ? 'Hide the wiring hint' : 'Show a valid wiring'}
+            </button>
+            {showHint && (autoJumpers.length === 0 ? (
+              <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.6 }}>
+                Nothing to wire yet — place the parts first; the hint routes whatever is on the board.
+              </div>
+            ) : (
+              <ol style={{ fontSize: 10, color: 'var(--theory-color)', lineHeight: 1.7, margin: '6px 0 0', paddingLeft: 18 }}>
+                {autoJumpers.map((j, i) => <li key={i}>{j.note}</li>)}
+              </ol>
+            ))}
+          </>
+        )}
         <div className="section-title">Place from schematic</div>
         {!boardable && (
           <div style={{ fontSize: 11, color: '#ff7a7a', lineHeight: 1.5, marginBottom: 6 }}>
@@ -1086,6 +1134,17 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
             ))}
           </div>
         )}
+        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.6 }}>
+          {tool.kind === 'placePart' ? `Placing ${tool.id}: click two holes for its legs.`
+            : tool.kind === 'placeDip' ? `Placing ${tool.id}: click a hole in row ${DIP_TOP_ROW} (top-left pin); the chip drops across the channel.`
+            : tool.kind === 'placeTransistor' ? `Placing ${tool.id}: click a hole in row ${TO92_ROW} (left leg); the TO-92's 3 legs drop into adjacent columns.`
+            : tool.kind === 'jumper' ? 'Jumper: click two points — a hole or an M2K terminal — to wire them together.'
+            : 'Select: click a placed part or jumper to remove it; drag a part to move it (its jumpers are removed — re-wire it).'}
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 6 }}>
+          {mode === 'practice' ? 'Practice: each node is coloured as you wire; hover a hole to highlight its node.'
+            : 'Bench: nodes stay hidden until you press Check.'}
+        </div>
 
         {(['opamp-single', 'opamp-quad', 'opamp-soic-adapter', 'lmc662'] as const)
           .filter((pkg) => exp.dips.some((d) => d.kind === pkg))
@@ -1193,62 +1252,6 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
           terminal carry that terminal's colour.
         </div>
 
-        {/* F-7/ARB-3: the three-state routing control. One valid wiring comes from the pure
-            autoRouteJumpers engine; `hint` reveals it as a ghost, `auto` applies it read-only. */}
-        <div className="section-title">Jumper wiring</div>
-        <div className="wave-selector">
-          <button className={routing === 'manual' ? 'active' : ''} title="You run every jumper yourself (default)"
-            onClick={() => onRoutingChange?.('manual')}>Manual</button>
-          <button className={routing === 'hint' ? 'active' : ''} title="Wire it yourself, with a reveal-a-valid-wiring hint"
-            onClick={() => onRoutingChange?.('hint')}>Hint</button>
-          <button className={routing === 'auto' ? 'active' : ''} title="Place parts only — jumpers are generated read-only"
-            onClick={() => onRoutingChange?.('auto')}>Auto</button>
-        </div>
-        <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: 4 }}>
-          {routing === 'manual'
-            ? 'You place the parts and run every inter-column jumper yourself; Check verifies your wiring.'
-            : routing === 'hint'
-            ? 'You still wire it yourself — but you can reveal one valid wiring as a ghost overlay to compare against. It never fills in your jumpers, and Check still grades your own wiring.'
-            : 'Place the parts only: the inter-column jumpers are generated for you. Check reflects the generated wiring. Click a wire to take over and edit it (switches to Manual); your own jumpers are kept and come back in Manual/Hint.'}
-        </div>
-        {routing === 'hint' && (
-          <>
-            <button className={`run-btn ${showHint ? 'active' : ''}`} style={{ marginTop: 6 }}
-              onClick={() => setShowHint((v) => !v)}>
-              {showHint ? 'Hide the wiring hint' : 'Show a valid wiring'}
-            </button>
-            {showHint && (autoJumpers.length === 0 ? (
-              <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.6 }}>
-                Nothing to wire yet — place the parts first; the hint routes whatever is on the board.
-              </div>
-            ) : (
-              <ol style={{ fontSize: 10, color: 'var(--theory-color)', lineHeight: 1.7, margin: '6px 0 0', paddingLeft: 18 }}>
-                {autoJumpers.map((j, i) => <li key={i}>{j.note}</li>)}
-              </ol>
-            ))}
-          </>
-        )}
-
-        <div className="section-title">Tools</div>
-        <div className="wave-selector">
-          <button className={tool.kind === 'select' ? 'active' : ''} onClick={() => { setTool({ kind: 'select' }); setPending(null) }}>Select</button>
-          {routing !== 'auto' && (
-            <button className={tool.kind === 'jumper' ? 'active' : ''} onClick={() => { setTool({ kind: 'jumper' }); setPending(null) }}>Jumper</button>
-          )}
-          <button onClick={() => { setBoard({ parts: [], jumpers: [], ports: [], dips: [], transistors: [] }); setCheck(null); setPending(null) }}>Clear</button>
-        </div>
-
-        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.6 }}>
-          {tool.kind === 'placePart' ? `Placing ${tool.id}: click two holes for its legs.`
-            : tool.kind === 'placeDip' ? `Placing ${tool.id}: click a hole in row ${DIP_TOP_ROW} (top-left pin); the chip drops across the channel.`
-            : tool.kind === 'placeTransistor' ? `Placing ${tool.id}: click a hole in row ${TO92_ROW} (left leg); the TO-92's 3 legs drop into adjacent columns.`
-            : tool.kind === 'jumper' ? 'Jumper: click two points — a hole or an M2K terminal — to wire them together.'
-            : 'Select: click a placed part or jumper to remove it; drag a part to move it (its jumpers are removed — re-wire it).'}
-        </div>
-        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 6 }}>
-          {mode === 'practice' ? 'Practice: each node is coloured as you wire; hover a hole to highlight its node.'
-            : 'Bench: nodes stay hidden until you press Check.'}
-        </div>
       </div>
     </div>
   )

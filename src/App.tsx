@@ -17,7 +17,7 @@ import Welcome from './components/Welcome'
 import Quickstart from './components/Quickstart'
 import ErrorBoundary from './components/ErrorBoundary'
 import { EXAMPLES } from './core/examples'
-import { type BoardLayout, PLACEABLE_KINDS, DIP_KINDS, autoRouteJumpers, buildHoles, normalizeBoardOrder, materializeAutoJumpers } from './core/breadboard'
+import { type BoardLayout, PLACEABLE_KINDS, DIP_KINDS, autoRouteJumpers, buildHoles, normalizeBoardOrder, materializeAutoJumpers, schematicExpectation } from './core/breadboard'
 import Voltmeter from './components/Voltmeter'
 import PowerSupply from './components/PowerSupply'
 import './App.css'
@@ -256,13 +256,17 @@ export default function App() {
   // Keep the breadboard in sync with the schematic: when parts are cleared/loaded/deleted, drop
   // board parts whose id no longer exists. If that empties the board (e.g. Clear or a brand-new
   // circuit was loaded), reset jumpers + ports too so the board starts fresh for the new circuit.
+  // BUG-2 hygiene: an op-amp swapped to a different package (e.g. OP484 14-quad → OP37 8-single)
+  // keeps its id but changes its board footprint — the stale placed DIP would render the old body
+  // while Check expects the new pinout at that column. Drop it so the student re-places the part.
   useEffect(() => {
     const valid = new Set(
       schematic.components.filter((c) => PLACEABLE_KINDS.has(c.kind) || DIP_KINDS.has(c.kind)).map((c) => c.id),
     )
+    const expKind = new Map(schematicExpectation(schematic).dips.map((d) => [d.id, d.kind]))
     setBoard((b) => {
       const parts = b.parts.filter((p) => valid.has(p.id))
-      const dips = (b.dips ?? []).filter((d) => valid.has(d.id))
+      const dips = (b.dips ?? []).filter((d) => valid.has(d.id) && expKind.get(d.id) === d.kind)
       if (parts.length === b.parts.length && dips.length === (b.dips ?? []).length) return b // nothing stale
       return parts.length === 0 && dips.length === 0 ? { parts: [], jumpers: [], ports: [], dips: [] } : { ...b, parts, dips }
     })
