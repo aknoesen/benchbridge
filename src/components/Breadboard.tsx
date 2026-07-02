@@ -762,7 +762,9 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
             </g>
           )
         })}
-        <text x={(bx + bx + bw) / 2} y={by + bh / 2 + 3} fontSize={8} fill="#c3c6cc" textAnchor="middle">{d.id} · {dipName}</text>
+        {/* the printing turns upside-down with the chip (ARB-5b) — like the real part */}
+        <text x={(bx + bx + bw) / 2} y={by + bh / 2 + 3} fontSize={8} fill="#c3c6cc" textAnchor="middle"
+          transform={d.flipped ? `rotate(180 ${bx + bw / 2} ${by + bh / 2})` : undefined}>{d.id} · {dipName}</text>
       </g>
     )
   }
