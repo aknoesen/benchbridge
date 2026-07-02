@@ -8,7 +8,44 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
-## Next session: start here (updated 2026-07-02)
+## Next session: start here (updated 2026-07-02, batch 2)
+
+**The board-interaction cluster is DONE (built by CC per the 2026-07-02 handoff entries), four
+commits, all host-verified (280/280 incl. the 12-bit canary, build clean, live Chrome pass each):**
+- **BUG-1 z-order overhaul** — placed items carry a monotonic `seq` (assigned on place, bumped on
+  move); the board renders components merged + sorted by it (last placed/moved on top) and ALL wire
+  layers draw above components; hint ghost + probe readout on top of everything. `seq` is purely
+  presentational (Check/nets ignore it); `normalizeBoardOrder` keeps pre-field saves stacking as
+  they used to (localStorage + lab files).
+- **ARB-2b MOVE stage 1** — drag a placed 2-pin/DIP/TO-92 with Select (click still deletes; a 5-px
+  threshold separates them). Ghost preview snaps whole-hole on the slot grid (channel/spacer gaps
+  refuse); drops validate span floor / DIP straddle / TO-92 term row / occupancy and snap back with
+  a message when illegal. A committed move **deletes the jumpers on the part's old holes** (locked
+  decision) and bumps the part to the z-order top. **One Ctrl-Z per drag: the shared undo history
+  now snapshots `{schematic, board}`** (undo/redo restore both — board edits ride the same stack).
+  Pure helpers (`parseHoleKey`/`shiftHole`/`occupiedHoles`/`canDrop*`/`removeJumpersTouching`/
+  `movePart`/`moveDip`/`moveTransistor`) unit-tested; `MIN_RESISTOR_HOLES` moved to core.
+- **ARB-3b editable auto seed** — clicking a generated jumper in Auto bakes the set into
+  `board.jumpers` minus the clicked one (one shared `materializeAutoJumpers()` for Save + autosave +
+  take-over) and flips to Manual; Check then grades the student's wiring. One Ctrl-Z restores the
+  pre-click jumpers; note the routing *toggle* is not history-tracked, so fully returning to Auto is
+  one extra click (flag if andre wants the toggle undone too).
+- **Panel/bezel/hygiene** — board side panel reordered (Tools → Jumper wiring → chips → hints →
+  reference) so tool switches never scroll; board panel background = bench colour (full-bleed, no
+  bezel seam) + board vertically centred; and BUG-2 hygiene: an op-amp package swap (e.g. OP484
+  quad → OP37 single) drops the stale DIP placement in the sync effect. **BUG-2's Check-fail is
+  believed downstream of BUG-1** (part hidden under the IC → mis-placed legs): re-test on the
+  deployed build; if a clean Auto board still fails Check, that's a real router bug — trace the
+  summing-node group per the handoff note.
+
+Live-verified in Chrome: drag commit + auto re-route around the new spot + occupied-drop snap-back +
+one-undo restore; take-over flips the banner to Manual with n−1 jumpers and Check reports the
+missing wire; panel order + full-bleed bench + centred board render. NOT eyeballed: DIP/TO-92 drag
+(same machinery, helpers unit-tested) — worth a moment in the tuning round.
+
+---
+
+## Earlier on 2026-07-02
 
 **ARB-4 (Fritzing-style photoreal cream breadboard) is BUILT** — by the Cowork agent per
 `docs/specs/fritzing-board.md`; Claude Code to build+verify+commit on the host. Pure SVG re-skin of
