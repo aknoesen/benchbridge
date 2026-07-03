@@ -1,6 +1,6 @@
-# SPEC — Tester-feedback punch-list (Peggy Zhu review, 2026-06-30)
+# SPEC — Tester-feedback punch-list (P.Z. review, 2026-06-30)
 
-Source: Peggy Zhu's review of the deployed BenchBridge (`bridgem2k.onrender.com`), forwarded by andre.
+Source: P.Z.'s review of the deployed BenchBridge (`bridgem2k.onrender.com`), forwarded by andre.
 Overall verdict was positive (intuitive, Quickstart clear, schematic→board transfer flow holds up); this
 is a punch-list, not a redesign. **Sequencing (andre 2026-06-30): do this AFTER Track J (TIA-2 + TIA-3)
 is complete.** Work the four buckets in priority order FB-1 → FB-4. None of this touches

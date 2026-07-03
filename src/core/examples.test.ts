@@ -4,7 +4,7 @@ import { EXAMPLES } from './examples'
 import { toCircuit } from './schematic'
 import { buildNetlist, applyGeneratorParams } from './netlist'
 import { normalizeResult, nodeVoltage, sampleNodeTransient } from './spice'
-import { schematicExpectation } from './breadboard'
+import { schematicExpectation, checkEquivalence, buildHoles } from './breadboard'
 import { ledAverageCurrents } from './boardsim'
 
 // FB-2: single-ended examples wire 1−/2− to GND and probe the input (2+). The diode/Zener I-V examples
@@ -51,6 +51,14 @@ describe('Quickstart examples (QS-4 finished copy: flashlight / divider probes /
     expect(vR).toBeGreaterThan(2.7)  // ≈ 5 − Vf ≈ 3.2 V across the resistor
     expect(vR).toBeLessThan(3.6)     // → I = V/R ≈ 6–7 mA, the copy's numbers
   }, 30000)
+
+  it('flashlight: ships a pre-built board that passes Check, so the LED is lit on load', () => {
+    const ex = EXAMPLES.find((e) => e.id === 'flashlight')!
+    expect(ex.board).toBeDefined()
+    expect(ex.board!.parts.map((p) => p.id).sort()).toEqual(['D1', 'R1'])
+    expect(ex.board!.jumpers.length).toBeGreaterThan(0)
+    expect(checkEquivalence(ex.schematic, ex.board!, buildHoles()).ok).toBe(true)
+  })
 
   it('divider: CH1 differential across the top R and CH2 single-ended midpoint (same 2.5 V two ways)', () => {
     const ex = EXAMPLES.find((e) => e.id === 'divider')!

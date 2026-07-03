@@ -172,15 +172,18 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
       <>
         <h2 style={h2}>Build a flashlight</h2>
         <p style={{ marginTop: 6 }}>
-          The simplest useful circuit: a supply, a resistor, an LED. Build it and it lights up.
+          The simplest useful circuit: a supply, a resistor, an LED.
         </p>
         <div style={btnRow}>
-          <button style={goBtn} onClick={() => { onLoadExample('flashlight'); onGoTo('schematic') }}>Load the flashlight →</button>
-          <span style={{ alignSelf: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>→ the LED glows.</span>
+          <button style={goBtn} onClick={() => { onLoadExample('flashlight'); onGoTo('breadboard') }}>Load the flashlight →</button>
+          <span style={{ alignSelf: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>→ opens the <b>Breadboard</b>, already built, with the <b>LED lit</b> on the real board.</span>
         </div>
-        <p style={{ marginTop: 14 }}>
-          <b>Now make it a measurement, not just a light.</b> The brightness is really the{' '}
-          <b>current</b> — but you can't <i>see</i> current, so measure it.
+        <p style={{ marginTop: 12 }}>
+          <b>Hover the LED</b> — it shows its current, about <b>6 mA</b>.
+        </p>
+        <p style={{ marginTop: 8 }}>
+          <b>Now make it a measurement, not just a light.</b> That brightness is really the{' '}
+          <b>current</b> — you can't <i>see</i> current, so measure it.
         </p>
         <Beat>
           <b>Measure the resistor's voltage — differentially.</b> Put CH1's two probes on the two
@@ -189,14 +192,9 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
           <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('scope')}>Open the Oscilloscope →</button></div>
         </Beat>
         <Beat>
-          <b>Calculate the current.</b> Ohm's law: <b>I = V / R = 3 V / 470 Ω ≈ 6 mA.</b> That
-          current is what lights the LED.
-        </Beat>
-        <Beat>
-          <b>Change it and watch.</b> Turn the supply down. The LED visibly <b>dims</b> — and when
-          you re-measure, the drop falls to about <b>1 V</b>, so <b>I ≈ 2 mA</b>. Your eye said
-          "dimmer," the math says "6 mA → 2 mA," and they agree. You just <i>measured</i> brightness.
-          <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('psu')}>Open the Power Supply →</button></div>
+          <b>Calculate the current.</b> Ohm's law: <b>I = V / R = 3 V / 470 Ω ≈ 6 mA</b> — the same
+          current the LED was showing. <b>That current is what lights it.</b> You've connected a
+          glowing LED to a number you measured.
         </Beat>
       </>
     )

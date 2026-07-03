@@ -24,18 +24,18 @@ Signals flow one way: the **sources** drive your circuit, the **scope and meter*
 circuit in between. Ready? `[Start the tour →]`
 
 ## Page 3 — Build a flashlight  *(~2 min)*
-The simplest useful circuit: a supply, a resistor, an LED. Build it and it lights up.
-`[Load the flashlight →]`  → the LED glows.
-**Now make it a measurement, not just a light.** The brightness is really the **current** — but you can't
-*see* current, so measure it.
+The simplest useful circuit: a supply, a resistor, an LED.
+`[Load the flashlight →]`  → opens the **Breadboard**, already built, with the **LED lit** on the real board.
+**Hover the LED** — it shows its current, about **6 mA**.
+**Now make it a measurement, not just a light.** That brightness is really the **current** — you can't *see*
+current, so measure it.
 - **Measure the resistor's voltage — differentially.** Put CH1's two probes on the two ends of the resistor
   and read the drop, about **3 V**. (Both probes are on live nodes, neither at ground — that's a
   *differential* measurement; more on that next page.) `[Open the Oscilloscope →]`
-- **Calculate the current.** Ohm's law: **I = V / R = 3 V / 470 Ω ≈ 6 mA.** That current is what lights the LED.
-- **Change it and watch.** Turn the supply down. The LED visibly **dims** — and when you re-measure, the drop
-  falls to about **1 V**, so **I ≈ 2 mA**. Your eye said "dimmer," the math says "6 mA → 2 mA," and they
-  agree. You just *measured* brightness.
+- **Calculate the current.** Ohm's law: **I = V / R = 3 V / 470 Ω ≈ 6 mA** — the same current the LED was
+  showing. **That current is what lights it.** You've connected a glowing LED to a number you measured.
 `[← Back to the tour]`
+*(Live "turn it down and watch it dim" is the animated-glow enhancer GLOW-1 — post-beta. Beta = steady glow.)*
 
 ## Page 4 — The voltage divider  *(~2 min)*
 Two equal resistors split the supply in half.

@@ -8,7 +8,26 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
-## Next session: start here (updated 2026-07-02, batch 5 — QUICKSTART FROZEN for the beta)
+## Next session: start here (updated 2026-07-02, batch 6 — flashlight pre-built board, freeze holds)
+
+**The last beta-freeze fix is in: the flashlight now actually glows on load.** Root cause: examples
+carried only a schematic, so the board loaded empty and the user never saw the ARB-2 glow.
+- `Example` gained **`board?: BoardLayout`** — an optional pre-built, Check-passing board applied on
+  load by BOTH load paths (App's `loadExample` for the Quickstart, and a new `onLoadBoard` prop on
+  the SchematicEditor Examples dropdown, wired at both render sites).
+- The **flashlight ships a pre-built board**: R1 b10–b15 + D1 c20–c24, wiring generated at module
+  init by `autoRouteJumpers` + `materializeAutoJumpers` — **Check-passing by construction** (unit
+  test asserts it), plain student jumpers so it behaves in every routing mode. Steady DC drive →
+  solid glow (the live-dim beat moved to the new **GLOW-1** post-beta row, per andre).
+- Quickstart **page 3 carries the revised copy** (opens the Breadboard, hover-for-mA, live-dim
+  dropped) and its load button goes to the **Board view**.
+- **Verified live per the handoff checklist:** load flashlight → Board opens pre-built (5 jumpers)
+  → LED lit (glow halos) → hover reads **6.82 mA** → CH1's ≈3.2 V differential drop unit-pinned by
+  the ngspice `.op` test. 292/292 incl. the canary, build clean.
+
+---
+
+## Earlier on 2026-07-02 (batch 5 — QUICKSTART FROZEN for the beta)
 
 **The finished, andre-approved Quickstart copy is IN (`docs/specs/quickstart-copy.md`) and the
 Quickstart is FROZEN for the alumni beta** — copy/structure changes now go through the handoff log.

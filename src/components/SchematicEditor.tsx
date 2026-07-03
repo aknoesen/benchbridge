@@ -134,9 +134,11 @@ interface EditorProps {
   onLoadScope?: (req: { xy: boolean; ch1Vdiv?: number; ch2Vdiv?: number }) => void
   // Open the Curve Tracer when an example requests it (SWEEP-1 curve-family examples).
   onOpenTracer?: () => void
+  // Apply an example's pre-built breadboard on load (QS-4: the flashlight ships placed + wired).
+  onLoadBoard?: (b: import('../core/breadboard').BoardLayout) => void
 }
 
-export default function SchematicEditor({ schematic, setSchematic, snapshot, undo, redo, onLoadGenerators, onLoadScope, onOpenTracer }: EditorProps) {
+export default function SchematicEditor({ schematic, setSchematic, snapshot, undo, redo, onLoadGenerators, onLoadScope, onOpenTracer, onLoadBoard }: EditorProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const sch = schematic
@@ -606,6 +608,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                   // Drop to the Select tool so the first click on the canvas doesn't drop a resistor.
                   setTool('select'); setWireStart(null)
                   if (ex.w1 || ex.w2) onLoadGenerators?.(ex.w1, ex.w2)
+                  if (ex.board) onLoadBoard?.(ex.board) // QS-4: pre-built board (e.g. the flashlight)
                   onLoadScope?.({ xy: !!ex.xy, ch1Vdiv: ex.ch1Vdiv, ch2Vdiv: ex.ch2Vdiv })
                   if (ex.tracer) onOpenTracer?.()
                   setSimStatus('loaded example: ' + ex.name)
