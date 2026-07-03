@@ -1,0 +1,168 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SCH-11 symbol + wiring harness</title>
+<!-- Loads real symbols from build.py output if present; else uses placeholders. -->
+<script src="out/symbols.js" onerror="void 0"></script>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 0; color: #1a1a1a; }
+  header { padding: 8px 12px; background: #f3f4f6; border-bottom: 1px solid #ddd; }
+  header b { color: #0b62d6; }
+  #palette { padding: 8px 12px; border-bottom: 1px solid #eee; }
+  #palette button { margin: 0 6px 6px 0; padding: 6px 10px; cursor: pointer;
+    border: 1px solid #ccc; border-radius: 6px; background: #fff; }
+  #stage { position: relative; height: 62vh; overflow: hidden; background:
+    linear-gradient(#fafafa,#fafafa) padding-box, repeating-linear-gradient(#0000 0 19px,#eef1f4 19px 20px); }
+  #wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .inst { position: absolute; cursor: grab; user-select: none; }
+  .inst svg { display: block; pointer-events: none; }
+  .pin { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px;
+    border-radius: 50%; background: #0b62d6; opacity: .55; cursor: crosshair; }
+  .pin.sel { opacity: 1; box-shadow: 0 0 0 3px #ffd24d; }
+  #nets { padding: 8px 12px; font-family: ui-monospace, monospace; white-space: pre-wrap;
+    border-top: 1px solid #eee; max-height: 22vh; overflow: auto; }
+  .hint { color: #666; }
+</style>
+
+<header>
+  <b>SCH-11 harness</b> — place symbols, click a pin then another pin to wire them.
+  <button onclick="clearWires()">clear wires</button>
+  <button onclick="clearAll()">clear all</button>
+  <span class="hint" id="src"></span>
+</header>
+<div id="palette"></div>
+<div id="stage"><svg id="wires"></svg></div>
+<div id="nets"></div>
+
+<script>
+// ---- placeholder symbols (used only if out/symbols.js absent) ---------------
+const PLACEHOLDER = {
+  resistor: { viewBox: "0 0 40 120", pins: [{id:"p0",x:20,y:8},{id:"p1",x:20,y:112}],
+    svg: `<svg viewBox="0 0 40 120" width="40" height="120" xmlns="http://www.w3.org/2000/svg">
+      <path d="M20 8 V40 L8 48 L32 60 L8 72 L32 84 L20 92 V112" fill="none" stroke="#111" stroke-width="2"/>
+      <circle cx="20" cy="8" r="2.5" fill="#222"/><circle cx="20" cy="112" r="2.5" fill="#222"/></svg>` },
+  source: { viewBox: "0 0 60 120", pins: [{id:"p0",x:30,y:6},{id:"p1",x:30,y:114}],
+    svg: `<svg viewBox="0 0 60 120" width="60" height="120" xmlns="http://www.w3.org/2000/svg">
+      <line x1="30" y1="6" x2="30" y2="26" stroke="#111" stroke-width="2"/>
+      <line x1="30" y1="94" x2="30" y2="114" stroke="#111" stroke-width="2"/>
+      <circle cx="30" cy="60" r="34" fill="none" stroke="#111" stroke-width="2"/>
+      <path d="M14 60 q8 -16 16 0 t16 0" fill="none" stroke="#111" stroke-width="2"/>
+      <circle cx="30" cy="6" r="2.5" fill="#222"/><circle cx="30" cy="114" r="2.5" fill="#222"/></svg>` },
+  ground: { viewBox: "0 0 40 40", pins: [{id:"p0",x:20,y:6}],
+    svg: `<svg viewBox="0 0 40 40" width="40" height="40" xmlns="http://www.w3.org/2000/svg">
+      <line x1="20" y1="6" x2="20" y2="20" stroke="#111" stroke-width="2"/>
+      <line x1="8" y1="20" x2="32" y2="20" stroke="#111" stroke-width="2"/>
+      <line x1="13" y1="26" x2="27" y2="26" stroke="#111" stroke-width="2"/>
+      <line x1="17" y1="32" x2="23" y2="32" stroke="#111" stroke-width="2"/>
+      <circle cx="20" cy="6" r="2.5" fill="#222"/></svg>` },
+};
+
+const SYMBOLS = window.SYMBOLS || PLACEHOLDER;
+document.getElementById("src").textContent =
+  window.SYMBOLS ? "(real symbols from build.py)" : "(placeholder symbols — run build.py for the real ones)";
+
+const S = 1.4;                 // display scale (svg user units -> px)
+const stage = document.getElementById("stage");
+const wires = document.getElementById("wires");
+let insts = [], links = [], seq = 0, sel = null;
+
+function vb(sym){ const [x,y,w,h] = sym.viewBox.split(/\s+/).map(Number); return {x,y,w,h}; }
+
+function addInstance(kind, left=40, top=40){
+  const sym = SYMBOLS[kind]; if(!sym) return;
+  const v = vb(sym);
+  const el = document.createElement("div");
+  el.className = "inst"; el.style.left = left+"px"; el.style.top = top+"px";
+  el.style.width = v.w*S+"px"; el.style.height = v.h*S+"px";
+  // scale the inline svg
+  const holder = document.createElement("div");
+  holder.innerHTML = sym.svg;
+  const svg = holder.firstElementChild;
+  svg.setAttribute("width", v.w*S); svg.setAttribute("height", v.h*S);
+  el.appendChild(svg);
+  const id = "i"+(seq++);
+  el.dataset.id = id;
+  sym.pins.forEach(p => {
+    const d = document.createElement("div");
+    d.className = "pin";
+    d.style.left = (p.x - v.x)*S + "px";
+    d.style.top  = (p.y - v.y)*S + "px";
+    d.dataset.inst = id; d.dataset.pin = p.id;
+    d.addEventListener("mousedown", e => { e.stopPropagation(); pinClick(id, p.id, d); });
+    el.appendChild(d);
+  });
+  el.addEventListener("mousedown", e => startDrag(e, el));
+  stage.appendChild(el);
+  insts.push({id, kind, el, sym, v});
+  redraw();
+}
+
+function pinScreen(instId, pinId){
+  const inst = insts.find(i => i.id === instId); if(!inst) return null;
+  const p = inst.sym.pins.find(p => p.id === pinId);
+  const left = parseFloat(inst.el.style.left), top = parseFloat(inst.el.style.top);
+  return { x: left + (p.x - inst.v.x)*S, y: top + (p.y - inst.v.y)*S };
+}
+
+function pinClick(instId, pinId, dot){
+  if(sel && !(sel.instId===instId && sel.pinId===pinId)){
+    links.push({a: {...sel}, b: {instId, pinId}});
+    sel.dot.classList.remove("sel"); sel = null; redraw();
+  } else {
+    if(sel) sel.dot.classList.remove("sel");
+    sel = {instId, pinId, dot}; dot.classList.add("sel");
+  }
+}
+
+let drag = null;
+function startDrag(e, el){
+  drag = { el, dx: e.clientX - parseFloat(el.style.left), dy: e.clientY - parseFloat(el.style.top) };
+  el.style.cursor = "grabbing";
+}
+window.addEventListener("mousemove", e => {
+  if(!drag) return;
+  drag.el.style.left = (e.clientX - drag.dx) + "px";
+  drag.el.style.top  = (e.clientY - drag.dy) + "px";
+  redraw();
+});
+window.addEventListener("mouseup", () => { if(drag){ drag.el.style.cursor="grab"; drag=null; } });
+
+// ---- connectivity (union-find over pin nodes) ------------------------------
+function nets(){
+  const parent = {};
+  const find = a => (parent[a]===undefined ? (parent[a]=a) : (parent[a]===a ? a : (parent[a]=find(parent[a]))));
+  const key = l => l.instId+":"+l.pinId;
+  insts.forEach(i => i.sym.pins.forEach(p => find(i.id+":"+p.id)));
+  links.forEach(l => { parent[find(key(l.a))] = find(key(l.b)); });
+  const groups = {};
+  Object.keys(parent).forEach(k => { const r = find(k); (groups[r] = groups[r]||[]).push(k); });
+  return Object.values(groups).filter(g => g.length > 1);
+}
+
+function redraw(){
+  wires.innerHTML = "";
+  links.forEach(l => {
+    const a = pinScreen(l.a.instId, l.a.pinId), b = pinScreen(l.b.instId, l.b.pinId);
+    if(!a||!b) return;
+    const ln = document.createElementNS("http://www.w3.org/2000/svg","line");
+    ln.setAttribute("x1",a.x); ln.setAttribute("y1",a.y);
+    ln.setAttribute("x2",b.x); ln.setAttribute("y2",b.y);
+    ln.setAttribute("stroke","#0b62d6"); ln.setAttribute("stroke-width","2");
+    wires.appendChild(ln);
+  });
+  const ns = nets();
+  document.getElementById("nets").textContent =
+    "wires: " + links.length + "   connected nets: " + ns.length + "\n" +
+    ns.map((g,i) => "  net "+(i+1)+": " + g.join("  ")).join("\n");
+}
+
+function clearWires(){ links = []; if(sel){sel.dot.classList.remove("sel"); sel=null;} redraw(); }
+function clearAll(){ insts.forEach(i=>i.el.remove()); insts=[]; links=[]; seq=0; sel=null; redraw(); }
+
+// palette
+Object.keys(SYMBOLS).forEach(k => {
+  const b = document.createElement("button");
+  b.textContent = "+ " + k;
+  b.onclick = () => addInstance(k, 40 + Math.random()*300, 30 + Math.random()*120);
+  document.getElementById("palette").appendChild(b);
+});
+</script>
