@@ -417,3 +417,64 @@ describe('deleteComponentsWithWires', () => {
     expect(out.wires).toEqual([])
   })
 })
+
+import { localTerminals, mirrorComponentWithWires, canMirror } from './schematic'
+
+describe('model-space mirror (SCH-11 P3 Stage 2)', () => {
+  it('mirrors base offsets across the footprint centerline — terminals swap in place', () => {
+    // resistor: a(0,0) ↔ b(2,0); footprint unchanged, part does not translate
+    expect(localTerminals({ kind: 'resistor', mirror: true }).map((t) => [t.name, t.gx, t.gy]))
+      .toEqual([['a', 2, 0], ['b', 0, 0]])
+    // bjt (mirror line x=1): base crosses to the right, collector/emitter to the left
+    expect(localTerminals({ kind: 'bjt', mirror: true }).map((t) => [t.name, t.gx, t.gy]))
+      .toEqual([['c', 0, 0], ['b', 2, 1], ['e', 0, 2]])
+    // opamp (mirror line x=2): inputs land on the right, output on the left
+    expect(localTerminals({ kind: 'opamp', mirror: true }).map((t) => [t.name, t.gx, t.gy]))
+      .toEqual([['inP', 4, 0], ['inN', 4, 2], ['out', 0, 1]])
+    // single-pin parts mirror to themselves
+    expect(localTerminals({ kind: 'ground', mirror: true })).toEqual(localTerminals({ kind: 'ground' }))
+  })
+
+  it('mirror composes BEFORE rotation in terminalsOf', () => {
+    const q: SchComponent = { id: 'Q1', kind: 'bjt', gx: 4, gy: 4, rotation: 1, mirror: true }
+    // mirrored offsets c(0,0) b(2,1) e(0,2), then rotated CW: (dx,dy)→(−dy,dx)
+    expect(terminalsOf(q).map((t) => [t.name, t.gx, t.gy]))
+      .toEqual([['c', 4, 4], ['b', 3, 6], ['e', 2, 4]])
+  })
+
+  it('canMirror: multi-pin catalog parts yes; single-pin ports and the inline INA125 no', () => {
+    expect(canMirror('resistor')).toBe(true)
+    expect(canMirror('opamp')).toBe(true)
+    expect(canMirror('lmc662')).toBe(true)
+    expect(canMirror('ina125')).toBe(false) // inline render does not honour mirror
+    expect(canMirror('ground')).toBe(false)
+    expect(canMirror('awg1')).toBe(false)
+    // and the model op refuses rather than silently lying about pin positions
+    const s: Schematic = { components: [{ id: 'U1', kind: 'ina125', gx: 0, gy: 0 }], wires: [] }
+    expect(mirrorComponentWithWires(s, 'U1')).toBe(s)
+  })
+
+  it('carries terminal-attached wire endpoints to the mirrored terminals; stays connected', () => {
+    const s: Schematic = {
+      components: [{ id: 'U1', kind: 'opamp', gx: 0, gy: 0 }],
+      wires: [{ x1: 4, y1: 1, x2: 8, y2: 1 }], // end1 on out (4,1)
+    }
+    const m = mirrorComponentWithWires(s, 'U1')
+    // out moves (4,1) → (0,1); the wire end follows so the connection is preserved
+    expect(m.wires[0]).toEqual({ x1: 0, y1: 1, x2: 8, y2: 1 })
+    const nets = computeNets(m)
+    expect(nets.get('0,1')).toBe(nets.get('8,1'))
+  })
+
+  it('flipping twice is the identity (terminals, wires, and serialized component)', () => {
+    const s: Schematic = {
+      components: [{ id: 'Q1', kind: 'bjt', gx: 2, gy: 2, rotation: 3, part: '2N3904' }],
+      wires: [{ x1: 3, y1: 2, x2: 0, y2: 3 }], // end1 on the rotated base pin (3,2)
+    }
+    const twice = mirrorComponentWithWires(mirrorComponentWithWires(s, 'Q1'), 'Q1')
+    expect(terminalsOf(twice.components[0])).toEqual(terminalsOf(s.components[0]))
+    expect(twice.wires).toEqual(s.wires)
+    // mirror clears back to undefined so a round-tripped part serializes like the original
+    expect(twice.components[0].mirror).toBeUndefined()
+  })
+})

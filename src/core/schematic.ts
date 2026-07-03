@@ -39,6 +39,7 @@ export interface SchComponent {
   gx: number // grid position (grid units)
   gy: number
   rotation?: number // 0..3 → 0/90/180/270 degrees clockwise (default 0)
+  mirror?: boolean // flipped across the part's own vertical centerline (applied before rotation)
   value?: number // ohms / farads / henries (vsource uses AC 1)
   opModel?: 'ideal' | 'lmc662' // for kind 'opamp': ideal VCVS or the LMC662 behavioural model
   part?: string // for kind 'bjt' / 'mosfet': the ADALP2000 part name (key into TRANSISTOR_PARTS)
@@ -155,10 +156,23 @@ export function rotateOffset(dx: number, dy: number, r: number): [number, number
   }
 }
 
-// Absolute (rotated) terminal grid positions for net computation and rendering.
+// Base terminal offsets with the component's mirror applied (still unrotated). The mirror
+// axis is the vertical centerline of the part's base footprint (gx → minX+maxX − gx), so a
+// flip swaps terminals in place — the part does not translate — and every kind's mirrored
+// offsets stay on-grid (min+max is an integer for all kinds). Mirror composes BEFORE
+// rotation: the flip happens in the part's own frame, then the whole part rotates.
+export function localTerminals(c: Pick<SchComponent, 'kind' | 'opModel' | 'mirror'>): SchTerminal[] {
+  const base = baseTerminals(c.kind, c.opModel)
+  if (!c.mirror) return base
+  let min = base[0].gx, max = base[0].gx
+  for (const t of base) { min = Math.min(min, t.gx); max = Math.max(max, t.gx) }
+  return base.map((t) => ({ ...t, gx: min + max - t.gx }))
+}
+
+// Absolute (mirrored + rotated) terminal grid positions for net computation and rendering.
 export function terminalsOf(c: SchComponent): SchTerminal[] {
   const r = c.rotation ?? 0
-  return baseTerminals(c.kind, c.opModel).map((t) => {
+  return localTerminals(c).map((t) => {
     const [dx, dy] = rotateOffset(t.gx, t.gy, r)
     return { name: t.name, gx: c.gx + dx, gy: c.gy + dy }
   })
@@ -346,6 +360,38 @@ export function rotateComponentWithWires(s: Schematic, id: string): Schematic {
   if (!c) return s
   const oldT = terminalsOf(c)
   const nc = { ...c, rotation: (((c.rotation ?? 0) + 1) % 4) }
+  const newT = terminalsOf(nc)
+  const map = new Map<string, { gx: number; gy: number }>()
+  oldT.forEach((t, i) => map.set(key(t.gx, t.gy), { gx: newT[i].gx, gy: newT[i].gy }))
+  return {
+    components: s.components.map((x) => (x.id === id ? nc : x)),
+    wires: s.wires.map((w) => {
+      let nw = w
+      const a = map.get(key(w.x1, w.y1)); if (a) nw = { ...nw, x1: a.gx, y1: a.gy }
+      const b = map.get(key(w.x2, w.y2)); if (b) nw = { ...nw, x2: b.gx, y2: b.gy }
+      return nw
+    }),
+  }
+}
+
+// Whether F (flip) does anything for a kind. Single-pin parts (ports, ground, rails) mirror to
+// themselves, and the INA125 keeps its inline (non-catalog) render, which does not honour
+// mirror — flipping its model but not its artwork would lie about where the pins are.
+export function canMirror(kind: SchKind): boolean {
+  if (kind === 'ina125') return false
+  return baseTerminals(kind).length > 1
+}
+
+// Toggle component `id`'s mirror, carrying terminal-attached wire endpoints to the mirrored
+// terminal positions (matched by terminal index) — the same rubber-band contract as rotate.
+// The flip is a model-space mirror of the terminal offsets (localTerminals); the renderer
+// re-derives the artwork from the mirrored terminals via the SCH-11 alignment transform, so
+// symbols with a baked-in reflection (the op-amp) cannot double-flip.
+export function mirrorComponentWithWires(s: Schematic, id: string): Schematic {
+  const c = s.components.find((x) => x.id === id)
+  if (!c || !canMirror(c.kind)) return s
+  const oldT = terminalsOf(c)
+  const nc = { ...c, mirror: !c.mirror || undefined }
   const newT = terminalsOf(nc)
   const map = new Map<string, { gx: number; gy: number }>()
   oldT.forEach((t, i) => map.set(key(t.gx, t.gy), { gx: newT[i].gx, gy: newT[i].gy }))

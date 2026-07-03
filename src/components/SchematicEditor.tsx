@@ -3,9 +3,9 @@
 // toCircuit(). See docs/specs/schematic-ngspice.md (SCH-1).
 import { useMemo, useRef, useState, useEffect, type ReactElement, type Dispatch, type SetStateAction, type CSSProperties } from 'react'
 import {
-  Schematic, SchComponent, SchKind, terminalsOf, baseTerminals, toCircuit, ampCategory, computeNets,
+  Schematic, SchComponent, SchKind, terminalsOf, localTerminals, toCircuit, ampCategory, computeNets,
   attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentWithWires,
-  deleteComponentsWithWires, type WireEndRef,
+  mirrorComponentWithWires, canMirror, deleteComponentsWithWires, type WireEndRef,
 } from '../core/schematic'
 import { symbolFor, alignTransform, matScale, inkedInner } from '../core/symbolArt'
 import { buildNetlist, TRANSISTOR_PARTS } from '../core/netlist'
@@ -188,6 +188,8 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   const [simBusy, setSimBusy] = useState(false)
   const engineRef = useRef<SpiceEngine | null>(null)
   const [hoverGrid, setHoverGrid] = useState<{ gx: number; gy: number } | null>(null)
+  // Part under the cursor — R/F act on it in preference to the selection (Stage 2 hover-targeting).
+  const [hoverPartId, setHoverPartId] = useState<string | null>(null)
   const [selectedWire, setSelectedWire] = useState<number | null>(null)
 
   // ---- Clipboard (copy/paste/cut). Undo/redo (snapshot/undo/redo) come from App via props. -----
@@ -420,9 +422,25 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     setSelectedWire(i)
     setSelected(null)
   }
+  // Hover-targeting (Stage 2): the part whose terminal bounding box contains the snapped grid
+  // point — computed from the model, not DOM enter/leave on the artwork, so the gaps between a
+  // symbol's thin strokes still count as "over the part". Topmost (last rendered) wins.
+  function partAt(gx: number, gy: number): string | null {
+    for (let i = sch.components.length - 1; i >= 0; i--) {
+      const ts = terminalsOf(sch.components[i])
+      let minx = ts[0].gx, maxx = ts[0].gx, miny = ts[0].gy, maxy = ts[0].gy
+      for (const t of ts) {
+        minx = Math.min(minx, t.gx); maxx = Math.max(maxx, t.gx)
+        miny = Math.min(miny, t.gy); maxy = Math.max(maxy, t.gy)
+      }
+      if (gx >= minx && gx <= maxx && gy >= miny && gy <= maxy) return sch.components[i].id
+    }
+    return null
+  }
   function onMouseMove(e: React.MouseEvent) {
     const { gx, gy } = gridAt(e)
     setHoverGrid({ gx, gy }) // live snap indicator for the wire tool
+    setHoverPartId(partAt(gx, gy))
     if (marquee) {
       if (gx !== marquee.x0 || gy !== marquee.y0) marqueeMoved.current = true
       setMarquee((m) => (m ? { ...m, x1: gx, y1: gy } : m))
@@ -466,6 +484,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
 
   function deleteSelected() {
     if (selectedWire === null && selSet.size === 0 && !selected) return
+    setHoverPartId(null) // a removed element fires no mouseleave — drop the hover id explicitly
     snapshot()
     if (selectedWire !== null) {
       setSch((s) => ({ ...s, wires: s.wires.filter((_, i) => i !== selectedWire) }))
@@ -482,13 +501,30 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     setSch((s) => deleteComponentsWithWires(s, new Set([selected])))
     setSelSet(new Set()); setSelWires(new Set()); setSelected(null)
   }
+  // R/F target: the part under the cursor wins, else the selection. Resolved against the live
+  // component list because a delete can leave a stale hover id (no mouseleave fires for a
+  // removed element).
+  function keyTarget(): SchComponent | null {
+    for (const id of [hoverPartId, selected]) {
+      const c = id ? sch.components.find((x) => x.id === id) : undefined
+      if (c) return c
+    }
+    return null
+  }
   function rotate() {
-    if (selected) {
+    const target = keyTarget()
+    if (target) {
       snapshot()
-      setSch((s) => rotateComponentWithWires(s, selected))
+      setSch((s) => rotateComponentWithWires(s, target.id))
     } else {
       setPlaceRotation((r) => (r + 1) % 4)
     }
+  }
+  function flip() {
+    const target = keyTarget()
+    if (!target || !canMirror(target.kind)) return
+    snapshot()
+    setSch((s) => mirrorComponentWithWires(s, target.id))
   }
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -505,12 +541,14 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         else if (k === 'x') { e.preventDefault(); cutSelection() }
         return
       }
-      // Delete and R act only when the pointer is over THIS panel: in the stacked Board view the
+      // Delete/R/F act only when the pointer is over THIS panel: in the stacked Board view the
       // Breadboard is mounted alongside with its own global keys, and without the gate one press
       // hit both — deleting/rotating the selected schematic part while the user worked the board.
+      // Within the panel, R/F prefer the part under the cursor over the selection (keyTarget).
       if (!pointerInsideRef.current) return
       if ((e.key === 'Delete' || e.key === 'Backspace') && (selected || selectedWire !== null || selSet.size)) deleteSelected()
       else if (e.key === 'r' || e.key === 'R') rotate()
+      else if (e.key === 'f' || e.key === 'F') flip()
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
@@ -622,6 +660,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
           <div className="display-controls">
             <button className="run-btn active" onClick={simulate} disabled={simBusy}>{simBusy ? 'Simulating…' : '▶ Simulate'}</button>
             <button className="run-btn" onClick={rotate}>Rotate (R)</button>
+            <button className="run-btn" onClick={flip}>Flip (F)</button>
             <button className="run-btn" onClick={deleteSelected} disabled={!selected && selectedWire === null}>Delete</button>
             <button className="run-btn" onClick={saveCircuit}>Save</button>
             <button className="run-btn" onClick={() => fileRef.current?.click()}>Open</button>
@@ -668,7 +707,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
           onMouseDown={onSvgDown}
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}
-          onMouseLeave={() => { setMarquee(null); setDrag(null) }}
+          onMouseLeave={() => { setMarquee(null); setDrag(null); setHoverPartId(null) }}
         >
           {/* grid dots */}
           <defs>
@@ -783,7 +822,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         </div>
 
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4 }}>
-          Place angle: {placeRotation * 90}° &nbsp;(press R to rotate; rotates selected part if one is selected)
+          Place angle: {placeRotation * 90}° &nbsp;(R rotates / F flips the part under the cursor, else the selected part; R with nothing targeted turns the place angle)
         </div>
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>
           Select tool: <b>drag a box</b> over parts to select them (or Shift+click), then drag any to move the group{selSet.size > 1 ? ` (${selSet.size} selected)` : ''}.
@@ -793,9 +832,12 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         {sel ? (
           <div>
             <div style={{ fontSize: 11, color: 'var(--text-primary)', marginBottom: 6 }}>
-              {sel.id} ({sel.kind}) — {(sel.rotation ?? 0) * 90}°
+              {sel.id} ({sel.kind}) — {(sel.rotation ?? 0) * 90}°{sel.mirror ? ' · flipped' : ''}
             </div>
-            <button className="run-btn" style={{ marginBottom: 8 }} onClick={rotate}>Rotate this part (R)</button>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+              <button className="run-btn" onClick={rotate}>Rotate (R)</button>
+              {canMirror(sel.kind) && <button className="run-btn" onClick={flip}>Flip (F)</button>}
+            </div>
             <div className="control-row-inline">
               <label>Ref</label>
               <input type="text" defaultValue={sel.id} key={'ref-' + sel.id}
@@ -1050,7 +1092,10 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
   if (art) {
     const pinById = new Map(art.sym.pins.map((p) => [p.id, p]))
     const src = art.pinIds.map((id) => pinById.get(id)!).filter(Boolean)
-    const dst = baseTerminals(c.kind, c.opModel).map((t) => ({ x: ax + G(t.gx), y: ay + G(t.gy) }))
+    // localTerminals bakes the model-space mirror into the destination points, so the
+    // alignment transform re-derives a flipped render — no scaleX stacked on top (which
+    // would double-flip symbols whose alignment already reflects, like the op-amp).
+    const dst = localTerminals(c).map((t) => ({ x: ax + G(t.gx), y: ay + G(t.gy) }))
     const m = alignTransform(src, dst)
     const html = inkedInner(art.id, art.sym, matScale(m))
     const ink = selected ? 'var(--accent-blue)' : 'var(--sch-ink)'
@@ -1088,8 +1133,9 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
       case 'lmc662': {
         // catalog DIP body is unlabeled — keep the app's pin/name labels on top
         const w = G(4), bx0 = ax + 12, bx1 = ax + w - 12, cxm = ax + w / 2
-        const lLab = ['OUTA', '−A', '+A', 'V−']
-        const rLab = ['V+', 'OUTB', '−B', '+B']
+        // pin columns swap sides when the DIP is mirrored — labels follow the pins
+        const colA = ['OUTA', '−A', '+A', 'V−'], colB = ['V+', 'OUTB', '−B', '+B']
+        const [lLab, rLab] = c.mirror ? [colB, colA] : [colA, colB]
         for (let i = 0; i < 4; i++) {
           labels.push(upright(bx0 + 13, ay + G(i) + 3, <text x={bx0 + 13} y={ay + G(i) + 3} fill="var(--text-secondary)" fontSize={8} textAnchor="start">{lLab[i]}</text>))
           labels.push(upright(bx1 - 13, ay + G(i) + 3, <text x={bx1 - 13} y={ay + G(i) + 3} fill="var(--text-secondary)" fontSize={8} textAnchor="end">{rLab[i]}</text>))
