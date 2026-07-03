@@ -40,6 +40,10 @@ export interface SchComponent {
   gy: number
   rotation?: number // 0..3 → 0/90/180/270 degrees clockwise (default 0)
   mirror?: boolean // flipped across the part's own vertical centerline (applied before rotation)
+  // For kind 'scope1'/'scope2' (the shared measurement input): how the placed input is DISPLAYED —
+  // oscilloscope (default) or voltmeter badge. Purely presentational: same port, same nets, same sim
+  // (the M2K scope and voltmeter are the same 1±/2± input on one ADC).
+  view?: 'scope' | 'voltmeter'
   value?: number // ohms / farads / henries (vsource uses AC 1)
   opModel?: 'ideal' | 'lmc662' // for kind 'opamp': ideal VCVS or the LMC662 behavioural model
   part?: string // for kind 'bjt' / 'mosfet': the ADALP2000 part name (key into TRANSISTOR_PARTS)

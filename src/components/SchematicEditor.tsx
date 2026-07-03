@@ -139,10 +139,11 @@ const TOOLS: { tool: Tool; label: string }[] = [
   { tool: 'ina125', label: 'INA125' },
   { tool: 'awg1', label: 'W1' },
   { tool: 'awg2', label: 'W2' },
-  { tool: 'scope1', label: '1+' },
-  { tool: 'adc1n', label: '1-' },
-  { tool: 'scope2', label: '2+' },
-  { tool: 'adc2n', label: '2-' },
+  // Option B (andre): ONE measurement input per channel — places the existing 1+/2+ port
+  // (single-ended; the − lead comes from the differential toggle on the placed input).
+  // The raw 1-/2- terminals are no longer palette buttons; the kinds still exist.
+  { tool: 'scope1', label: 'CH1 meas' },
+  { tool: 'scope2', label: 'CH2 meas' },
   { tool: 'vplus', label: 'V+' },
   { tool: 'vminus', label: 'V-' },
   { tool: 'ground', label: 'GND' },
@@ -736,6 +737,27 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, kind: k, value } : c) }))
   }
 
+  // Option B: presentational scope/voltmeter view on the shared measurement input (1+/2+).
+  // Same port, same nets, same sim — only the badge glyph changes.
+  function setSelView(v: 'scope' | 'voltmeter') {
+    if (!sel) return
+    snapshot()
+    setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, view: v === 'scope' ? undefined : v } : c) }))
+  }
+
+  // Option B differential toggle: place/remove the channel's − reference port. These are the
+  // EXISTING adc1n/adc2n kinds (no model change) — the palette just no longer lists them raw.
+  function setDifferential(negKind: 'adc1n' | 'adc2n', plus: SchComponent, on: boolean) {
+    snapshot()
+    if (on) {
+      const c: SchComponent = { id: newId(negKind, sch.components), kind: negKind, gx: plus.gx, gy: plus.gy + 2 }
+      setSch((s) => ({ ...s, components: [...s.components, c] }))
+    } else {
+      const ids = new Set(sch.components.filter((c) => c.kind === negKind).map((c) => c.id))
+      setSch((s) => deleteComponentsWithWires(s, ids))
+    }
+  }
+
   // SCH-8: choose the ADALP2000 transistor part (sets the NPN/PNP or N/P-channel model body).
   function setSelPart(part: string) {
     if (!sel) return
@@ -1093,6 +1115,30 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                 </select>
               </div>
             )}
+            {(sel.kind === 'scope1' || sel.kind === 'scope2') && (() => {
+              const ch = sel.kind === 'scope1' ? 1 : 2
+              const negKind = ch === 1 ? 'adc1n' as const : 'adc2n' as const
+              const hasNeg = sch.components.some((c) => c.kind === negKind)
+              return (
+                <>
+                  <div className="control-row-inline">
+                    <label>View as</label>
+                    <select value={sel.view ?? 'scope'} onChange={(e) => setSelView(e.target.value as 'scope' | 'voltmeter')} style={{ width: 150 }}>
+                      <option value="scope">Oscilloscope</option>
+                      <option value="voltmeter">Voltmeter</option>
+                    </select>
+                  </div>
+                  <div className="control-row-inline">
+                    <label>Differential</label>
+                    <input type="checkbox" checked={hasNeg} onChange={(e) => setDifferential(negKind, sel, e.target.checked)} />
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>
+                    The shared CH{ch} input — scope and voltmeter read these same pins. Differential
+                    adds the {ch}− reference lead; off = single-ended (referenced to GND).
+                  </div>
+                </>
+              )
+            })()}
             {(sel.kind === 'bjt' || sel.kind === 'mosfet') && (
               <div className="control-row-inline">
                 <label>Part</label>
@@ -1476,7 +1522,7 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
     const lbl = c.kind === 'scope1' ? '1+' : '2+'
     inner = (
       <g style={{ color: col }}>
-        {badgeArt(c.id, 'oscilloscope', x, y - 22)}
+        {badgeArt(c.id, c.view === 'voltmeter' ? 'voltmeter' : 'oscilloscope', x, y - 22)}
         {upright(x, y - 38, <text x={x} y={y - 38} fill={col} fontSize={10} textAnchor="middle">{lbl}</text>)}
       </g>
     )
