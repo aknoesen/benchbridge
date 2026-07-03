@@ -1,12 +1,13 @@
 // Schematic editor (SCH-1) — a lightweight node-and-wire editor (NOT KiCad). Place R/C/L/V/
 // op-amp/ground/probe on a grid, draw wires, edit values. Produces a SPICE-2 Circuit via
 // toCircuit(). See docs/specs/schematic-ngspice.md (SCH-1).
-import { useMemo, useRef, useState, useEffect, type ReactElement, type Dispatch, type SetStateAction } from 'react'
+import { useMemo, useRef, useState, useEffect, type ReactElement, type Dispatch, type SetStateAction, type CSSProperties } from 'react'
 import {
-  Schematic, SchComponent, SchKind, terminalsOf, toCircuit, ampCategory, computeNets,
+  Schematic, SchComponent, SchKind, terminalsOf, baseTerminals, toCircuit, ampCategory, computeNets,
   attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentWithWires,
   deleteComponentsWithWires, type WireEndRef,
 } from '../core/schematic'
+import { symbolFor, alignTransform, matScale, inkedInner } from '../core/symbolArt'
 import { buildNetlist, TRANSISTOR_PARTS } from '../core/netlist'
 import { EXAMPLES } from '../core/examples'
 import { createSpiceEngine, type SpiceEngine, transferFunction } from '../core/spice'
@@ -53,6 +54,27 @@ function tiaHintFor(sch: Schematic, pdId: string): { rfOhms: number; gbwHz: numb
 
 const GRID = 24
 const PAD = 16
+
+// SCH-11 white "paper" canvas: the circuitikz symbols are black-line artwork, so the
+// schematic surface is a light document INSIDE the dark app (matches the white-paper
+// PNG export). These CSS custom properties are set on the schematic <svg> only, so
+// every var()-coloured element inside re-resolves for paper without touching the
+// app-wide dark theme. Ports keep their channel identity hues, darkened for contrast.
+const PAPER_CANVAS: CSSProperties & Record<string, string> = {
+  background: '#fdfdfa',
+  '--sch-ink': '#1c1c1c',        // symbol + remaining inline part ink
+  '--wire-color': '#1c1c1c',     // wires read as ink, like the reader's figures
+  '--node-color': '#2a6ad0',     // terminal dots: visible wiring targets on paper
+  '--accent-blue': '#1d6fd8',    // selection/marquee: darker blue for white bg
+  '--text-primary': '#1c1c1c',
+  '--text-secondary': '#5a5a5a',
+  '--bg-panel': '#ffffff',       // body fill of the remaining inline parts (INA125)
+  '--theory-color': '#0a8a4a',   // legacy probe marker
+  '--ch1-color': '#c05f00',      // 1+/1− port markers (darkened CH1 orange)
+  '--ch2-color': '#7d3fa0',      // 2+/2− port markers (darkened CH2 purple)
+}
+const GRID_DOT_PAPER = '#d8d8d2'
+const AWG_PAPER = '#9c7a00' // W1/W2 port markers (darkened from the dark theme's #e0c020)
 
 type Tool = 'select' | 'wire' | SchKind
 
@@ -603,8 +625,8 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
             <button className="run-btn" onClick={deleteSelected} disabled={!selected && selectedWire === null}>Delete</button>
             <button className="run-btn" onClick={saveCircuit}>Save</button>
             <button className="run-btn" onClick={() => fileRef.current?.click()}>Open</button>
-            <button className="run-btn" title="Save the schematic as a PNG (transparent background) for your prelab"
-              onClick={() => { if (svgRef.current) exportSvgToPng(svgRef.current, 'schematic.png', { light: true }).catch((e) => setSimStatus('Export failed: ' + e.message)) }}>
+            <button className="run-btn" title="Save the schematic as a white-paper PNG figure for your prelab"
+              onClick={() => { if (svgRef.current) exportSvgToPng(svgRef.current, 'schematic.png', { paper: true }).catch((e) => setSimStatus('Export failed: ' + e.message)) }}>
               Export PNG
             </button>
             <select className="run-btn" title="Load an example circuit" value=""
@@ -641,7 +663,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         <svg
           ref={svgRef}
           className="plotly-display"
-          style={{ background: 'var(--bg-display)', cursor: tool !== 'select' ? 'crosshair' : (overSelection ? 'move' : 'default') }}
+          style={{ ...PAPER_CANVAS, cursor: tool !== 'select' ? 'crosshair' : (overSelection ? 'move' : 'default') }}
           onClick={onBackgroundClick}
           onMouseDown={onSvgDown}
           onMouseMove={onMouseMove}
@@ -651,7 +673,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
           {/* grid dots */}
           <defs>
             <pattern id="gridDots" x={PAD} y={PAD} width={GRID} height={GRID} patternUnits="userSpaceOnUse">
-              <circle cx={0} cy={0} r={1} fill="#333" />
+              <circle cx={0} cy={0} r={1} fill={GRID_DOT_PAPER} />
             </pattern>
           </defs>
           <rect x={0} y={0} width="100%" height="100%" fill="url(#gridDots)" />
@@ -1010,7 +1032,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
 }
 
 function renderSymbol(c: SchComponent, px: (g: number) => number, selected: boolean) {
-  const stroke = selected ? 'var(--accent-blue)' : 'var(--ch1-color)'
+  const stroke = selected ? 'var(--accent-blue)' : 'var(--sch-ink)'
   const sw = selected ? 2.5 : 1.8
   const ax = px(c.gx), ay = px(c.gy)
   const rot = (c.rotation ?? 0) * 90
@@ -1021,162 +1043,71 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
   )
 
   let inner: ReactElement
-  if (c.kind === 'resistor') {
-    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
-    // American zigzag resistor
-    const zig = `${x1},${y} ${cx - 18},${y} ${cx - 15},${y - 7} ${cx - 9},${y + 7} ${cx - 3},${y - 7} ${cx + 3},${y + 7} ${cx + 9},${y - 7} ${cx + 15},${y + 7} ${cx + 18},${y} ${x2},${y}`
+  // SCH-11: kinds with a circuitikz catalog symbol render from it, the artwork
+  // transformed so every catalog pin sits exactly on the app's grid terminals
+  // (baseTerminals stays authoritative — the symbol conforms to the model).
+  const art = symbolFor(c)
+  if (art) {
+    const pinById = new Map(art.sym.pins.map((p) => [p.id, p]))
+    const src = art.pinIds.map((id) => pinById.get(id)!).filter(Boolean)
+    const dst = baseTerminals(c.kind, c.opModel).map((t) => ({ x: ax + G(t.gx), y: ay + G(t.gy) }))
+    const m = alignTransform(src, dst)
+    const html = inkedInner(art.id, art.sym, matScale(m))
+    const ink = selected ? 'var(--accent-blue)' : 'var(--sch-ink)'
+    const cx = ax + G(1), y = ay
+    const idText = (tx: number, ty: number, size = 10, fill = 'var(--text-secondary)') =>
+      upright(tx, ty, <text x={tx} y={ty} fill={fill} fontSize={size} textAnchor="middle">{c.id}</text>)
+    const valText = (tx: number, ty: number) =>
+      upright(tx, ty, <text x={tx} y={ty} fill="var(--text-primary)" fontSize={9} textAnchor="middle">{fmtEng(c.value ?? 0)}{UNIT[c.kind] ?? ''}</text>)
+    const labels: ReactElement[] = []
+    switch (c.kind) {
+      case 'resistor':
+      case 'capacitor':
+      case 'inductor':
+        labels.push(idText(cx, y - 15), valText(cx, y + 20))
+        break
+      case 'vsource':
+        labels.push(idText(cx, y - 18))
+        break
+      case 'diode':
+      case 'zener':
+        labels.push(idText(cx, y - 15, 9))
+        break
+      case 'led':
+      case 'photodiode':
+        labels.push(idText(cx, y + 20, 9))
+        break
+      case 'bjt':
+      case 'mosfet':
+        labels.push(idText(cx, ay - 5, 9))
+        labels.push(upright(cx, ay + G(2) + 13, <text x={cx} y={ay + G(2) + 13} fill="var(--text-primary)" fontSize={8} textAnchor="middle">{c.part ?? (c.kind === 'bjt' ? 'BJT' : 'MOSFET')}</text>))
+        break
+      case 'opamp':
+        labels.push(idText(ax + G(2) + 4, ay + G(1) + 4))
+        break
+      case 'lmc662': {
+        // catalog DIP body is unlabeled — keep the app's pin/name labels on top
+        const w = G(4), bx0 = ax + 12, bx1 = ax + w - 12, cxm = ax + w / 2
+        const lLab = ['OUTA', '−A', '+A', 'V−']
+        const rLab = ['V+', 'OUTB', '−B', '+B']
+        for (let i = 0; i < 4; i++) {
+          labels.push(upright(bx0 + 13, ay + G(i) + 3, <text x={bx0 + 13} y={ay + G(i) + 3} fill="var(--text-secondary)" fontSize={8} textAnchor="start">{lLab[i]}</text>))
+          labels.push(upright(bx1 - 13, ay + G(i) + 3, <text x={bx1 - 13} y={ay + G(i) + 3} fill="var(--text-secondary)" fontSize={8} textAnchor="end">{rLab[i]}</text>))
+        }
+        labels.push(idText(cxm, ay + G(1) + 2, 9, 'var(--sch-ink)'))
+        labels.push(upright(cxm, ay + G(2) + 2, <text x={cxm} y={ay + G(2) + 2} fill="var(--text-secondary)" fontSize={8} textAnchor="middle">LMC662</text>))
+        break
+      }
+      case 'ground':
+        labels.push(upright(ax, ay + 28, <text x={ax} y={ay + 28} fill="var(--sch-ink)" fontSize={9} textAnchor="middle">GND</text>))
+        break
+    }
     inner = (
       <g>
-        <polyline points={zig} fill="none" stroke={stroke} strokeWidth={sw} />
-        {upright(cx, y - 13, <text x={cx} y={y - 13} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
-        {upright(cx, y + 18, <text x={cx} y={y + 18} fill="var(--text-primary)" fontSize={9} textAnchor="middle">{fmtEng(c.value ?? 0)}{UNIT[c.kind] ?? ''}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'capacitor') {
-    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
-    inner = (
-      <g>
-        <line x1={x1} y1={y} x2={cx - 4} y2={y} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 4} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx - 4} y1={y - 11} x2={cx - 4} y2={y + 11} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 4} y1={y - 11} x2={cx + 4} y2={y + 11} stroke={stroke} strokeWidth={sw} />
-        {upright(cx, y - 15, <text x={cx} y={y - 15} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
-        {upright(cx, y + 20, <text x={cx} y={y + 20} fill="var(--text-primary)" fontSize={9} textAnchor="middle">{fmtEng(c.value ?? 0)}{UNIT[c.kind] ?? ''}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'diode') {
-    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
-    inner = (
-      <g>
-        <line x1={x1} y1={y} x2={cx - 7} y2={y} stroke={stroke} strokeWidth={sw} />
-        {/* anode triangle pointing to the cathode bar */}
-        <polygon points={`${cx - 7},${y - 9} ${cx - 7},${y + 9} ${cx + 5},${y}`} fill={stroke} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
-        <line x1={cx + 5} y1={y - 9} x2={cx + 5} y2={y + 9} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 5} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
-        {upright(cx, y - 15, <text x={cx} y={y - 15} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'led') {
-    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
-    inner = (
-      <g>
-        <line x1={x1} y1={y} x2={cx - 7} y2={y} stroke={stroke} strokeWidth={sw} />
-        <polygon points={`${cx - 7},${y - 9} ${cx - 7},${y + 9} ${cx + 5},${y}`} fill={stroke} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
-        <line x1={cx + 5} y1={y - 9} x2={cx + 5} y2={y + 9} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 5} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
-        {/* two emission arrows (light coming out) */}
-        <line x1={cx - 1} y1={y - 11} x2={cx + 6} y2={y - 19} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx + 6} y1={y - 19} x2={cx + 2.5} y2={y - 17.5} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx + 6} y1={y - 19} x2={cx + 5} y2={y - 15.5} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx + 5} y1={y - 10} x2={cx + 12} y2={y - 18} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx + 12} y1={y - 18} x2={cx + 8.5} y2={y - 16.5} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx + 12} y1={y - 18} x2={cx + 11} y2={y - 14.5} stroke={stroke} strokeWidth={1.3} />
-        {upright(cx, y + 18, <text x={cx} y={y + 18} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{c.id}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'zener') {
-    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
-    inner = (
-      <g>
-        <line x1={x1} y1={y} x2={cx - 7} y2={y} stroke={stroke} strokeWidth={sw} />
-        <polygon points={`${cx - 7},${y - 9} ${cx - 7},${y + 9} ${cx + 5},${y}`} fill={stroke} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
-        {/* Zener cathode bar with bent ends (the "Z" flag) */}
-        <line x1={cx + 5} y1={y - 9} x2={cx + 5} y2={y + 9} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 5} y1={y - 9} x2={cx + 1} y2={y - 9} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 5} y1={y + 9} x2={cx + 9} y2={y + 9} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 5} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
-        {upright(cx, y - 15, <text x={cx} y={y - 15} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{c.id}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'photodiode') {
-    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
-    inner = (
-      <g>
-        <line x1={x1} y1={y} x2={cx - 7} y2={y} stroke={stroke} strokeWidth={sw} />
-        <polygon points={`${cx - 7},${y - 9} ${cx - 7},${y + 9} ${cx + 5},${y}`} fill={stroke} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
-        <line x1={cx + 5} y1={y - 9} x2={cx + 5} y2={y + 9} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 5} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
-        {/* two arrows pointing IN (incoming light) — the photodiode convention, opposite the LED */}
-        <line x1={cx + 6} y1={y - 19} x2={cx - 1} y2={y - 11} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx - 1} y1={y - 11} x2={cx + 2.5} y2={y - 10} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx - 1} y1={y - 11} x2={cx} y2={y - 14.5} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx + 12} y1={y - 18} x2={cx + 5} y2={y - 10} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx + 5} y1={y - 10} x2={cx + 8.5} y2={y - 9} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx + 5} y1={y - 10} x2={cx + 6} y2={y - 13.5} stroke={stroke} strokeWidth={1.3} />
-        {upright(cx, y + 18, <text x={cx} y={y + 18} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{c.id}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'bjt') {
-    // terminals: collector (2,0) top-right, base (0,1) left, emitter (2,2) bottom-right.
-    const npn = (c.part ? TRANSISTOR_PARTS[c.part]?.type : 'npn') !== 'pnp'
-    const bx = ax + 18 // base bar x
-    inner = (
-      <g>
-        <line x1={ax} y1={ay + G(1)} x2={bx} y2={ay + G(1)} stroke={stroke} strokeWidth={sw} />
-        <line x1={bx} y1={ay + 12} x2={bx} y2={ay + 36} stroke={stroke} strokeWidth={sw} />
-        <line x1={bx} y1={ay + 18} x2={ax + G(2)} y2={ay} stroke={stroke} strokeWidth={sw} />
-        <line x1={bx} y1={ay + 30} x2={ax + G(2)} y2={ay + G(2)} stroke={stroke} strokeWidth={sw} />
-        {/* emitter arrow: NPN points out toward the emitter; PNP points in toward the base */}
-        <polygon points={npn
-          ? `${ax + 42},${ay + 44} ${ax + 34},${ay + 45} ${ax + 39},${ay + 37}`
-          : `${ax + 28},${ay + 36} ${ax + 32},${ay + 43} ${ax + 36},${ay + 36}`}
-          fill={stroke} stroke={stroke} strokeWidth={1} strokeLinejoin="round" />
-        {upright(ax + G(1), ay - 5, <text x={ax + G(1)} y={ay - 5} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{c.id}</text>)}
-        {upright(ax + G(1), ay + G(2) + 13, <text x={ax + G(1)} y={ay + G(2) + 13} fill="var(--text-primary)" fontSize={8} textAnchor="middle">{c.part ?? 'BJT'}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'mosfet') {
-    // terminals: drain (2,0) top-right, gate (0,1) left, source (2,2) bottom-right.
-    const nch = (c.part ? TRANSISTOR_PARTS[c.part]?.type : 'nmos') !== 'pmos'
-    const gp = ax + 12 // gate plate x
-    const chx = ax + 18 // channel x
-    inner = (
-      <g>
-        <line x1={ax} y1={ay + G(1)} x2={gp} y2={ay + G(1)} stroke={stroke} strokeWidth={sw} />
-        <line x1={gp} y1={ay + 11} x2={gp} y2={ay + 37} stroke={stroke} strokeWidth={sw} />
-        {/* enhancement channel: three broken bars */}
-        <line x1={chx} y1={ay + 11} x2={chx} y2={ay + 19} stroke={stroke} strokeWidth={sw} />
-        <line x1={chx} y1={ay + 20} x2={chx} y2={ay + 28} stroke={stroke} strokeWidth={sw} />
-        <line x1={chx} y1={ay + 29} x2={chx} y2={ay + 37} stroke={stroke} strokeWidth={sw} />
-        {/* drain (top-right) */}
-        <line x1={chx} y1={ay + 15} x2={ax + 34} y2={ay + 15} stroke={stroke} strokeWidth={sw} />
-        <line x1={ax + 34} y1={ay + 15} x2={ax + 34} y2={ay} stroke={stroke} strokeWidth={sw} />
-        <line x1={ax + 34} y1={ay} x2={ax + G(2)} y2={ay} stroke={stroke} strokeWidth={sw} />
-        {/* source (bottom-right) */}
-        <line x1={chx} y1={ay + 33} x2={ax + 34} y2={ay + 33} stroke={stroke} strokeWidth={sw} />
-        <line x1={ax + 34} y1={ay + 33} x2={ax + 34} y2={ay + G(2)} stroke={stroke} strokeWidth={sw} />
-        <line x1={ax + 34} y1={ay + G(2)} x2={ax + G(2)} y2={ay + G(2)} stroke={stroke} strokeWidth={sw} />
-        {/* channel-type arrow on the source stub: NMOS points in toward the channel, PMOS out */}
-        <polygon points={nch
-          ? `${chx + 3},${ay + 33} ${chx + 9},${ay + 30} ${chx + 9},${ay + 36}`
-          : `${ax + 31},${ay + 33} ${ax + 25},${ay + 30} ${ax + 25},${ay + 36}`}
-          fill={stroke} stroke={stroke} strokeWidth={1} strokeLinejoin="round" />
-        {upright(ax + G(1), ay - 5, <text x={ax + G(1)} y={ay - 5} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{c.id}</text>)}
-        {upright(ax + G(1), ay + G(2) + 13, <text x={ax + G(1)} y={ay + G(2) + 13} fill="var(--text-primary)" fontSize={8} textAnchor="middle">{c.part ?? 'MOSFET'}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'vsource') {
-    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
-    inner = (
-      <g>
-        <line x1={x1} y1={y} x2={cx - 14} y2={y} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 14} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
-        <circle cx={cx} cy={y} r={14} fill="none" stroke={stroke} strokeWidth={sw} />
-        {upright(cx, y - 18, <text x={cx} y={y - 18} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
-        {upright(cx, y + 4, <text x={cx} y={y + 4} fill="var(--text-primary)" fontSize={11} textAnchor="middle">V</text>)}
-      </g>
-    )
-  } else if (c.kind === 'inductor') {
-    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
-    // coil = four upward semicircle humps across 36px, centered on cx
-    const coil = `M ${cx - 18} ${y} a 4.5 4.5 0 0 1 9 0 a 4.5 4.5 0 0 1 9 0 a 4.5 4.5 0 0 1 9 0 a 4.5 4.5 0 0 1 9 0`
-    inner = (
-      <g>
-        <line x1={x1} y1={y} x2={cx - 18} y2={y} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 18} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
-        <path d={coil} fill="none" stroke={stroke} strokeWidth={sw} />
-        {upright(cx, y - 13, <text x={cx} y={y - 13} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
-        {upright(cx, y + 18, <text x={cx} y={y + 18} fill="var(--text-primary)" fontSize={9} textAnchor="middle">{fmtEng(c.value ?? 0)}{UNIT[c.kind] ?? ''}</text>)}
+        <g transform={`matrix(${m.map((n) => +n.toFixed(5)).join(' ')})`}
+          style={{ color: ink }}
+          dangerouslySetInnerHTML={{ __html: html }} />
+        {labels.map((l, i) => <g key={i}>{l}</g>)}
       </g>
     )
   } else if (c.kind === 'ina125') {
@@ -1201,63 +1132,11 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
         {upright(ax + G(3.5), top - 4, <text x={ax + G(3.5)} y={top - 4} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
       </g>
     )
-  } else if (c.kind === 'opamp') {
-    const xL = ax, yT = ay, yB = ay + G(2), xR = ax + G(4), yM = ay + G(1)
-    inner = (
-      <g>
-        <line x1={xL} y1={yT} x2={xL + 10} y2={yT} stroke={stroke} strokeWidth={sw} />
-        <line x1={xL} y1={yB} x2={xL + 10} y2={yB} stroke={stroke} strokeWidth={sw} />
-        <line x1={xR - 6} y1={yM} x2={xR} y2={yM} stroke={stroke} strokeWidth={sw} />
-        <polygon points={`${xL + 10},${yT - 8} ${xL + 10},${yB + 8} ${xR - 6},${yM}`} fill="var(--bg-panel)" stroke={stroke} strokeWidth={sw} />
-        {upright(xL + 17, yT + 4, <text x={xL + 17} y={yT + 4} fill="var(--text-primary)" fontSize={11} textAnchor="middle">+</text>)}
-        {upright(xL + 17, yB + 1, <text x={xL + 17} y={yB + 1} fill="var(--text-primary)" fontSize={13} textAnchor="middle">−</text>)}
-        {upright(xL + 30, yM + 4, <text x={xL + 30} y={yM + 4} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'lmc662') {
-    // 8-pin DIP. Left pins 1-4 (OUTA,-A,+A,V-), right pins top→bottom (V+,OUTB,-B,+B).
-    const w = G(4)
-    const bx0 = ax + 12, bx1 = ax + w - 12, by0 = ay - 10, by1 = ay + G(3) + 10
-    const cxm = (bx0 + bx1) / 2
-    const lLab = ['OUTA', '−A', '+A', 'V−']
-    const rLab = ['V+', 'OUTB', '−B', '+B']
-    inner = (
-      <g>
-        <rect x={bx0} y={by0} width={bx1 - bx0} height={by1 - by0} rx={4} fill="var(--bg-panel)" stroke={stroke} strokeWidth={sw} />
-        <path d={`M ${cxm - 7},${by0} a 7 7 0 0 0 14 0`} fill="none" stroke={stroke} strokeWidth={sw} />
-        {[0, 1, 2, 3].map((i) => (
-          <g key={'l' + i}>
-            <line x1={ax} y1={ay + G(i)} x2={bx0} y2={ay + G(i)} stroke={stroke} strokeWidth={sw} />
-            {upright(bx0 + 13, ay + G(i) + 3, <text x={bx0 + 13} y={ay + G(i) + 3} fill="var(--text-secondary)" fontSize={8} textAnchor="start">{lLab[i]}</text>)}
-          </g>
-        ))}
-        {[0, 1, 2, 3].map((i) => (
-          <g key={'r' + i}>
-            <line x1={ax + w} y1={ay + G(i)} x2={bx1} y2={ay + G(i)} stroke={stroke} strokeWidth={sw} />
-            {upright(bx1 - 13, ay + G(i) + 3, <text x={bx1 - 13} y={ay + G(i) + 3} fill="var(--text-secondary)" fontSize={8} textAnchor="end">{rLab[i]}</text>)}
-          </g>
-        ))}
-        {upright(cxm, ay + G(1) + 2, <text x={cxm} y={ay + G(1) + 2} fill="var(--ch1-color)" fontSize={9} textAnchor="middle">{c.id}</text>)}
-        {upright(cxm, ay + G(2) + 2, <text x={cxm} y={ay + G(2) + 2} fill="var(--text-secondary)" fontSize={8} textAnchor="middle">LMC662</text>)}
-      </g>
-    )
-  } else if (c.kind === 'ground') {
-    const x = ax, y = ay
-    const col = '#cccccc' // GND = black wire; rendered light for contrast on the dark canvas
-    inner = (
-      <g>
-        <line x1={x} y1={y} x2={x} y2={y + 10} stroke={col} strokeWidth={sw} />
-        <line x1={x - 9} y1={y + 10} x2={x + 9} y2={y + 10} stroke={col} strokeWidth={sw} />
-        <line x1={x - 5} y1={y + 14} x2={x + 5} y2={y + 14} stroke={col} strokeWidth={sw} />
-        <line x1={x - 2} y1={y + 18} x2={x + 2} y2={y + 18} stroke={col} strokeWidth={sw} />
-        {upright(x, y + 30, <text x={x} y={y + 30} fill={col} fontSize={9} textAnchor="middle">GND</text>)}
-      </g>
-    )
   } else if (c.kind === 'dcrail' || c.kind === 'vplus' || c.kind === 'vminus') {
     const x = ax, y = ay
     const v = c.value ?? (c.kind === 'vminus' ? -5 : 5)
     const neg = c.kind === 'vminus' || v < 0
-    const col = neg ? '#4a9eff' : '#e04040' // V- blue, V+ red
+    const col = neg ? '#2a6ad0' : '#c22a2a' // V- blue, V+ red (paper-contrast shades)
     const lbl = c.kind === 'vplus' ? 'V+' : c.kind === 'vminus' ? 'V-' : (v >= 0 ? '+' : '') + v + 'V'
     inner = (
       <g>
@@ -1271,9 +1150,9 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
     const lbl = c.kind === 'awg1' ? 'W1' : 'W2'
     inner = (
       <g>
-        <circle cx={x} cy={y} r={11} fill="var(--bg-panel)" stroke="#e0c020" strokeWidth={sw} />
-        <path d={`M ${x - 6} ${y} q 3 -6 6 0 q 3 6 6 0`} fill="none" stroke="#e0c020" strokeWidth={1.4} />
-        {upright(x, y - 16, <text x={x} y={y - 16} fill="#e0c020" fontSize={10} textAnchor="middle">{lbl}</text>)}
+        <circle cx={x} cy={y} r={11} fill="var(--bg-panel)" stroke={AWG_PAPER} strokeWidth={sw} />
+        <path d={`M ${x - 6} ${y} q 3 -6 6 0 q 3 6 6 0`} fill="none" stroke={AWG_PAPER} strokeWidth={1.4} />
+        {upright(x, y - 16, <text x={x} y={y - 16} fill={AWG_PAPER} fontSize={10} textAnchor="middle">{lbl}</text>)}
       </g>
     )
   } else if (c.kind === 'scope1' || c.kind === 'scope2' || c.kind === 'adc1n' || c.kind === 'adc2n') {

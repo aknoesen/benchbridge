@@ -115,7 +115,14 @@ export async function savePngBlob(blob: Blob, suggestedName: string) {
   URL.revokeObjectURL(url)
 }
 
-interface ExportOpts { scale?: number; light?: boolean }
+interface ExportOpts {
+  scale?: number
+  light?: boolean
+  // paper: the drawing is ALREADY ink-on-light (the SCH-11 schematic canvas) —
+  // fill the canvas white and drop the grid, but do NOT invert lightness
+  // (light:true would turn the black ink white and vanish it).
+  paper?: boolean
+}
 
 /**
  * Rasterize an on-screen SVG element to a PNG and save it. Uses the native Save dialog (name +
@@ -128,6 +135,7 @@ interface ExportOpts { scale?: number; light?: boolean }
 export async function exportSvgToPng(svg: SVGSVGElement, filename: string, opts: ExportOpts = {}): Promise<void> {
   const scale = opts.scale ?? 2
   const light = opts.light ?? false
+  const paper = opts.paper ?? false
 
   const vb = svg.viewBox?.baseVal
   const box = svg.getBoundingClientRect()
@@ -136,8 +144,11 @@ export async function exportSvgToPng(svg: SVGSVGElement, filename: string, opts:
   if (!w || !h) throw new Error('Nothing to export yet.')
 
   const clone = svg.cloneNode(true) as SVGSVGElement
-  if (light) clone.querySelectorAll('[fill^="url("]').forEach((el) => el.remove()) // drop the grid
   inlinePaint(svg, clone, light)
+  // Drop the grid AFTER the paint walk: inlinePaint pairs source/clone children by
+  // index, so removing a clone child first would shift every later sibling and land
+  // each element's paint on its neighbour (ports exported with the wrong fill).
+  if (light || paper) clone.querySelectorAll('[fill^="url("]').forEach((el) => el.remove())
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
   clone.setAttribute('width', String(w))
   clone.setAttribute('height', String(h))
@@ -158,7 +169,7 @@ export async function exportSvgToPng(svg: SVGSVGElement, filename: string, opts:
     canvas.height = Math.max(1, Math.round(h * scale))
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('Canvas unavailable.')
-    if (light) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height) }
+    if (light || paper) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height) }
     ctx.scale(scale, scale)
     ctx.drawImage(img, 0, 0, w, h)
     const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/png'))
