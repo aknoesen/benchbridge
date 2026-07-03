@@ -350,15 +350,16 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
         </p>
         <div style={btnRow}>
           <button style={goBtn} onClick={() => { onLoadExample('rc-lp'); onGoTo('scope') }}>Load the RC →</button>
-          <span style={{ alignSelf: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>→ a square wave in, a <b>rounded</b> output (two traces: the drive and the output).</span>
+          <span style={{ alignSelf: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>→ a <b>square wave</b> drives it.</span>
+          <button style={goBtn} onClick={() => onGoTo('scope')}>Open the Oscilloscope →</button>
+          <span style={{ alignSelf: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>— two traces: the sharp square <b>input</b> and a <b>rounded output</b>.</span>
         </div>
         <Beat>
-          <b>Watch the lag.</b> The output can't jump — it charges and discharges. Slow the frequency
-          and the curve fills out; speed it up and the output barely moves.
-          <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('scope')}>Open the Oscilloscope →</button></div>
+          <b>See the lag.</b> The output can't jump — it charges and discharges toward each new
+          level, so its edges round off. That rounding is the circuit's <b>memory</b>, seen in time.
         </Beat>
         <p style={{ marginTop: 12 }}>
-          The time it takes is the <b>time constant, τ = R·C</b> — the circuit's memory, seen in time.
+          How long it takes is the <b>time constant, τ = R·C</b>.
         </p>
       </>
     )
@@ -389,17 +390,21 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
     return (
       <>
         <h2 style={h2}>An op-amp</h2>
-        <p style={{ marginTop: 6 }}>An op-amp trades a resistor ratio for gain.</p>
+        <p style={{ marginTop: 6 }}>An op-amp turns a resistor ratio into gain.</p>
         <div style={btnRow}>
           <button style={goBtn} onClick={() => { onLoadExample('inv-amp'); onGoTo('scope') }}>Load the inverting amp →</button>
-          <span style={{ alignSelf: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>→ a small input, a bigger, flipped output (two traces).</span>
+          <button style={goBtn} onClick={() => onGoTo('scope')}>Open the Oscilloscope →</button>
+          <span style={{ alignSelf: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>— two traces: a small <b>input</b> and a bigger, <b>flipped output</b>.</span>
         </div>
         <Beat>
-          <b>Read the gain.</b> It's set by two resistors: <b>−R<sub>f</sub>/R<sub>in</sub></b>.
-          Change R<sub>in</sub> and watch the output grow or shrink. Push the input too far and the
-          output flattens — it's hit the supply rails.
-          <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('scope')}>Open the Oscilloscope →</button></div>
+          <b>Read the gain off the screen.</b> The output is about <b>2× the input, and inverted</b> —
+          that's the gain the two resistors set: <b>−R<sub>f</sub>/R<sub>in</sub></b> (here
+          −20 kΩ / 10 kΩ = −2). Count the divisions on each trace to confirm.
         </Beat>
+        <p style={note}>
+          Push an amplifier too hard and the output flattens at the supply rails — that's{' '}
+          <i>clipping</i>. (Try it later in the Circuit editor by raising the input level.)
+        </p>
       </>
     )
   }
@@ -409,18 +414,28 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
       <>
         <h2 style={h2}>I-V curves</h2>
         <p style={{ marginTop: 6 }}>
-          Not every part obeys Ohm's law. See a device's character directly.
+          Not every part obeys Ohm's law. A device's <b>I-V curve</b> — current vs voltage — is its
+          fingerprint.
         </p>
         <div style={btnRow}>
           <button style={goBtn} onClick={() => { onLoadExample('diode-iv'); onGoTo('scope') }}>Load the diode I-V →</button>
-          <span style={{ alignSelf: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>→ in <b>XY mode</b> the scope plots current vs voltage: a diode's forward knee, a Zener's reverse breakdown.</span>
+          <button style={goBtn} onClick={() => onGoTo('scope')}>Open the Oscilloscope (XY) →</button>
         </div>
+        <p style={{ marginTop: 10 }}>
+          In <b>XY mode</b> the scope plots current vs voltage: a <b>diode's</b> forward knee and a{' '}
+          <b>Zener's</b> reverse breakdown. A resistor would be a straight line; the diode bends.{' '}
+          <b>That shape <i>is</i> the device.</b>
+        </p>
         <Beat>
-          A resistor's I-V is a straight line; a diode's bends. <b>That shape <i>is</i> the device.</b>
-          <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button style={goBtn} onClick={() => { onLoadExample('zener-iv'); onGoTo('scope') }}>Open the Oscilloscope (XY) →</button>
+          <b>Transistors have a whole <i>family</i> of curves</b> — and a different tool draws
+          those. The <b>Curve Tracer</b> sweeps a transistor and plots one curve per control step.
+          <div style={{ marginTop: 8 }}>
             <button style={goBtn} onClick={() => { onLoadExample('nmos-curve-family'); onGoTo('curvetracer') }}>Open the Curve Tracer →</button>
           </div>
+          <p style={{ ...note, marginBottom: 0 }}>
+            Heads-up: this shows a <b>transistor</b> family, <i>not</i> the diode. (Two different
+            devices, two different views.)
+          </p>
         </Beat>
       </>
     )
@@ -433,13 +448,24 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
         <p style={{ marginTop: 6 }}>Everything so far was a schematic. Now bridge to hardware.</p>
         <div style={btnRow}>
           <button style={goBtn} onClick={() => onGoTo('breadboard')}>Open the Breadboard →</button>
+          <span style={{ alignSelf: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>— your circuit sits on top, an empty breadboard below.</span>
         </div>
+        <Beat>
+          <b>Find your parts.</b> They're in the <b>"Place from schematic"</b> panel on the{' '}
+          <b>right</b> — <b>scroll down</b> if you don't see them all. Click a part, then click{' '}
+          <b>two holes</b> on the board to drop it.
+        </Beat>
+        <Beat>
+          <b>Wire and check.</b> Use the <b>Jumper</b> tool to connect the columns, then press{' '}
+          <b>Check</b> — it tells you if your board is electrically the schematic. <i>Practice</i>{' '}
+          colours the nodes as you go; <i>Bench</i> hides them so you build from your own
+          understanding.
+        </Beat>
+        <Beat>
+          <b>Rotate as you place.</b> Hover a part and press <b>R</b> to turn it — handy for fitting
+          a transistor or an IC. <i>(Good placement is what keeps real boards tidy.)</i>
+        </Beat>
         <p style={{ marginTop: 12 }}>
-          Place the same parts, wire them, and press <b>Check</b> — the board tells you whether your
-          wiring is electrically the schematic. <i>Practice</i> mode colours the nodes as you go;{' '}
-          <i>Bench</i> mode hides them so you build from your own understanding, then verify.
-        </p>
-        <p style={{ marginTop: 8 }}>
           <b>This is the part no simulator does: design it, then build it and prove your board matches.</b>
         </p>
       </>

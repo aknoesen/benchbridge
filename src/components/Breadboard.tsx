@@ -829,7 +829,9 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
           fill="url(#arb4-to92)" stroke="#0a0a0c" strokeWidth={1} filter="url(#arb4-shadow)" />
         <path d={`M ${cx - halfW + 4} ${bodyTop + 6} A ${halfW - 4} 5 0 0 1 ${cx + halfW - 4} ${bodyTop + 6}`}
           fill="none" stroke="#ffffff" strokeOpacity={0.12} strokeWidth={2} />{/* top sheen */}
-        <text x={cx} y={(bodyBot + bodyTop) / 2 + 5} fontSize={8} fill="#c3c6cc" textAnchor="middle">{t.id} · {TR_NAME[t.kind] ?? t.kind}</text>
+        {/* the printing turns upside-down with the part (ARB-5b) — same rule as the DIP label */}
+        <text x={cx} y={(bodyBot + bodyTop) / 2 + 5} fontSize={8} fill="#c3c6cc" textAnchor="middle"
+          transform={t.flipped ? `rotate(180 ${cx} ${(bodyBot + bodyTop) / 2})` : undefined}>{t.id} · {TR_NAME[t.kind] ?? t.kind}</text>
       </g>
     )
   }

@@ -66,10 +66,11 @@ Generator's button just toggles Stop/Run. **W1** is your signal; **W2** is the s
 
 ## Page 6 — An RC, in time  *(~2 min)*
 Now a part whose behaviour depends on *how fast* the signal changes.
-`[Load the RC →]`  → a square wave in, a **rounded** output on the scope (two traces: the drive and the output).
-- **Watch the lag.** The output can't jump — it charges and discharges. Slow the frequency and the curve fills
-  out; speed it up and the output barely moves. `[Open the Oscilloscope →]`
-- The time it takes is the **time constant, τ = R·C** — the circuit's memory, seen in time.
+`[Load the RC →]`  → a **square wave** drives it.  `[Open the Oscilloscope →]` — two traces: the sharp square
+**input** and a **rounded output**.
+- **See the lag.** The output can't jump — it charges and discharges toward each new level, so its edges round
+  off. That rounding is the circuit's **memory**, seen in time.
+- How long it takes is the **time constant, τ = R·C**.
 `[← Back to the tour]`
 
 ## Page 7 — The same RC, in frequency  *(~2 min)*
@@ -81,25 +82,35 @@ The exact same circuit, now swept across frequency.
 `[← Back to the tour]`
 
 ## Page 8 — An op-amp  *(~2 min)*
-An op-amp trades a resistor ratio for gain.
-`[Load the inverting amp →]`  → a small input, a bigger, flipped output (two traces).
-- **Read the gain.** It's set by two resistors: **−Rf/Rin.** Change Rin and watch the output grow or shrink.
-  Push the input too far and the output flattens — it's hit the supply rails. `[Open the Oscilloscope →]`
+An op-amp turns a resistor ratio into gain.
+`[Load the inverting amp →]`  `[Open the Oscilloscope →]` — two traces: a small **input** and a bigger,
+**flipped output**.
+- **Read the gain off the screen.** The output is about **2× the input, and inverted** — that's the gain the
+  two resistors set: **−Rf/Rin** (here −20 kΩ / 10 kΩ = −2). Count the divisions on each trace to confirm.
+- Push an amplifier too hard and the output flattens at the supply rails — that's *clipping*. *(Try it later
+  in the Circuit editor by raising the input level.)*
 `[← Back to the tour]`
 
 ## Page 9 — I-V curves  *(~2 min)*
-Not every part obeys Ohm's law. See a device's character directly.
-`[Load the diode I-V →]`  → in **XY mode** the scope plots current vs voltage: a diode's forward knee, a
-Zener's reverse breakdown.
-- A resistor's I-V is a straight line; a diode's bends. **That shape *is* the device.**
-  `[Open the Oscilloscope (XY) →]`   `[Open the Curve Tracer →]`
+Not every part obeys Ohm's law. A device's **I-V curve** — current vs voltage — is its fingerprint.
+`[Load the diode I-V →]`  `[Open the Oscilloscope (XY) →]` — in **XY mode** the scope plots current vs voltage:
+a **diode's** forward knee and a **Zener's** reverse breakdown. A resistor would be a straight line; the diode
+bends. **That shape *is* the device.**
+- **Transistors have a whole *family* of curves** — and a different tool draws those. The **Curve Tracer**
+  sweeps a transistor and plots one curve per control step. `[Open the Curve Tracer →]` — heads-up: this shows
+  a **transistor** family, *not* the diode. (Two different devices, two different views.)
 `[← Back to the tour]`
 
 ## Page 10 — Build it for real  *(the capstone)*
 Everything so far was a schematic. Now bridge to hardware.
-`[Open the Breadboard →]`  → place the same parts, wire them, and press **Check** — the board tells you
-whether your wiring is electrically the schematic. *Practice* mode colours the nodes as you go; *Bench* mode
-hides them so you build from your own understanding, then verify.
+`[Open the Breadboard →]`  — your circuit sits on top, an empty breadboard below.
+- **Find your parts.** They're in the **"Place from schematic"** panel on the **right** — **scroll down** if
+  you don't see them all. Click a part, then click **two holes** on the board to drop it.
+- **Wire and check.** Use the **Jumper** tool to connect the columns, then press **Check** — it tells you if
+  your board is electrically the schematic. *Practice* colours the nodes as you go; *Bench* hides them so you
+  build from your own understanding.
+- **Rotate as you place.** Hover a part and press **R** to turn it — handy for fitting a transistor or an IC.
+  *(Good placement is what keeps real boards tidy.)*
 **This is the part no simulator does: design it, then build it and prove your board matches.**
 `[← Back to the tour]`
 
