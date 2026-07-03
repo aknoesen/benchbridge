@@ -208,30 +208,32 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
     return (
       <>
         <h2 style={h2}>The voltage divider</h2>
-        <p style={{ marginTop: 6 }}>Two equal resistors split the supply in half.</p>
+        <p style={{ marginTop: 6 }}>
+          Two resistors in series split the supply — the bigger one drops more.
+        </p>
         <div style={btnRow}>
           <button style={goBtn} onClick={() => { onLoadExample('divider'); onGoTo('schematic') }}>Load the divider →</button>
-          <span style={{ alignSelf: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>→ V+ reads <b>5 V</b>, the midpoint reads <b>2.5 V</b>.</span>
+          <span style={{ alignSelf: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>→ here the <b>bottom</b> resistor is <b>twice</b> the top one (20 kΩ over 10 kΩ).</span>
         </div>
-        <p style={{ marginTop: 14 }}>
-          <b>Why 2.5 V?</b> Equal resistors share the 5 V equally — each drops 2.5 V, so the midpoint
-          sits exactly halfway.
-        </p>
-        <p style={{ marginTop: 8 }}>
-          <b>The same 2.5 V, measured two ways</b> — your first real look at single-ended vs
-          differential:
-        </p>
+        <div style={{ ...btnRow, marginTop: 10 }}>
+          <button style={goBtn} onClick={() => onGoTo('voltmeter')}>Open the Voltmeter →</button>
+          <span style={{ alignSelf: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>and read the two channels — they're already wired:</span>
+        </div>
         <Beat>
-          <b>CH1 across the top resistor (differential):</b> probes on V+ and the midpoint →
-          5 − 2.5 = <b>2.5 V</b>. Neither probe at ground.
+          <b>CH2 — single-ended</b> (the midpoint, referenced to GND): about <b>3.3 V</b>. That's
+          the divider's output — the bottom resistor is 2/3 of the total resistance, so it drops
+          2/3 of the 5 V. One lead sits at ground.
         </Beat>
         <Beat>
-          <b>CH2 across the bottom resistor (single-ended):</b> probe on the midpoint, reference to
-          GND → <b>2.5 V</b>. One end at ground.
+          <b>CH1 — differential</b> (across the <i>top</i> resistor: V+ minus the midpoint): about{' '}
+          <b>1.7 V</b> — the drop across the top resistor. Both leads sit on live nodes, neither at
+          ground.
         </Beat>
         <p style={{ marginTop: 12 }}>
-          Same number, two styles. <b>Differential</b> reads the drop across a floating part;{' '}
-          <b>single-ended</b> reads a node against ground.
+          <b>Two different numbers, because they're two different kinds of measurement:</b>{' '}
+          single-ended reads a node <i>against ground</i>; differential reads the <i>difference
+          between two live nodes</i>. (We used <b>unequal</b> resistors on purpose — equal ones make
+          both channels read the same and hide the whole point.)
         </p>
         <div style={card}>
           <svg viewBox="0 0 760 252" style={{ width: '100%', height: 'auto' }} role="img"
@@ -271,9 +273,6 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
             <text x="656" y="212" fill="#40c0e0" fontSize="15" fontWeight="700" textAnchor="middle">= +10 V</text>
             <text x="404" y="234" fill="var(--text-secondary)" fontSize="11.5">The difference: 5 − (−5) = 10 V. No ground needed.</text>
           </svg>
-        </div>
-        <div style={btnRow}>
-          <button style={goBtn} onClick={() => onGoTo('voltmeter')}>Open the Voltmeter →</button>
         </div>
       </>
     )

@@ -60,15 +60,21 @@ describe('Quickstart examples (QS-4 finished copy: flashlight / divider probes /
     expect(checkEquivalence(ex.schematic, ex.board!, buildHoles()).ok).toBe(true)
   })
 
-  it('divider: CH1 differential across the top R and CH2 single-ended midpoint (same 2.5 V two ways)', () => {
+  it('divider: UNEQUAL split — CH1 differential ≈1.7 V across the top R, CH2 single-ended ≈3.3 V', async () => {
     const ex = EXAMPLES.find((e) => e.id === 'divider')!
-    const { probes } = toCircuit(ex.schematic)
-    expect(probes.ch1).toBeDefined()
+    const { circuit, probes } = toCircuit(ex.schematic)
     expect(probes.ch1n).not.toBe('0')          // differential across R1
-    expect(probes.ch2).toBeDefined()
     expect(probes.ch2n ?? '0').toBe('0')       // single-ended across R2
     expect(probes.ch2).toBe(probes.ch1n)       // both land on the midpoint node
-  })
+    const sim = new Simulation()
+    await sim.start()
+    sim.setNetList(buildNetlist(circuit, { kind: 'op' }))
+    const r = normalizeResult(await sim.runSim())
+    const ch1 = nodeVoltage(r, probes.ch1!) - nodeVoltage(r, probes.ch1n!)
+    const ch2 = nodeVoltage(r, probes.ch2!)
+    expect(ch1).toBeCloseTo(5 * 10 / 30, 1)    // ≈ 1.67 V across the 10 kΩ (the copy's "about 1.7 V")
+    expect(ch2).toBeCloseTo(5 * 20 / 30, 1)    // ≈ 3.33 V at the midpoint (the copy's "about 3.3 V")
+  }, 30000)
 
   it('signal-sine: one clean trace — W1 to a single-ended CH1 through only the scope-input load', () => {
     const ex = EXAMPLES.find((e) => e.id === 'signal-sine')!

@@ -40,16 +40,17 @@ precisely, use the Voltmeter.
 Live "turn it down and watch it dim" is the animated-glow enhancer GLOW-1 — post-beta.)*
 
 ## Page 4 — The voltage divider  *(~2 min)*
-Two equal resistors split the supply in half.
-`[Load the divider →]`  → V+ reads **5 V**, the midpoint reads **2.5 V**.
-**Why 2.5 V?** Equal resistors share the 5 V equally — each drops 2.5 V, so the midpoint sits exactly halfway.
-**The same 2.5 V, measured two ways** — your first real look at single-ended vs differential:
-- **CH1 across the top resistor (differential):** probes on V+ and the midpoint → 5 − 2.5 = **2.5 V**. Neither
-  probe at ground.
-- **CH2 across the bottom resistor (single-ended):** probe on the midpoint, reference to GND → **2.5 V**. One
-  end at ground.
-Same number, two styles. **Differential** reads the drop across a floating part; **single-ended** reads a node
-against ground. `[Open the Voltmeter →]`   `[← Back to the tour]`
+Two resistors in series split the supply — the bigger one drops more.
+`[Load the divider →]`  → here the **bottom** resistor is **twice** the top one (e.g. 20 kΩ over 10 kΩ).
+`[Open the Voltmeter →]`  and read the two channels — they're already wired:
+- **CH2 — single-ended** (the midpoint, referenced to GND): about **3.3 V**. That's the divider's output — the
+  bottom resistor is 2/3 of the total resistance, so it drops 2/3 of the 5 V. One lead sits at ground.
+- **CH1 — differential** (across the *top* resistor: V+ minus the midpoint): about **1.7 V** — the drop across
+  the top resistor. Both leads sit on live nodes, neither at ground.
+**Two different numbers, because they're two different kinds of measurement:** single-ended reads a node
+*against ground*; differential reads the *difference between two live nodes*. (We used **unequal** resistors on
+purpose — equal ones make both channels read the same and hide the whole point.)
+`[← Back to the tour]`
 
 ## Page 5 — Make a signal, see it in frequency  *(~2 min)*
 `[Load a signal →]`  → a clean sine on the scope, one trace. (The signal is already live — the Signal
@@ -108,10 +109,26 @@ You've seen the whole bench. Now make something yours.
 
 ---
 
-## Notes for CC
-- **Example probe configs needed:** the **flashlight** (page 3) needs **CH1 differential across the resistor**;
-  the **divider** (page 4) needs **CH1 differential across the top R + CH2 single-ended across the bottom R**;
-  page 5 needs the **neutral single-signal example** (one trace). See the QS-4 accuracy-fixes handoff.
-- Keep numbers as written (Ohm's law / gain are exact); the dBFS floor is qualitative ("near the bottom").
-- Every page ends with a return-to-tour; the flashlight + divider are the two consecutive differential
-  lessons (in action, then by name) — don't merge or reorder them.
+## Notes for CC — and the VERIFICATION SWEEP (andre: "carefully check ALL the examples")
+**Two principles for every page:** (1) **never assert a reading — send the user to the instrument to read
+it** ("open the Voltmeter and read…", not "it reads 5 V"); (2) **the stated number must actually appear** on
+that instrument for that example. **Verify each row below on the deployed app** (Cowork + andre will also do a
+page-by-page Chrome pass):
+
+| Pg | Example / config | Open… | Should read |
+|----|------------------|-------|-------------|
+| 3 | flashlight — **supply-driven DC** (V+ → 470 Ω → LED → GND) | Board (LED lit) → **Voltmeter** | hover = node **voltages**; CH1 (diff across R) ≈ **3 V** → I ≈ 6 mA |
+| 4 | divider — **UNEQUAL R** (top 10 kΩ, bottom 20 kΩ, V+ 5 V) | **Voltmeter** | CH2 single (midpoint→GND) ≈ **3.3 V**; CH1 diff (across top R) ≈ **1.7 V** — *different* numbers |
+| 5 | signal-sine — W1 sine, one trace | Signal Gen → **Spectrum** | one sine peak; square → harmonic comb; 12-bit noise floor |
+| 6 | RC low-pass, square drive | **Oscilloscope** | rounded output, 2 traces (drive + output) |
+| 7 | same RC, AC sweep | **Network analyzer** | Bode: flat then roll-off; −3 dB corner |
+| 8 | inverting amp | **Oscilloscope** | bigger, flipped output; clips at rails when pushed |
+| 9 | diode I-V (XY) + MOSFET family | **Scope (XY)** / **Curve Tracer** | I-V knee / breakdown; curve family |
+| 10 | (capstone) | **Breadboard** | place → wire → **Check** passes |
+
+- **Divider needs UNEQUAL resistors** (andre): equal Rs make CH1-diff = CH2-single, hiding single-vs-differential.
+  Use a **dedicated Quickstart divider** (or change the shared one, but it's named "÷2" — your call) with
+  top 10 kΩ / bottom 20 kΩ, **CH1 differential across the top R**, **CH2 single-ended across the bottom R**.
+- **Flashlight**: supply-driven DC, **CH1 differential across the resistor** (Voltmeter), pre-built lit board.
+- Numbers: Ohm's-law / divider values are exact-ish (round as written); dBFS floor is qualitative.
+- Flashlight + divider are the two consecutive differential lessons (in action, then by name) — don't reorder.

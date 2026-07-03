@@ -145,13 +145,16 @@ export const EXAMPLES: Example[] = [
     board: FLASHLIGHT_BOARD,
   },
   {
-    id: 'divider', name: 'Voltage divider (÷2)', group: 'Passive',
-    blurb: 'Two equal resistors split the supply in half — and the same 2.5 V is measured two ways. ' +
-      'Channel 1 reads ACROSS the top resistor (differential: probes on V+ and the midpoint, neither at ' +
-      'ground). Channel 2 reads the midpoint against ground (single-ended). Open the Voltmeter: both say ' +
-      '2.5 V. Change V+ on the Power Supply and watch them track.',
-    // V+ rail (Power Supply, default +5 V) drives the divider. CH1 = V+ − midpoint (differential
-    // across R1, 2.5 V); CH2 = midpoint (single-ended across R2, 2.5 V). 2 V/div frames both.
+    id: 'divider', name: 'Voltage divider (10 kΩ : 20 kΩ)', group: 'Passive',
+    blurb: 'Two resistors in series split the supply — the bigger one drops more. The bottom resistor ' +
+      'is twice the top (20 kΩ over 10 kΩ), and the two channels are already wired to read it two ways: ' +
+      'Channel 2 single-ended (midpoint against ground, ≈2/3 of the supply) and Channel 1 differential ' +
+      '(across the top resistor, ≈1/3 of it). Open the Voltmeter and read them — two DIFFERENT numbers, ' +
+      'because they are two different kinds of measurement. Unequal on purpose: equal resistors would ' +
+      'make both channels agree and hide the point.',
+    // V+ rail (Power Supply, default +5 V) drives the divider. UNEQUAL on purpose (QS-4 page 4):
+    // CH1 = V+ − midpoint (differential across R1) ≈ 1.7 V; CH2 = midpoint (single-ended across
+    // R2) ≈ 3.3 V — different numbers make single-vs-differential visible. 2 V/div frames both.
     ch1Vdiv: 2, ch2Vdiv: 2,
     schematic: {
       // Every connection is an explicit wire (not a coincidence of two legs at one grid point), so a
@@ -159,7 +162,7 @@ export const EXAMPLES: Example[] = [
       components: [
         { id: 'VP', kind: 'vplus', gx: 2, gy: 4 },
         { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 10000 },              // a=(4,4) b=(6,4)
-        { id: 'R2', kind: 'resistor', gx: 8, gy: 4, rotation: 1, value: 10000 }, // a=(8,4) b=(8,6)
+        { id: 'R2', kind: 'resistor', gx: 8, gy: 4, rotation: 1, value: 20000 }, // a=(8,4) b=(8,6)
         { id: 'G1', kind: 'ground', gx: 8, gy: 8 },
         { id: 'P1', kind: 'scope1', gx: 2, gy: 2 },   // 1+ on the applied V+ (top of R1)
         { id: 'A1', kind: 'adc1n', gx: 10, gy: 2 },   // 1− on the midpoint → CH1 differential across R1
