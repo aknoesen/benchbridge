@@ -374,6 +374,16 @@ export function rotateComponentWithWires(s: Schematic, id: string): Schematic {
   }
 }
 
+// Orthogonal two-segment route between grid points (pin-magnetic modeless wiring, Stage 3).
+// Horizontal leg first, bending at (b.x, a.y); collinear points give one segment, identical
+// points none. The preview draws exactly these segments, so what you see is what commits.
+export function orthoRoute(a: { x: number; y: number }, b: { x: number; y: number }): Wire[] {
+  const segs: Wire[] = []
+  if (b.x !== a.x) segs.push({ x1: a.x, y1: a.y, x2: b.x, y2: a.y })
+  if (b.y !== a.y) segs.push({ x1: b.x, y1: a.y, x2: b.x, y2: b.y })
+  return segs
+}
+
 // Whether F (flip) does anything for a kind. Single-pin parts (ports, ground, rails) mirror to
 // themselves, and the INA125 keeps its inline (non-catalog) render, which does not honour
 // mirror — flipping its model but not its artwork would lie about where the pins are.

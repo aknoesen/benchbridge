@@ -5,7 +5,7 @@ import { useMemo, useRef, useState, useEffect, type ReactElement, type Dispatch,
 import {
   Schematic, SchComponent, SchKind, terminalsOf, localTerminals, toCircuit, ampCategory, computeNets,
   attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentWithWires,
-  mirrorComponentWithWires, canMirror, deleteComponentsWithWires, type WireEndRef,
+  mirrorComponentWithWires, canMirror, orthoRoute, deleteComponentsWithWires, type WireEndRef,
 } from '../core/schematic'
 import { symbolFor, alignTransform, matScale, inkedInner } from '../core/symbolArt'
 import { buildNetlist, TRANSISTOR_PARTS } from '../core/netlist'
@@ -54,6 +54,7 @@ function tiaHintFor(sch: Schematic, pdId: string): { rfOhms: number; gbwHz: numb
 
 const GRID = 24
 const PAD = 16
+const PIN_SNAP_PX = 10 // magnetic radius for modeless pin-to-pin wiring (Stage 3)
 
 // SCH-11 white "paper" canvas: the circuitikz symbols are black-line artwork, so the
 // schematic surface is a light document INSIDE the dark app (matches the white-paper
@@ -190,6 +191,10 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   const [hoverGrid, setHoverGrid] = useState<{ gx: number; gy: number } | null>(null)
   // Part under the cursor — R/F act on it in preference to the selection (Stage 2 hover-targeting).
   const [hoverPartId, setHoverPartId] = useState<string | null>(null)
+  // Stage 3 pin-magnetic modeless wiring (Select tool): the pin under the cursor (magnetic
+  // highlight + snap target) and the start pin of a wiring gesture in progress.
+  const [hoverPin, setHoverPin] = useState<{ x: number; y: number } | null>(null)
+  const [pinWire, setPinWire] = useState<{ x: number; y: number } | null>(null)
   const [selectedWire, setSelectedWire] = useState<number | null>(null)
 
   // ---- Clipboard (copy/paste/cut). Undo/redo (snapshot/undo/redo) come from App via props. -----
@@ -341,6 +346,40 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     }
   }
 
+  // Nearest wireable pin (a component terminal or an existing wire endpoint) within the magnetic
+  // radius of the RAW mouse position — sub-grid distance, so the snap feels magnetic rather than
+  // cell-quantized. Recomputed in the down handlers (not read from hover state) to avoid staleness.
+  function pinNear(e: React.MouseEvent): { x: number; y: number } | null {
+    const r = svgRef.current!.getBoundingClientRect()
+    const mx = e.clientX - r.left, my = e.clientY - r.top
+    let best: { x: number; y: number } | null = null
+    let bd = PIN_SNAP_PX
+    const consider = (gx: number, gy: number) => {
+      const d = Math.hypot(mx - (gx * GRID + PAD), my - (gy * GRID + PAD))
+      if (d < bd) { bd = d; best = { x: gx, y: gy } }
+    }
+    for (const c of sch.components) for (const t of terminalsOf(c)) consider(t.gx, t.gy)
+    for (const w of sch.wires) { consider(w.x1, w.y1); consider(w.x2, w.y2) }
+    return best
+  }
+
+  // Pin-magnetic wiring gesture: first pin-down starts it, second commits the orthogonal route,
+  // a down anywhere that is not a pin cancels (the grid-click Wire tool remains the free-form path).
+  function pinWireDown(target: { x: number; y: number } | null) {
+    if (!pinWire) {
+      if (target) setPinWire(target)
+      return
+    }
+    if (target && (target.x !== pinWire.x || target.y !== pinWire.y)) {
+      const segs = orthoRoute(pinWire, target)
+      if (segs.length) {
+        snapshot()
+        setSch((s) => ({ ...s, wires: [...s.wires, ...segs] }))
+      }
+    }
+    setPinWire(null)
+  }
+
   // Background mouse-down: in the Select tool, start a marquee (drag a box to select). Components
   // stop propagation on their own mouse-down, so this only fires on empty canvas.
   // Bounding box (grid units) of the current multi-selection, or null if nothing is boxed.
@@ -354,6 +393,10 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
 
   function onSvgDown(e: React.MouseEvent) {
     if (tool !== 'select') return
+    // Pin-magnetic wiring takes precedence: a down on a pin starts/commits a wire; a down
+    // anywhere else while wiring cancels it (and does not fall through to marquee/drag).
+    const pin = pinNear(e)
+    if (pinWire || pin) { pinWireDown(pin); return }
     const { gx, gy } = gridAt(e)
     marqueeMoved.current = false
     dragSnapped.current = false
@@ -396,6 +439,12 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
 
   function onComponentDown(e: React.MouseEvent, id: string) {
     e.stopPropagation()
+    // Grab a pin → wire; grab the body → select/drag (the standard EDA split). Terminal dots
+    // paint inside the component group, so the wiring check must run here too.
+    if (tool === 'select') {
+      const pin = pinNear(e)
+      if (pinWire || pin) { pinWireDown(pin); return }
+    }
     setSelectedWire(null)
     dragSnapped.current = false
     if (e.shiftKey) {
@@ -419,6 +468,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   function onWireClick(e: React.MouseEvent, i: number) {
     e.stopPropagation()
     if (tool === 'wire') return // don't select while drawing wires
+    if (pinWire || pinNear(e)) return // the down already started/committed a pin wire — not a select
     setSelectedWire(i)
     setSelected(null)
   }
@@ -441,6 +491,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     const { gx, gy } = gridAt(e)
     setHoverGrid({ gx, gy }) // live snap indicator for the wire tool
     setHoverPartId(partAt(gx, gy))
+    setHoverPin(tool === 'select' && !drag && !marquee ? pinNear(e) : null)
     if (marquee) {
       if (gx !== marquee.x0 || gy !== marquee.y0) marqueeMoved.current = true
       setMarquee((m) => (m ? { ...m, x1: gx, y1: gy } : m))
@@ -549,6 +600,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
       if ((e.key === 'Delete' || e.key === 'Backspace') && (selected || selectedWire !== null || selSet.size)) deleteSelected()
       else if (e.key === 'r' || e.key === 'R') rotate()
       else if (e.key === 'f' || e.key === 'F') flip()
+      else if (e.key === 'Escape') { setPinWire(null); setWireStart(null) } // abandon a wiring gesture
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
@@ -702,7 +754,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         <svg
           ref={svgRef}
           className="plotly-display"
-          style={{ ...PAPER_CANVAS, cursor: tool !== 'select' ? 'crosshair' : (overSelection ? 'move' : 'default') }}
+          style={{ ...PAPER_CANVAS, cursor: tool !== 'select' || hoverPin || pinWire ? 'crosshair' : (overSelection ? 'move' : 'default') }}
           onClick={onBackgroundClick}
           onMouseDown={onSvgDown}
           onMouseMove={onMouseMove}
@@ -743,6 +795,23 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
             <circle cx={px(hoverGrid.gx)} cy={px(hoverGrid.gy)} r={5} fill="none"
               stroke="var(--accent-blue)" strokeWidth={1.5} pointerEvents="none" />
           )}
+
+          {/* Stage 3 pin-magnetic wiring: highlight ring on the snapped pin, and while a gesture
+              is live, the exact orthogonal route that a commit would add (dashed). */}
+          {hoverPin && !drag && !marquee && (
+            <circle cx={px(hoverPin.x)} cy={px(hoverPin.y)} r={7} fill="none"
+              stroke="var(--accent-blue)" strokeWidth={2} pointerEvents="none" />
+          )}
+          {pinWire && (
+            <circle cx={px(pinWire.x)} cy={px(pinWire.y)} r={4.5} fill="var(--accent-blue)" pointerEvents="none" />
+          )}
+          {pinWire && hoverGrid && (() => {
+            const end = hoverPin ?? { x: hoverGrid.gx, y: hoverGrid.gy }
+            return orthoRoute(pinWire, end).map((w, i) => (
+              <line key={`pw${i}`} x1={px(w.x1)} y1={px(w.y1)} x2={px(w.x2)} y2={px(w.y2)}
+                stroke="var(--accent-blue)" strokeWidth={1.5} strokeDasharray="5 3" pointerEvents="none" />
+            ))
+          })()}
           {/* marquee box-select */}
           {marquee && (
             <rect x={px(Math.min(marquee.x0, marquee.x1))} y={px(Math.min(marquee.y0, marquee.y1))}
@@ -826,6 +895,9 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         </div>
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>
           Select tool: <b>drag a box</b> over parts to select them (or Shift+click), then drag any to move the group{selSet.size > 1 ? ` (${selSet.size} selected)` : ''}.
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>
+          Wiring: <b>click a pin</b> (blue ring), then another pin — no Wire tool needed. Esc cancels.
         </div>
 
         <div className="section-title">Selected</div>

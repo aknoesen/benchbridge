@@ -418,7 +418,31 @@ describe('deleteComponentsWithWires', () => {
   })
 })
 
-import { localTerminals, mirrorComponentWithWires, canMirror } from './schematic'
+import { localTerminals, mirrorComponentWithWires, canMirror, orthoRoute } from './schematic'
+
+describe('orthoRoute (pin-magnetic wiring, SCH-11 P3 Stage 3)', () => {
+  it('routes horizontal-first with one bend; collinear gives one segment; same point none', () => {
+    expect(orthoRoute({ x: 0, y: 0 }, { x: 4, y: 2 })).toEqual([
+      { x1: 0, y1: 0, x2: 4, y2: 0 },
+      { x1: 4, y1: 0, x2: 4, y2: 2 },
+    ])
+    expect(orthoRoute({ x: 0, y: 0 }, { x: 4, y: 0 })).toEqual([{ x1: 0, y1: 0, x2: 4, y2: 0 }])
+    expect(orthoRoute({ x: 2, y: 3 }, { x: 2, y: 7 })).toEqual([{ x1: 2, y1: 3, x2: 2, y2: 7 }])
+    expect(orthoRoute({ x: 1, y: 1 }, { x: 1, y: 1 })).toEqual([])
+  })
+
+  it('committed route electrically connects the two pins', () => {
+    const s: Schematic = {
+      components: [
+        { id: 'R1', kind: 'resistor', gx: 0, gy: 0, value: 1000 },
+        { id: 'R2', kind: 'resistor', gx: 6, gy: 4, value: 1000 },
+      ],
+      wires: [...orthoRoute({ x: 2, y: 0 }, { x: 6, y: 4 })], // R1.b → R2.a, one bend
+    }
+    const nets = computeNets(s)
+    expect(nets.get('2,0')).toBe(nets.get('6,4'))
+  })
+})
 
 describe('model-space mirror (SCH-11 P3 Stage 2)', () => {
   it('mirrors base offsets across the footprint centerline — terminals swap in place', () => {
