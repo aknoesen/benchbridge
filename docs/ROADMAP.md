@@ -45,6 +45,7 @@ Spec: `docs/specs/schematic-ngspice.md`
 | SCH-9 | **Op-amp / amplifier library from the ADALP2000 kit.** Extend the op-amp from LMC662-only to a selectable set of the kit's parts, each a *behavioral macro of a real part* (GBW, slew, supply range, input type, rail-to-rail or not) with its own DIP footprint — **not** a package-less generic "ideal". Op-amps: `ADTL082` (JFET dual), `AD8542` (CMOS RRIO dual), `OP27`/`OP37` (precision bipolar; OP37 decompensated), `OP97` (precision µpower), `OP482`/`OP484` (JFET/RRIO quad). Selectable like the diode kinds. *Delivered:* `core/opamps.ts` catalog + level-1 macromodel (`buildOpampSubckt`); kit dropdown in the inspector with off-kit "not in your parts kit" badge + Swap-to-OP484; OP37-gain-<5 and AD8542-over-supply gotcha warnings; examples migrated to OP484. **`AD8226` (2nd in-amp) and `AD8561` (comparator) deferred to a later specialty phase**, with vendor SPICE-model import as an optional enhancement. | SCH-6, SCH-7 | DONE |
 | SCH-10 | **Passives as pick-and-place kit values.** Today R/C/L take any value; add a quick-pick palette of the **ADALP2000 kit's stocked values** so students design with what they physically have. Keep free numeric entry, but add the palette and an optional "nearest kit value" snap/flag (a computed 3.7 kΩ flags to the stocked 4.7 kΩ). Also add the kit's **potentiometers** (5/10/50 kΩ), the **thermistor**, and a **polarized electrolytic** cap variant (the kit's ≥1 µF caps are polarized). Full value list + dielectric/polarity notes in `docs/specs/adalp2000-kit.md`. | SCH-1 | DONE |
 | SWEEP-1 | (Enables SCH-8 showcase) **Parametric curve tracer (hardware-faithful).** Characteristic-curve families (MOSFET Id-Vds stepped by Vgs; BJT Ic-Vce stepped by Ib) by extending the existing single-curve I-V path (W1 sweep + scope XY through a sense resistor) with W2 stepping the controlling parameter. Runs on the existing `.tran` path — **not** a new analysis mode; W2 steps Ib through a base resistor so no current source is needed. Maps to a real M2K procedure and survives the G-D hardware seam (a sim-only `.dc` tracer would not). See `docs/specs/sch8-sweep1.md`. | SCH-8, OSC-5 | DONE |
+| SCH-11 | **Schematic symbols → circuitikz textbook catalog + instruments (video-driven, andre 2026-07-02).** In a demo the breadboard's realistic parts pop while the schematic reads flat. Reproduce the **circuitikz ANSI symbol catalog** as SVG (enumerate from the CTAN manual + installed package, batch-render each via `dvisvgm`/`pdf2svg`) and map the app's part kinds onto it, matching the circuitikz style of **andre's own course reader** (max pedagogical consistency); include the **signal-generator, oscilloscope, and power-supply** symbols (circuitikz has the signal/scope elements andre uses). **Visual layer only:** preserve terminal anchor points, wire-attach, hit targets, drag/rotate, PNG export; **no `core/signal.ts`** (canary untouched); decoupled from the netlist. **Boundary:** do NOT pull in WIRE-4's always-present-terminal refactor. Develop on branch **`sch11-ansi-symbols`**; merge to main only if small + low-risk (292/292 incl. canary, build clean, no signal.ts, export + editor interactions intact) before survey **wave 1**. See `docs/specs/sch11-schematic-symbols.md`. | SCH-1 | TODO |
 | KICAD-1 | (Stretch) KiCad netlist import | LOOP-1 | TODO |
 
 Notes:
@@ -243,6 +244,19 @@ Notes:
 - **Canary:** independent of these circuit changes — confirm the no-circuit 12-bit floor stays −104 dBFS.
 - The photodiode part itself was an ad-hoc add (not a phase); this track is the deliberate follow-on
   that turns it into a teachable TIA front-end for the analog sequence (EEC100 target).
+
+## Track M — Signal generator (sweep + enhancements)  ← planned (andre, 2026-07-02)
+
+The generator today outputs fixed-frequency waveforms (sine/square/triangle/sawtooth). A real function
+generator can **sweep** its frequency, which is how you'd watch a filter's response build up live on the
+scope/spectrum. Adding it lets a student see an RC roll off directly from the generator, without reaching
+for the Network Analyzer, and it's the one capability the promo demo had to route around (it shows the RC
+in the time domain via a square wave + the Bode via the Network Analyzer instead). See
+`docs/private/PROMO-VIDEO-script.md`.
+
+| ID | Deliverable | Depends on | Status |
+|----|-------------|-----------|--------|
+| GEN-1 | **W1/W2 frequency-sweep (chirp) mode.** A time-domain frequency sweep on the signal generator — start/stop frequency, sweep time, linear/log — so a student can drive a circuit and watch the scope and spectrum respond in real time, exactly like a bench function generator's sweep. Distinct from NET-1's Network-Analyzer Bode (a computed `.ac` voltage ratio): this is a real swept **stimulus** through the live `.tran` path. **Touches `core/signal.ts` (`generateSignal` gains a time-varying frequency term) → keep the fixed-frequency path byte-identical when sweep is OFF, and re-verify the 12-bit canary + zero-leakage framing.** UI lives in the Signal Generator panel. | — | TODO |
 
 ## Track K — Tester-feedback punch-list (P.Z. review, 2026-06-30)
 
