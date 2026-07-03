@@ -453,10 +453,10 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
         </div>
         <p style={{ marginTop: 12 }}>Draw your own, or load any example to explore:</p>
         <div style={card}>
+          {/* the four strongest, spanning the range (andre: trim to four): a passive filter, an
+              op-amp, an I-V/XY curve, and the curve-family showpiece */}
           {[
-            { id: 'flashlight', label: 'Flashlight (supply → R → LED)', go: 'breadboard', desc: 'the opener, on the board — watch it glow' },
             { id: 'rc-lp', label: 'RC low-pass (~1 kHz)', go: 'network', desc: 'Bode plot + −3 dB corner' },
-            { id: 'led-pwm', label: 'PWM-driven LED', go: 'breadboard', desc: 'board glow follows duty cycle' },
             { id: 'inv-amp', label: 'Inverting amp ×−2 (OP484)', go: 'scope', desc: 'first op-amp circuit' },
             { id: 'zener-iv', label: 'Zener I-V curve (XY)', go: 'scope', desc: 'forward turn-on + breakdown' },
             { id: 'nmos-curve-family', label: 'MOSFET curve family', go: 'curvetracer', desc: 'the whole device character' },
