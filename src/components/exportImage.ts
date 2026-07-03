@@ -122,6 +122,11 @@ interface ExportOpts {
   // fill the canvas white and drop the grid, but do NOT invert lightness
   // (light:true would turn the black ink white and vanish it).
   paper?: boolean
+  // vars: CSS custom properties forced onto the live svg for the duration of the
+  // computed-style walk, then restored. Lets the export always use the white-paper
+  // palette even when the on-screen canvas wears another skin (green pad, blueprint) —
+  // the exported figure is for publication, the skin is for editing.
+  vars?: Record<string, string>
 }
 
 /**
@@ -144,7 +149,20 @@ export async function exportSvgToPng(svg: SVGSVGElement, filename: string, opts:
   if (!w || !h) throw new Error('Nothing to export yet.')
 
   const clone = svg.cloneNode(true) as SVGSVGElement
-  inlinePaint(svg, clone, light)
+  // Force the requested palette while computed styles are read (CSSOM resolves
+  // property changes synchronously), then restore the on-screen values.
+  const prevVars = new Map<string, string>()
+  if (opts.vars) {
+    for (const [k, v] of Object.entries(opts.vars)) {
+      prevVars.set(k, svg.style.getPropertyValue(k))
+      svg.style.setProperty(k, v)
+    }
+  }
+  try {
+    inlinePaint(svg, clone, light)
+  } finally {
+    for (const [k, v] of prevVars) v ? svg.style.setProperty(k, v) : svg.style.removeProperty(k)
+  }
   // Drop the grid AFTER the paint walk: inlinePaint pairs source/clone children by
   // index, so removing a clone child first would shift every later sibling and land
   // each element's paint on its neighbour (ports exported with the wrong fill).

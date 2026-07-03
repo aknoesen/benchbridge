@@ -56,26 +56,67 @@ const GRID = 24
 const PAD = 16
 const PIN_SNAP_PX = 10 // magnetic radius for modeless pin-to-pin wiring (Stage 3)
 
-// SCH-11 white "paper" canvas: the circuitikz symbols are black-line artwork, so the
-// schematic surface is a light document INSIDE the dark app (matches the white-paper
-// PNG export). These CSS custom properties are set on the schematic <svg> only, so
-// every var()-coloured element inside re-resolves for paper without touching the
-// app-wide dark theme. Ports keep their channel identity hues, darkened for contrast.
-const PAPER_CANVAS: CSSProperties & Record<string, string> = {
-  background: '#fdfdfa',
-  '--sch-ink': '#1c1c1c',        // symbol + remaining inline part ink
-  '--wire-color': '#1c1c1c',     // wires read as ink, like the reader's figures
-  '--node-color': '#2a6ad0',     // terminal dots: visible wiring targets on paper
-  '--accent-blue': '#1d6fd8',    // selection/marquee: darker blue for white bg
-  '--text-primary': '#1c1c1c',
-  '--text-secondary': '#5a5a5a',
-  '--bg-panel': '#ffffff',       // body fill of the remaining inline parts (INA125)
-  '--theory-color': '#0a8a4a',   // legacy probe marker
-  '--ch1-color': '#c05f00',      // 1+/1− port markers (darkened CH1 orange)
-  '--ch2-color': '#7d3fa0',      // 2+/2− port markers (darkened CH2 purple)
+// SCH-11 "paper" canvas: the circuitikz symbols are line artwork, so the schematic
+// surface is a document skin INSIDE the dark app. These CSS custom properties are set
+// on the schematic <svg> only, so every var()-coloured element inside re-resolves per
+// skin without touching the app-wide dark theme. Three paper styles (Stage 4, andre):
+// white (default — and what the PNG export ALWAYS uses, via the export `vars` override),
+// green engineering pad (pale sage + fine line grid == the snap grid), and blueprint.
+// The skins are on-screen editing surfaces only; exported figures stay publication-white.
+type PaperStyle = 'white' | 'green' | 'blueprint'
+const PAPER_STYLES: Record<PaperStyle, CSSProperties & Record<string, string>> = {
+  white: {
+    background: '#fdfdfa',
+    '--sch-ink': '#1c1c1c',        // symbol + remaining inline part ink
+    '--wire-color': '#1c1c1c',     // wires read as ink, like the reader's figures
+    '--node-color': '#2a6ad0',     // terminal dots: visible wiring targets on paper
+    '--accent-blue': '#1d6fd8',    // selection/marquee: darker blue for white bg
+    '--text-primary': '#1c1c1c',
+    '--text-secondary': '#5a5a5a',
+    '--bg-panel': '#ffffff',       // body fill of the remaining inline parts (INA125)
+    '--theory-color': '#0a8a4a',   // legacy probe marker
+    '--ch1-color': '#c05f00',      // 1+/1− port markers (darkened CH1 orange)
+    '--ch2-color': '#7d3fa0',      // 2+/2− port markers (darkened CH2 purple)
+    '--awg-color': '#9c7a00',      // W1/W2 port markers (darkened from the dark theme's #e0c020)
+    '--sch-grid': '#d8d8d2',       // grid dots
+  },
+  green: {
+    // the classic sage computation pad: tint kept very light so ink and port hues pop
+    background: '#edf2e3',
+    '--sch-ink': '#1c1c1c',
+    '--wire-color': '#1c1c1c',
+    '--node-color': '#2a6ad0',
+    '--accent-blue': '#1d6fd8',
+    '--text-primary': '#1c1c1c',
+    '--text-secondary': '#55604a',
+    '--bg-panel': '#f6f9ef',
+    '--theory-color': '#0a8a4a',
+    '--ch1-color': '#c05f00',
+    '--ch2-color': '#7d3fa0',
+    '--awg-color': '#9c7a00',
+    '--sch-grid': '#c7d6b6',       // printed grid lines (== the snap grid pitch)
+  },
+  blueprint: {
+    background: '#1d3a5f',
+    '--sch-ink': '#e6edf5',        // white-line drawing on blue
+    '--wire-color': '#e6edf5',
+    '--node-color': '#7ab8ff',
+    '--accent-blue': '#7ab8ff',
+    '--text-primary': '#e6edf5',
+    '--text-secondary': '#9fb4cc',
+    '--bg-panel': '#1d3a5f',
+    '--theory-color': '#4adf95',
+    '--ch1-color': '#f0a030',      // bright channel hues read fine on deep blue
+    '--ch2-color': '#c98fe8',
+    '--awg-color': '#e0c020',
+    '--sch-grid': '#33557f',
+  },
 }
-const GRID_DOT_PAPER = '#d8d8d2'
-const AWG_PAPER = '#9c7a00' // W1/W2 port markers (darkened from the dark theme's #e0c020)
+// The PNG export is a publication figure: always the white-paper palette, whatever
+// skin is on screen (passed to exportSvgToPng as the `vars` override).
+const EXPORT_PAPER_VARS = Object.fromEntries(
+  Object.entries(PAPER_STYLES.white).filter(([k]) => k.startsWith('--')),
+) as Record<string, string>
 
 type Tool = 'select' | 'wire' | SchKind
 
@@ -183,6 +224,11 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     | null
   >(null)
   const [placeRotation, setPlaceRotation] = useState(0)
+  const [placeMirror, setPlaceMirror] = useState(false) // ghost pre-flip (Stage 4)
+  // On-screen paper skin (white / green pad / blueprint) — view-only; export is always white.
+  const [paperStyle, setPaperStyle] = useState<PaperStyle>('white')
+  // Right-click context menu on a part: rotate/flip/duplicate/delete without the keyboard.
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; id: string } | null>(null)
   // Place-time type selectors: when the Op-amp / In-amp tool is active a sub-selector below the
   // toolbar picks the exact part to drop. These map to (kind, opModel) at placement time.
   const [simStatus, setSimStatus] = useState('')
@@ -429,7 +475,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     // place-time sub-selector; everything else places its own kind directly.
     const kind = tool as SchKind
     // Op-amp places kind 'opamp' (LMC662); INA125 places kind 'ina125'. Power implied in sim, DIP on board.
-    const c: SchComponent = { id: newId(kind, sch.components), kind, gx, gy, rotation: placeRotation, value: DEFAULT_VALUE[kind], part: DEFAULT_PART[kind] }
+    const c: SchComponent = { id: newId(kind, sch.components), kind, gx, gy, rotation: placeRotation, mirror: (placeMirror && canMirror(kind)) || undefined, value: DEFAULT_VALUE[kind], part: DEFAULT_PART[kind] }
     snapshot()
     setSch((s) => ({ ...s, components: [...s.components, c] }))
     setSelected(c.id)
@@ -562,7 +608,11 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     }
     return null
   }
+  // With a part tool active the user is placing: R/F pre-rotate/pre-flip the ghost that rides
+  // the cursor (Stage 4), never a part already on the canvas.
+  const placing = tool !== 'select' && tool !== 'wire'
   function rotate() {
+    if (placing) { setPlaceRotation((r) => (r + 1) % 4); return }
     const target = keyTarget()
     if (target) {
       snapshot()
@@ -572,10 +622,33 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     }
   }
   function flip() {
+    if (placing) { if (canMirror(tool as SchKind)) setPlaceMirror((m) => !m); return }
     const target = keyTarget()
     if (!target || !canMirror(target.kind)) return
     snapshot()
     setSch((s) => mirrorComponentWithWires(s, target.id))
+  }
+  function rotatePart(id: string) {
+    snapshot()
+    setSch((s) => rotateComponentWithWires(s, id))
+  }
+  function flipPart(id: string) {
+    snapshot()
+    setSch((s) => mirrorComponentWithWires(s, id))
+  }
+  function duplicatePart(id: string) {
+    const c = sch.components.find((x) => x.id === id)
+    if (!c) return
+    const copy: SchComponent = { ...c, id: newId(c.kind, sch.components), gx: c.gx + 1, gy: c.gy + 1 }
+    snapshot()
+    setSch((s) => ({ ...s, components: [...s.components, copy] }))
+    setSelected(copy.id); setSelSet(new Set([copy.id])); setSelWires(new Set())
+  }
+  function deletePart(id: string) {
+    setHoverPartId(null)
+    snapshot()
+    setSch((s) => deleteComponentsWithWires(s, new Set([id])))
+    setSelSet(new Set()); setSelWires(new Set()); setSelected(null)
   }
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -600,11 +673,19 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
       if ((e.key === 'Delete' || e.key === 'Backspace') && (selected || selectedWire !== null || selSet.size)) deleteSelected()
       else if (e.key === 'r' || e.key === 'R') rotate()
       else if (e.key === 'f' || e.key === 'F') flip()
-      else if (e.key === 'Escape') { setPinWire(null); setWireStart(null) } // abandon a wiring gesture
+      else if (e.key === 'Escape') { setPinWire(null); setWireStart(null); setCtxMenu(null) } // abandon gesture/menu
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   })
+
+  // Any press outside the context menu dismisses it (the menu stops its own mousedown).
+  useEffect(() => {
+    if (!ctxMenu) return
+    const close = () => setCtxMenu(null)
+    window.addEventListener('mousedown', close)
+    return () => window.removeEventListener('mousedown', close)
+  }, [ctxMenu])
 
   const sel = sch.components.find((c) => c.id === selected) || null
 
@@ -717,9 +798,15 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
             <button className="run-btn" onClick={saveCircuit}>Save</button>
             <button className="run-btn" onClick={() => fileRef.current?.click()}>Open</button>
             <button className="run-btn" title="Save the schematic as a white-paper PNG figure for your prelab"
-              onClick={() => { if (svgRef.current) exportSvgToPng(svgRef.current, 'schematic.png', { paper: true }).catch((e) => setSimStatus('Export failed: ' + e.message)) }}>
+              onClick={() => { if (svgRef.current) exportSvgToPng(svgRef.current, 'schematic.png', { paper: true, vars: EXPORT_PAPER_VARS }).catch((e) => setSimStatus('Export failed: ' + e.message)) }}>
               Export PNG
             </button>
+            <select className="run-btn" title="Paper style — on-screen editing skin only; the PNG export is always white"
+              value={paperStyle} onChange={(e) => setPaperStyle(e.target.value as PaperStyle)}>
+              <option value="white">White paper</option>
+              <option value="green">Green pad</option>
+              <option value="blueprint">Blueprint</option>
+            </select>
             <select className="run-btn" title="Load an example circuit" value=""
               onChange={(e) => {
                 const ex = EXAMPLES.find((x) => x.id === e.target.value)
@@ -754,17 +841,30 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         <svg
           ref={svgRef}
           className="plotly-display"
-          style={{ ...PAPER_CANVAS, cursor: tool !== 'select' || hoverPin || pinWire ? 'crosshair' : (overSelection ? 'move' : 'default') }}
+          style={{ ...PAPER_STYLES[paperStyle], cursor: tool !== 'select' || hoverPin || pinWire ? 'crosshair' : (overSelection ? 'move' : 'default') }}
           onClick={onBackgroundClick}
           onMouseDown={onSvgDown}
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}
-          onMouseLeave={() => { setMarquee(null); setDrag(null); setHoverPartId(null) }}
+          onMouseLeave={() => { setMarquee(null); setDrag(null); setHoverPartId(null); setHoverPin(null); setHoverGrid(null) }}
+          onContextMenu={(e) => {
+            // Right-click a part → action menu (mouse/touch discoverability for R/F etc.).
+            e.preventDefault()
+            const { gx, gy } = gridAt(e)
+            const id = partAt(gx, gy)
+            if (id) {
+              setSelected(id); setSelSet(new Set([id])); setSelWires(new Set()); setSelectedWire(null)
+              setCtxMenu({ x: e.clientX, y: e.clientY, id })
+            } else setCtxMenu(null)
+          }}
         >
           {/* grid dots */}
           <defs>
             <pattern id="gridDots" x={PAD} y={PAD} width={GRID} height={GRID} patternUnits="userSpaceOnUse">
-              <circle cx={0} cy={0} r={1} fill={GRID_DOT_PAPER} />
+              {paperStyle === 'white'
+                ? <circle cx={0} cy={0} r={1} fill="var(--sch-grid)" />
+                // engineering pad / blueprint: a printed line grid, one cell = one snap step
+                : <path d={`M ${GRID} 0 L 0 0 0 ${GRID}`} fill="none" stroke="var(--sch-grid)" strokeWidth={0.6} />}
             </pattern>
           </defs>
           <rect x={0} y={0} width="100%" height="100%" fill="url(#gridDots)" />
@@ -844,6 +944,25 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
             </g>
           ))}
 
+          {/* Stage 4 ghost-place: the active palette part rides the cursor (R/F pre-rotate/flip);
+              the click that commits it is unchanged (onBackgroundClick places at the same snap). */}
+          {placing && hoverGrid && (() => {
+            const kind = tool as SchKind
+            const ghost: SchComponent = {
+              id: newId(kind, sch.components), kind, gx: hoverGrid.gx, gy: hoverGrid.gy,
+              rotation: placeRotation, mirror: (placeMirror && canMirror(kind)) || undefined,
+              value: DEFAULT_VALUE[kind], part: DEFAULT_PART[kind],
+            }
+            return (
+              <g opacity={0.45} pointerEvents="none">
+                {renderSymbol(ghost, px, false)}
+                {terminalsOf(ghost).map((t, i) => (
+                  <circle key={i} cx={px(t.gx)} cy={px(t.gy)} r={3} fill="var(--node-color)" />
+                ))}
+              </g>
+            )
+          })()}
+
           {/* junction dots — a filled dot where two pins butt together (a touch-connection) or three
               or more pins/wires meet, so "these are electrically connected here" is always visible. */}
           {(() => {
@@ -862,7 +981,34 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
             }
             return dots
           })()}
+
+          {/* Stage 4 hover hint chip — fades in while a part is under the cursor */}
+          <g pointerEvents="none" style={{ opacity: tool === 'select' && hoverPartId && !drag && !marquee && !pinWire ? 0.92 : 0, transition: 'opacity 0.25s' }}>
+            <rect x={8} y={8} width={198} height={20} rx={10} fill="var(--bg-panel)" stroke="var(--sch-grid)" />
+            <text x={107} y={22} fontSize={10} fill="var(--text-secondary)" textAnchor="middle">R rotate · F flip · right-click: menu</text>
+          </g>
         </svg>
+
+        {/* Stage 4 right-click menu — rotate/flip/duplicate/delete without the keyboard */}
+        {ctxMenu && (() => {
+          const c = sch.components.find((x) => x.id === ctxMenu.id)
+          if (!c) return null
+          const item = (label: string, fn: () => void, disabled = false) => (
+            <button key={label} className="run-btn" disabled={disabled}
+              style={{ display: 'block', width: '100%', textAlign: 'left' }}
+              onClick={() => { fn(); setCtxMenu(null) }}>{label}</button>
+          )
+          return (
+            <div onMouseDown={(e) => e.stopPropagation()}
+              style={{ position: 'fixed', left: ctxMenu.x, top: ctxMenu.y, zIndex: 1000, background: 'var(--bg-panel)', border: '1px solid #4a4a4a', borderRadius: 6, padding: 4, minWidth: 150, boxShadow: '0 4px 14px rgba(0,0,0,0.45)' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-secondary)', padding: '2px 6px 4px' }}>{c.id} ({c.kind})</div>
+              {item('Rotate (R)', () => rotatePart(c.id))}
+              {item('Flip (F)', () => flipPart(c.id), !canMirror(c.kind))}
+              {item('Duplicate', () => duplicatePart(c.id))}
+              {item('Delete', () => deletePart(c.id))}
+            </div>
+          )
+        })()}
       </div>
 
       <div className="settings-panel">
@@ -891,7 +1037,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         </div>
 
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4 }}>
-          Place angle: {placeRotation * 90}° &nbsp;(R rotates / F flips the part under the cursor, else the selected part; R with nothing targeted turns the place angle)
+          Place angle: {placeRotation * 90}°{placeMirror ? ' · flipped' : ''} &nbsp;(placing: R/F turn and flip the ghost on the cursor; otherwise R/F act on the part under the cursor, else the selection)
         </div>
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>
           Select tool: <b>drag a box</b> over parts to select them (or Shift+click), then drag any to move the group{selSet.size > 1 ? ` (${selSet.size} selected)` : ''}.
@@ -1268,9 +1414,9 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
     const lbl = c.kind === 'awg1' ? 'W1' : 'W2'
     inner = (
       <g>
-        <circle cx={x} cy={y} r={11} fill="var(--bg-panel)" stroke={AWG_PAPER} strokeWidth={sw} />
-        <path d={`M ${x - 6} ${y} q 3 -6 6 0 q 3 6 6 0`} fill="none" stroke={AWG_PAPER} strokeWidth={1.4} />
-        {upright(x, y - 16, <text x={x} y={y - 16} fill={AWG_PAPER} fontSize={10} textAnchor="middle">{lbl}</text>)}
+        <circle cx={x} cy={y} r={11} fill="var(--bg-panel)" stroke="var(--awg-color)" strokeWidth={sw} />
+        <path d={`M ${x - 6} ${y} q 3 -6 6 0 q 3 6 6 0`} fill="none" stroke="var(--awg-color)" strokeWidth={1.4} />
+        {upright(x, y - 16, <text x={x} y={y - 16} fill="var(--awg-color)" fontSize={10} textAnchor="middle">{lbl}</text>)}
       </g>
     )
   } else if (c.kind === 'scope1' || c.kind === 'scope2' || c.kind === 'adc1n' || c.kind === 'adc2n') {
