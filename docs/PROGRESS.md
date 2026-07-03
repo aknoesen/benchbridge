@@ -8,7 +8,29 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
-## Next session: start here (updated 2026-07-02, batch 7 — flashlight → Voltmeter, unequal divider)
+## Next session: start here (updated 2026-07-02, batch 8 — split view, key-gating, board reset)
+
+**The evening review round (`7eb0498..8b57214`), all andre-directed:**
+- **Observe-not-manipulate copy** on pages 6/8/9/10 (verbatim from the updated
+  `quickstart-copy.md`) — no step asks the user to manipulate a control they can't see; the I-V
+  page now clearly separates the diode (scope XY) from the transistor family (Curve Tracer, with a
+  heads-up); the build page tells users where the parts panel is and to use R.
+- **TO-92 label rotates with the part** (same transform as the DIP label).
+- **Dual-key co-fire fixed**: the SchematicEditor's global R **and Delete/Backspace** now act only
+  when the pointer is over its panel (a `pointerInsideRef` gate) — in the stacked Board view one
+  keypress was hitting both the board's handler and the schematic's. Verified live: R over the
+  board rotates only the board part.
+- **Example loads hard-reset the board** in both load paths (to `ex.board` if shipped, else empty)
+  — id-reuse across examples no longer leaves stale placements. Verified live.
+- **The divider page opens a circuit + Voltmeter SPLIT VIEW** (andre's green-lit "easy path"): new
+  `circuit-voltmeter` E-1 preset (schematic + voltmeter, row) + an `onGoToPreset` prop on
+  Quickstart; both divider-page buttons use it. Verified at 1366-px laptop width: circuit readable
+  on the left, Voltmeter reading 1.66 / 3.34 V live on the right (the singleton warm engine makes
+  the readings appear instantly). Divider only — the flashlight keeps the Board view.
+
+---
+
+## Earlier on 2026-07-02 (batch 7 — flashlight → Voltmeter, unequal divider)
 
 **Two beta-review fixes from andre's live pass (`5400c72`, `6f470df`):**
 - **Flashlight measures on the Voltmeter** (it's steady DC — the scope showed a flat line). The
