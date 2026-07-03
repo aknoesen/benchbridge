@@ -483,11 +483,12 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         else if (k === 'x') { e.preventDefault(); cutSelection() }
         return
       }
+      // Delete and R act only when the pointer is over THIS panel: in the stacked Board view the
+      // Breadboard is mounted alongside with its own global keys, and without the gate one press
+      // hit both — deleting/rotating the selected schematic part while the user worked the board.
+      if (!pointerInsideRef.current) return
       if ((e.key === 'Delete' || e.key === 'Backspace') && (selected || selectedWire !== null || selSet.size)) deleteSelected()
-      // R rotates only when the pointer is over THIS panel: in the stacked Board view the
-      // Breadboard has its own global R (rotate the hovered board part), and without the gate one
-      // press hit both — rotating the selected schematic part while the user rotated a board part.
-      else if ((e.key === 'r' || e.key === 'R') && pointerInsideRef.current) rotate()
+      else if (e.key === 'r' || e.key === 'R') rotate()
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)

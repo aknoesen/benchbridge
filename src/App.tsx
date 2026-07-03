@@ -35,6 +35,7 @@ const PRESETS: Preset[] = [
   { id: 'gen-scope', name: 'Generator + Scope', panels: ['siggen', 'scope'], arrange: 'row' },
   { id: 'circuit-bode', name: 'Circuit + Network (Bode)', panels: ['schematic', 'network'], arrange: 'row' },
   { id: 'circuit-scope', name: 'Circuit + Scope', panels: ['schematic', 'scope'], arrange: 'row' },
+  { id: 'circuit-voltmeter', name: 'Circuit + Voltmeter', panels: ['schematic', 'voltmeter'], arrange: 'row' },
   { id: 'bench', name: 'Scope + Supply + Voltmeter', panels: ['scope', 'psu', 'voltmeter'], arrange: 'grid' },
 ]
 const WORKSPACE_KEY = 'm2k-workspace-v1'
@@ -568,6 +569,7 @@ export default function App() {
       case 'quickstart':
         return <Quickstart
           onGoTo={(t) => { setActive(t as ActiveInstrument); setPresetId(null) }}
+          onGoToPreset={(id) => setPresetId(id)}
           onLoadExample={loadExample} />
       case 'siggen':
         return <SignalGenerator params={params} params2={params2} signal={signal} signal2={signal2} running={running} compact={multi}

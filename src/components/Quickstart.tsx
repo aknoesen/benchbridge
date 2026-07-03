@@ -13,6 +13,9 @@ import './Instrument.css'
 interface Props {
   // Switch the visible instrument panel (id is an App ActiveInstrument).
   onGoTo: (id: string) => void
+  // Open a multi-panel E-1 preset layout (id is an App Preset id) — the divider page shows the
+  // circuit and the Voltmeter TOGETHER so the reader can see which resistor each channel is across.
+  onGoToPreset?: (id: string) => void
   // Load a built-in example by id (sets the schematic + generator + scope presets).
   onLoadExample: (id: string) => void
 }
@@ -107,7 +110,7 @@ function SignalFlow() {
   )
 }
 
-export default function Quickstart({ onGoTo, onLoadExample }: Props) {
+export default function Quickstart({ onGoTo, onGoToPreset, onLoadExample }: Props) {
   const [page, setPageRaw] = useState<PageId>(lastPage)
   const [, bump] = useState(0) // re-render after visitedStore mutates
   function setPage(p: PageId) {
@@ -212,12 +215,12 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
           Two resistors in series split the supply — the bigger one drops more.
         </p>
         <div style={btnRow}>
-          <button style={goBtn} onClick={() => { onLoadExample('divider'); onGoTo('schematic') }}>Load the divider →</button>
+          <button style={goBtn} onClick={() => { onLoadExample('divider'); if (onGoToPreset) onGoToPreset('circuit-voltmeter'); else onGoTo('schematic') }}>Load the divider →</button>
           <span style={{ alignSelf: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>→ here the <b>bottom</b> resistor is <b>twice</b> the top one (20 kΩ over 10 kΩ).</span>
         </div>
         <div style={{ ...btnRow, marginTop: 10 }}>
-          <button style={goBtn} onClick={() => onGoTo('voltmeter')}>Open the Voltmeter →</button>
-          <span style={{ alignSelf: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>and read the two channels — they're already wired:</span>
+          <button style={goBtn} onClick={() => { if (onGoToPreset) onGoToPreset('circuit-voltmeter'); else onGoTo('voltmeter') }}>Open the circuit + Voltmeter →</button>
+          <span style={{ alignSelf: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>side by side — read the two channels; they're already wired:</span>
         </div>
         <Beat>
           <b>CH2 — single-ended</b> (the midpoint, referenced to GND): about <b>3.3 V</b>. That's
