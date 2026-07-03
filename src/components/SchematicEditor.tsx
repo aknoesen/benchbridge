@@ -1467,17 +1467,31 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
         {upright(x, y - 38, <text x={x} y={y - 38} fill={col} fontSize={10} textAnchor="middle">{lbl}</text>)}
       </g>
     )
-  } else if (c.kind === 'scope1' || c.kind === 'scope2' || c.kind === 'adc1n' || c.kind === 'adc2n') {
-    // measurement input: label + oscilloscope badge (stands for BOTH scope and voltmeter —
-    // the shared 1±/2± ADC input; the student picks the instrument downstream)
+  } else if (c.kind === 'scope1' || c.kind === 'scope2') {
+    // measurement input, + side: ONE oscilloscope badge per channel (it stands for both
+    // scope and voltmeter — the shared 1±/2± ADC input; the student picks the instrument
+    // downstream). The − port is the same channel's reference lead, not a second scope.
     const x = ax, y = ay
-    const ch1 = c.kind === 'scope1' || c.kind === 'adc1n'
-    const col = selected ? 'var(--accent-blue)' : ch1 ? 'var(--ch1-color)' : 'var(--ch2-color)'
-    const lbl = c.kind === 'scope1' ? '1+' : c.kind === 'adc1n' ? '1-' : c.kind === 'scope2' ? '2+' : '2-'
+    const col = selected ? 'var(--accent-blue)' : c.kind === 'scope1' ? 'var(--ch1-color)' : 'var(--ch2-color)'
+    const lbl = c.kind === 'scope1' ? '1+' : '2+'
     inner = (
       <g style={{ color: col }}>
         {badgeArt(c.id, 'oscilloscope', x, y - 22)}
         {upright(x, y - 38, <text x={x} y={y - 38} fill={col} fontSize={10} textAnchor="middle">{lbl}</text>)}
+      </g>
+    )
+  } else if (c.kind === 'adc1n' || c.kind === 'adc2n') {
+    // measurement input, − side: the channel's negative/reference LEAD — a small "−"
+    // terminal in the channel colour, deliberately not an instrument glyph (one scope
+    // symbol per channel lives on the + input).
+    const x = ax, y = ay
+    const col = selected ? 'var(--accent-blue)' : c.kind === 'adc1n' ? 'var(--ch1-color)' : 'var(--ch2-color)'
+    const lbl = c.kind === 'adc1n' ? '1-' : '2-'
+    inner = (
+      <g>
+        <circle cx={x} cy={y - 18} r={7} fill="transparent" stroke={col} strokeWidth={1.6} />
+        <line x1={x - 3.5} y1={y - 18} x2={x + 3.5} y2={y - 18} stroke={col} strokeWidth={1.6} />
+        {upright(x, y - 31, <text x={x} y={y - 31} fill={col} fontSize={10} textAnchor="middle">{lbl}</text>)}
       </g>
     )
   } else {
