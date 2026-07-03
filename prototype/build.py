@@ -191,13 +191,16 @@ SYMBOLS = {
 }
 
 # Generic DIP ICs — circuitikz `dipchip`; pins are named anchors ".pin 1".. ".pin N".
-# The chip is what op-amps / INA125 / any packaged part boards onto. The dipchip
-# options (num pins / hide numbers / no topmark) may want a small visual tune on
-# first render (lead length, pin spacing) — flagged for CC.
+# The chip is what op-amps / INA125 / any packaged part boards onto. Orientation
+# cues: keep the topmark notch, AND draw a pin-1 dot on the body next to pin 1
+# (circuitikz numbers dipchip pin 1 at the TOP-left, then down the left side —
+# so the dot sits in the top-left corner, real-chip style). Offset measured on
+# render: lead tip -> body edge is ~0.30, so 0.45 puts the dot just inside.
 for _n in (8, 14, 16):
     SYMBOLS[f"ic_dip{_n}"] = {
         "pre": "",
-        "body": rf"\node[dipchip, num pins={_n}, hide numbers, no topmark] (U) at (0,0){{}};",
+        "body": (rf"\node[dipchip, num pins={_n}, hide numbers] (U) at (0,0){{}};"
+                 "\n" r"\fill (U.pin 1) ++(0.45,0.10) circle (1.6pt);"),
         "pins": [f"U.pin {i}" for i in range(1, _n + 1)],
     }
 

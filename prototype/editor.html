@@ -1,0 +1,320 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SCH-11 interaction prototype</title>
+<!-- Interaction-model playground for SCH-11 (place / rotate / flip / select / wire).
+     Loads real symbols from build.py output if present; else placeholders.
+     Separate from harness.html (which stays the wiring-proof). -->
+<script src="out/symbols.js" onerror="void 0"></script>
+<style>
+  body { font: 13px/1.4 system-ui, sans-serif; margin: 0; color: #1a1a1a; }
+  header { padding: 7px 12px; background: #f3f4f6; border-bottom: 1px solid #ddd; }
+  header b { color: #0b62d6; }
+  #palette { padding: 6px 12px; border-bottom: 1px solid #eee; }
+  #palette button { margin: 0 5px 5px 0; padding: 5px 9px; cursor: pointer;
+    border: 1px solid #ccc; border-radius: 6px; background: #fff; font-size: 12px; }
+  #help { padding: 5px 12px; color: #555; background: #fbfbfc; border-bottom: 1px solid #eee; font-size: 12px; }
+  #stage { position: relative; height: 60vh; overflow: hidden; cursor: default;
+    background: linear-gradient(#fafafa,#fafafa) padding-box,
+      repeating-linear-gradient(#0000 0 19px,#eef1f4 19px 20px); }
+  #wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .inst { position: absolute; transform-origin: center center; }
+  .inst svg { display: block; pointer-events: none; }
+  .inst .body { position: absolute; inset: 0; cursor: grab; }
+  .inst.sel .body { outline: 2px dashed #0b62d6; outline-offset: 3px; background: rgba(11,98,214,.05); }
+  .inst.ghost { opacity: .5; pointer-events: none; }
+  .pin { position: absolute; width: 13px; height: 13px; margin: -6.5px 0 0 -6.5px;
+    border-radius: 50%; background: #0b62d6; opacity: .5; cursor: crosshair; }
+  .pin.hot { opacity: 1; box-shadow: 0 0 0 4px rgba(255,180,0,.6); }
+  #hint { position: absolute; pointer-events: none; background: #111; color: #fff;
+    font: 11px ui-monospace, monospace; padding: 2px 6px; border-radius: 4px; display: none; z-index: 5; }
+  #marquee { position: absolute; border: 1px solid #0b62d6; background: rgba(11,98,214,.08); display: none; }
+  #menu { position: absolute; background: #fff; border: 1px solid #ccc; border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.15); display: none; z-index: 10; overflow: hidden; }
+  #menu div { padding: 6px 14px; cursor: pointer; font-size: 12px; }
+  #menu div:hover { background: #eef4ff; }
+  #nets { padding: 6px 12px; font: 12px ui-monospace, monospace; white-space: pre-wrap;
+    border-top: 1px solid #eee; max-height: 20vh; overflow: auto; }
+</style>
+
+<header><b>SCH-11 interaction prototype</b> &nbsp;<span id="src"></span></header>
+<div id="palette"></div>
+<div id="help">
+  <b>place:</b> click a part → it follows the cursor (R rotate, F flip) → click to drop &nbsp;·&nbsp;
+  <b>hover + key:</b> R rotate · F flip · D duplicate · E edit · X/Del delete &nbsp;·&nbsp;
+  <b>select:</b> click, or drag a box (Shift adds) &nbsp;·&nbsp;
+  <b>wire:</b> click a pin → move → click another pin (Esc cancels) &nbsp;·&nbsp;
+  <b>right-click:</b> menu
+</div>
+<div id="stage">
+  <svg id="wires"></svg>
+  <div id="marquee"></div>
+  <div id="hint"></div>
+  <div id="menu"></div>
+</div>
+<div id="nets"></div>
+
+<script>
+const PLACEHOLDER = {
+  resistor: { viewBox:"0 0 40 120", pins:[{id:"p0",x:20,y:8},{id:"p1",x:20,y:112}],
+    svg:`<svg viewBox="0 0 40 120"><path d="M20 8 V40 L8 48 L32 60 L8 72 L32 84 L20 92 V112" fill="none" stroke="#111" stroke-width="2"/></svg>`},
+  source: { viewBox:"0 0 60 120", pins:[{id:"p0",x:30,y:6},{id:"p1",x:30,y:114}],
+    svg:`<svg viewBox="0 0 60 120"><line x1="30" y1="6" x2="30" y2="26" stroke="#111" stroke-width="2"/><line x1="30" y1="94" x2="30" y2="114" stroke="#111" stroke-width="2"/><circle cx="30" cy="60" r="34" fill="none" stroke="#111" stroke-width="2"/><path d="M14 60 q8 -16 16 0 t16 0" fill="none" stroke="#111" stroke-width="2"/></svg>`},
+  ground: { viewBox:"0 0 40 40", pins:[{id:"p0",x:20,y:6}],
+    svg:`<svg viewBox="0 0 40 40"><line x1="20" y1="6" x2="20" y2="20" stroke="#111" stroke-width="2"/><line x1="8" y1="20" x2="32" y2="20" stroke="#111" stroke-width="2"/><line x1="13" y1="26" x2="27" y2="26" stroke="#111" stroke-width="2"/><line x1="17" y1="32" x2="23" y2="32" stroke="#111" stroke-width="2"/></svg>`},
+};
+const SYMBOLS = window.SYMBOLS || PLACEHOLDER;
+document.getElementById("src").textContent =
+  window.SYMBOLS ? "(real symbols from build.py)" : "(placeholders — run build.py for the real catalog)";
+
+const S = 1.4, SNAP = 16;
+const stage = document.getElementById("stage");
+const wiresSvg = document.getElementById("wires");
+const hintEl = document.getElementById("hint");
+const menuEl = document.getElementById("menu");
+const marqEl = document.getElementById("marquee");
+let insts = [], wires = [], seq = 0;
+let selection = new Set(), hovered = null;
+let placing = null, moving = null, marquee = null, wiring = null;
+
+const rectOf = () => stage.getBoundingClientRect();
+const toStage = e => { const r = rectOf(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+const vbOf = s => { const [x,y,w,h] = s.viewBox.split(/\s+/).map(Number); return {x,y,w,h}; };
+const byId = id => insts.find(i => i.id === id);
+
+function pinCanvas(inst, pinId){
+  const p = inst.sym.pins.find(pp => pp.id === pinId);
+  const v = inst.v, wS = v.w*S, hS = v.h*S;
+  let lx = (p.x - v.x)*S - wS/2, ly = (p.y - v.y)*S - hS/2;
+  if(inst.flip) lx = -lx;
+  const t = inst.r*Math.PI/180, c = Math.cos(t), s = Math.sin(t);
+  return { x: inst.x + wS/2 + (lx*c - ly*s), y: inst.y + hS/2 + (lx*s + ly*c) };
+}
+
+function makeEl(sym, ghost){
+  const v = vbOf(sym), wS = v.w*S, hS = v.h*S;
+  const el = document.createElement("div");
+  el.className = "inst" + (ghost ? " ghost" : "");
+  el.style.width = wS+"px"; el.style.height = hS+"px";
+  const holder = document.createElement("div"); holder.innerHTML = sym.svg;
+  const svg = holder.firstElementChild;
+  svg.setAttribute("width", wS); svg.setAttribute("height", hS);
+  svg.setAttribute("viewBox", sym.viewBox);
+  el.appendChild(svg);
+  return { el, v, wS, hS };
+}
+
+function setTransform(inst){
+  inst.el.style.left = inst.x+"px"; inst.el.style.top = inst.y+"px";
+  inst.el.style.transform = `rotate(${inst.r}deg) scaleX(${inst.flip?-1:1})`;
+}
+
+function addInstance(kind, x, y, r=0, flip=false){
+  const sym = SYMBOLS[kind]; if(!sym) return;
+  const { el, v, wS, hS } = makeEl(sym, false);
+  const id = "i"+(seq++);
+  const inst = { id, kind, sym, v, x: x-wS/2, y: y-hS/2, r, flip, el };
+  const body = document.createElement("div"); body.className = "body"; el.appendChild(body);
+  body.addEventListener("mousedown", e => { if(e.button===0){ e.stopPropagation(); startMove(e, id); } });
+  el.addEventListener("mouseenter", () => { hovered = id; showHint(inst); });
+  el.addEventListener("mouseleave", () => { if(hovered===id){ hovered=null; hintEl.style.display="none"; } });
+  el.addEventListener("contextmenu", e => { e.preventDefault(); e.stopPropagation();
+    if(!selection.has(id)) setSelection([id]); openMenu(e); });
+  sym.pins.forEach(p => {
+    const d = document.createElement("div"); d.className = "pin";
+    const lx = (p.x - v.x)*S, ly = (p.y - v.y)*S;
+    d.style.left = lx+"px"; d.style.top = ly+"px";
+    d.dataset.inst = id; d.dataset.pin = p.id;
+    d.addEventListener("mousedown", e => { if(e.button===0){ e.stopPropagation(); pinMouseDown(id, p.id); } });
+    el.appendChild(d);
+  });
+  setTransform(inst); stage.appendChild(el); insts.push(inst); redraw();
+  return inst;
+}
+
+// ---- placing ---------------------------------------------------------------
+function startPlacing(kind){
+  cancelPlacing();
+  const sym = SYMBOLS[kind]; const { el, wS, hS } = makeEl(sym, true);
+  placing = { kind, r:0, flip:false, el, wS, hS };
+  stage.appendChild(el);
+}
+function updateGhost(p){
+  if(!placing) return;
+  placing.el.style.left = (p.x - placing.wS/2)+"px";
+  placing.el.style.top = (p.y - placing.hS/2)+"px";
+  placing.el.style.transform = `rotate(${placing.r}deg) scaleX(${placing.flip?-1:1})`;
+}
+function cancelPlacing(){ if(placing){ placing.el.remove(); placing=null; } }
+
+// ---- selection -------------------------------------------------------------
+function setSelection(ids){ selection = new Set(ids); refreshSel(); }
+function clearSelection(){ selection.clear(); refreshSel(); }
+function refreshSel(){ insts.forEach(i => i.el.classList.toggle("sel", selection.has(i.id))); }
+
+// ---- move ------------------------------------------------------------------
+function startMove(e, id){
+  if(!e.shiftKey && !selection.has(id)) setSelection([id]);
+  else if(e.shiftKey){ selection.has(id) ? selection.delete(id) : selection.add(id); refreshSel(); }
+  const p = toStage(e);
+  moving = { ox:p.x, oy:p.y, start: [...selection].map(sid => { const it=byId(sid); return {sid, x:it.x, y:it.y}; }) };
+}
+
+// ---- per-instance ops ------------------------------------------------------
+function rotateInst(id){ const i=byId(id); i.r=(i.r+90)%360; setTransform(i); redraw(); }
+function flipInst(id){ const i=byId(id); i.flip=!i.flip; setTransform(i); redraw(); }
+function dupInst(id){ const i=byId(id); const c=addInstance(i.kind, i.x+i.v.w*S/2+20, i.y+i.v.h*S/2+20, i.r, i.flip); if(c) setSelection([c.id]); }
+function editInst(id){ const i=byId(id); const val=prompt("Value / label for "+i.kind+":", i.label||""); if(val!==null){ i.label=val; drawLabels(); } }
+function deleteInst(id){
+  const i=byId(id); if(!i) return; i.el.remove();
+  insts = insts.filter(x=>x.id!==id);
+  wires = wires.filter(w => w.a.id!==id && w.b.id!==id);
+  selection.delete(id); redraw();
+}
+
+// ---- wiring ----------------------------------------------------------------
+function pinMouseDown(id, pin){
+  if(wiring){ // second pin -> commit (ignore same pin)
+    if(!(wiring.a.id===id && wiring.a.pin===pin)){ wires.push({a:wiring.a, b:{id,pin}}); }
+    cancelWiring();
+  } else {
+    wiring = { a:{id,pin} };
+  }
+  redraw();
+}
+function cancelWiring(){ wiring=null; clearHot(); redraw(); }
+function clearHot(){ stage.querySelectorAll(".pin.hot").forEach(p=>p.classList.remove("hot")); }
+
+function nearestPin(p){
+  let best=null, bd=SNAP;
+  for(const it of insts) for(const pin of it.sym.pins){
+    const c=pinCanvas(it,pin.id), d=Math.hypot(c.x-p.x,c.y-p.y);
+    if(d<bd){ bd=d; best={id:it.id, pin:pin.id, c}; }
+  }
+  return best;
+}
+
+// orthogonal Z-route between two points
+function route(a, b){
+  if(Math.abs(b.x-a.x) >= Math.abs(b.y-a.y)){ const mx=(a.x+b.x)/2; return [a,{x:mx,y:a.y},{x:mx,y:b.y},b]; }
+  const my=(a.y+b.y)/2; return [a,{x:a.x,y:my},{x:b.x,y:my},b];
+}
+function poly(pts, cls){
+  const el=document.createElementNS("http://www.w3.org/2000/svg","polyline");
+  el.setAttribute("points", pts.map(p=>p.x+","+p.y).join(" "));
+  el.setAttribute("fill","none"); el.setAttribute("class",cls);
+  return el;
+}
+
+// ---- render ----------------------------------------------------------------
+function redraw(){
+  wiresSvg.innerHTML = "";
+  for(const w of wires){
+    const a=pinCanvas(byId(w.a.id),w.a.pin), b=pinCanvas(byId(w.b.id),w.b.pin);
+    const el=poly(route(a,b),""); el.setAttribute("stroke","#0b62d6"); el.setAttribute("stroke-width","2");
+    wiresSvg.appendChild(el);
+  }
+  drawNets();
+}
+function drawWirePreview(cursor){
+  redraw();
+  if(!wiring) return;
+  const a=pinCanvas(byId(wiring.a.id),wiring.a.pin);
+  const snap=nearestPin(cursor); const end = snap?snap.c:cursor;
+  clearHot();
+  if(snap){ const el=[...stage.querySelectorAll(".pin")].find(d=>d.dataset.inst===snap.id&&d.dataset.pin===snap.pin); if(el)el.classList.add("hot"); }
+  const el=poly(route(a,end),""); el.setAttribute("stroke","#f0a030"); el.setAttribute("stroke-width","2"); el.setAttribute("stroke-dasharray","5 4");
+  wiresSvg.appendChild(el);
+}
+function drawLabels(){ /* labels drawn as title for now */ insts.forEach(i=>{ i.el.title = i.label? `${i.kind}: ${i.label}` : i.kind; }); }
+
+function nets(){
+  const parent={}; const find=a=>parent[a]===undefined?(parent[a]=a):(parent[a]===a?a:(parent[a]=find(parent[a])));
+  insts.forEach(i=>i.sym.pins.forEach(p=>find(i.id+":"+p.id)));
+  wires.forEach(w=>{ parent[find(w.a.id+":"+w.a.pin)]=find(w.b.id+":"+w.b.pin); });
+  const g={}; Object.keys(parent).forEach(k=>{const r=find(k);(g[r]=g[r]||[]).push(k);});
+  return Object.values(g).filter(x=>x.length>1);
+}
+function drawNets(){
+  const ns=nets();
+  document.getElementById("nets").textContent =
+    `parts: ${insts.length}   wires: ${wires.length}   connected nets: ${ns.length}\n` +
+    ns.map((g,i)=>"  net "+(i+1)+": "+g.join("  ")).join("\n");
+}
+
+// ---- hint + menu -----------------------------------------------------------
+function showHint(inst){
+  hintEl.textContent = "R ⟳  F ⤢  D ⧉  E ✎  X ⌫";
+  hintEl.style.left = (inst.x + inst.v.w*S + 6)+"px";
+  hintEl.style.top = inst.y+"px"; hintEl.style.display = "block";
+}
+function openMenu(e){
+  const p=toStage(e); const items=[
+    ["Rotate (R)",()=>act(rotateInst)],["Flip (F)",()=>act(flipInst)],
+    ["Duplicate (D)",()=>act(dupInst)],["Edit (E)",()=>{const id=[...selection][0]; if(id)editInst(id);}],
+    ["Delete (X)",()=>act(deleteInst)]];
+  menuEl.innerHTML=""; items.forEach(([label,fn])=>{ const d=document.createElement("div"); d.textContent=label; d.onclick=()=>{fn();hideMenu();}; menuEl.appendChild(d); });
+  menuEl.style.left=p.x+"px"; menuEl.style.top=p.y+"px"; menuEl.style.display="block";
+}
+function hideMenu(){ menuEl.style.display="none"; }
+function act(fn){ [...selection].forEach(fn); }
+
+// ---- global mouse ----------------------------------------------------------
+stage.addEventListener("mousedown", e => {
+  hideMenu();
+  if(e.button!==0) return;
+  const p = toStage(e);
+  if(placing){ addInstance(placing.kind, p.x, p.y, placing.r, placing.flip); if(!e.shiftKey) cancelPlacing(); return; }
+  // empty-canvas left press -> marquee (and provisional deselect)
+  marquee = { x0:p.x, y0:p.y, add:e.shiftKey, moved:false };
+  marqEl.style.display="block"; marqEl.style.left=p.x+"px"; marqEl.style.top=p.y+"px";
+  marqEl.style.width="0px"; marqEl.style.height="0px";
+});
+window.addEventListener("mousemove", e => {
+  const p = toStage(e);
+  if(placing) updateGhost(p);
+  if(wiring) drawWirePreview(p);
+  if(moving){
+    const dx=p.x-moving.ox, dy=p.y-moving.oy;
+    moving.start.forEach(s=>{ const it=byId(s.sid); it.x=s.x+dx; it.y=s.y+dy; it.el.style.left=it.x+"px"; it.el.style.top=it.y+"px"; });
+    redraw();
+  }
+  if(marquee){
+    marquee.moved=true;
+    const x=Math.min(p.x,marquee.x0), y=Math.min(p.y,marquee.y0), w=Math.abs(p.x-marquee.x0), h=Math.abs(p.y-marquee.y0);
+    marqEl.style.left=x+"px"; marqEl.style.top=y+"px"; marqEl.style.width=w+"px"; marqEl.style.height=h+"px";
+  }
+});
+window.addEventListener("mouseup", e => {
+  if(moving) moving=null;
+  if(marquee){
+    const r=marqEl.getBoundingClientRect(), sr=rectOf();
+    const box={x:r.left-sr.left,y:r.top-sr.top,w:r.width,h:r.height};
+    if(marquee.moved){
+      const hit=insts.filter(it=>{ const cx=it.x+it.v.w*S/2, cy=it.y+it.v.h*S/2; return cx>=box.x&&cx<=box.x+box.w&&cy>=box.y&&cy<=box.y+box.h; }).map(it=>it.id);
+      if(marquee.add) hit.forEach(id=>selection.add(id)); else setSelection(hit);
+      refreshSel();
+    } else if(!marquee.add){ clearSelection(); }
+    marqEl.style.display="none"; marquee=null;
+  }
+});
+
+window.addEventListener("keydown", e => {
+  if(e.key==="Escape"){ cancelPlacing(); cancelWiring(); clearSelection(); hideMenu(); return; }
+  const k=e.key.toLowerCase();
+  if(placing){ if(k==="r"){placing.r=(placing.r+90)%360;} if(k==="f"){placing.flip=!placing.flip;} return; }
+  const targets = hovered!=null ? [hovered] : [...selection];
+  if(!targets.length) return;
+  if(k==="r"){ e.preventDefault(); targets.forEach(rotateInst); }
+  else if(k==="f"){ e.preventDefault(); targets.forEach(flipInst); }
+  else if(k==="d"){ e.preventDefault(); targets.forEach(dupInst); }
+  else if(k==="e" && targets.length===1){ e.preventDefault(); editInst(targets[0]); }
+  else if(k==="x" || e.key==="Delete" || e.key==="Backspace"){ e.preventDefault(); targets.forEach(deleteInst); }
+});
+
+// palette
+Object.keys(SYMBOLS).forEach(kind => {
+  const b=document.createElement("button"); b.textContent=kind;
+  b.onclick=()=>startPlacing(kind); document.getElementById("palette").appendChild(b);
+});
+redraw();
+</script>
