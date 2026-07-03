@@ -472,7 +472,7 @@ describe('model-space mirror (SCH-11 P3 Stage 2)', () => {
     expect(canMirror('lmc662')).toBe(true)
     expect(canMirror('ina125')).toBe(false) // inline render does not honour mirror
     expect(canMirror('ground')).toBe(false)
-    expect(canMirror('awg1')).toBe(false)
+    expect(canMirror('awg1')).toBe(true) // two-terminal instrument (SCH-11) — mirrorable like any bipole
     // and the model op refuses rather than silently lying about pin positions
     const s: Schematic = { components: [{ id: 'U1', kind: 'ina125', gx: 0, gy: 0 }], wires: [] }
     expect(mirrorComponentWithWires(s, 'U1')).toBe(s)

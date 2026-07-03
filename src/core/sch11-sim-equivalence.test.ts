@@ -76,6 +76,21 @@ describe('SCH-11 sim-result equivalence across the example library', () => {
 
     const base: Baseline = JSON.parse(readFileSync(FIXTURE, 'utf8'))
     for (const ex of EXAMPLES) {
+      // DELIBERATE exception (flagged in the migration): the old ina125-amp's 1-/2- ground
+      // stubs ran straight through the RG pins, grounding/shorting the gain network — its
+      // baseline is a +5 V rail-clipped output. The migration removes those stubs, so instead
+      // of the broken baseline we assert the example's DOCUMENTED behaviour: gain ×10, unclipped.
+      if (ex.id === 'ina125-amp') {
+        const { ch1, ch2 } = results[ex.id]
+        expect(ch1).not.toBeNull(); expect(ch2).not.toBeNull()
+        const peak = Math.max(...ch1!.map(Math.abs))
+        expect(peak).toBeGreaterThan(1.5)   // a real ±(10×0.29) V sine…
+        expect(peak).toBeLessThan(4.5)      // …not pinned at the +5 V rail
+        for (let i = 0; i < POINTS; i++) {
+          expect(Math.abs(ch1![i] - 10 * ch2![i]), `ina125 gain at [${i}]`).toBeLessThan(0.25)
+        }
+        continue
+      }
       const b = base[ex.id]
       expect(b, `baseline entry for ${ex.id}`).toBeDefined()
       for (const ch of ['ch1', 'ch2'] as const) {

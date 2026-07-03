@@ -4,8 +4,8 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
 {
   "bjt-curve-family": [
     [
-      "10,10",
-      "net4",
+      "10,2",
+      "net7",
     ],
     [
       "10,4",
@@ -13,27 +13,39 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
     ],
     [
       "10,6",
-      "net2",
-    ],
-    [
-      "12,10",
-      "net4",
-    ],
-    [
-      "2,5",
       "net3",
     ],
     [
-      "4,5",
-      "net3",
+      "10,8",
+      "net8",
     ],
     [
-      "6,5",
+      "12,4",
+      "net0",
+    ],
+    [
+      "12,6",
       "net1",
     ],
     [
-      "8,10",
+      "2,5",
       "net4",
+    ],
+    [
+      "2,7",
+      "net5",
+    ],
+    [
+      "4,5",
+      "net4",
+    ],
+    [
+      "6,5",
+      "net2",
+    ],
+    [
+      "8,10",
+      "net6",
     ],
     [
       "8,2",
@@ -45,41 +57,53 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
     ],
     [
       "8,6",
-      "net2",
+      "net3",
     ],
     [
       "8,8",
-      "net4",
+      "net6",
     ],
   ],
   "differentiator": [
     [
+      "0,6",
+      "net0",
+    ],
+    [
+      "0,8",
+      "net6",
+    ],
+    [
       "10,4",
-      "net2",
+      "net3",
     ],
     [
       "10,6",
-      "net1",
+      "net2",
     ],
     [
       "10,8",
-      "net1",
+      "net2",
     ],
     [
       "12,8",
-      "net3",
+      "net4",
     ],
     [
       "14,5",
-      "net3",
+      "net4",
     ],
     [
       "14,8",
-      "net3",
+      "net4",
     ],
     [
       "16,5",
-      "net3",
+      "net4",
+    ],
+    [
+      "16,7",
+      "net5",
     ],
     [
       "2,6",
@@ -87,33 +111,33 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
     ],
     [
       "2,8",
-      "net0",
+      "net1",
     ],
     [
       "4,6",
       "net0",
     ],
     [
-      "6,2",
-      "net2",
-    ],
-    [
-      "6,4",
-      "net2",
-    ],
-    [
       "6,6",
-      "net1",
+      "net2",
     ],
     [
       "8,4",
-      "net2",
+      "net3",
     ],
   ],
   "diode-iv": [
     [
+      "10,2",
+      "net4",
+    ],
+    [
       "2,4",
       "net0",
+    ],
+    [
+      "2,6",
+      "net1",
     ],
     [
       "4,2",
@@ -125,23 +149,27 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
     ],
     [
       "6,2",
-      "net1",
-    ],
-    [
-      "6,4",
-      "net1",
-    ],
-    [
-      "6,6",
       "net2",
     ],
     [
+      "6,4",
+      "net2",
+    ],
+    [
+      "6,6",
+      "net3",
+    ],
+    [
       "6,8",
+      "net3",
+    ],
+    [
+      "8,2",
       "net2",
     ],
     [
       "8,4",
-      "net1",
+      "net2",
     ],
   ],
   "divider": [
@@ -154,16 +182,24 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
       "net1",
     ],
     [
-      "10,8",
-      "net2",
+      "10,6",
+      "net3",
     ],
     [
-      "2,2",
+      "2,0",
       "net0",
     ],
     [
       "2,4",
       "net0",
+    ],
+    [
+      "4,0",
+      "net0",
+    ],
+    [
+      "4,2",
+      "net1",
     ],
     [
       "4,4",
@@ -188,12 +224,20 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
   ],
   "flashlight": [
     [
-      "2,2",
+      "2,0",
       "net0",
     ],
     [
       "2,4",
       "net0",
+    ],
+    [
+      "4,0",
+      "net0",
+    ],
+    [
+      "4,2",
+      "net1",
     ],
     [
       "4,4",
@@ -218,36 +262,48 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
   ],
   "ina125-amp": [
     [
+      "0,2",
+      "net0",
+    ],
+    [
+      "0,4",
+      "net8",
+    ],
+    [
       "10,10",
-      "net1",
+      "net4",
     ],
     [
       "10,8",
-      "net1",
+      "net4",
     ],
     [
       "12,10",
-      "net1",
+      "net5",
     ],
     [
       "12,8",
-      "net1",
+      "net5",
     ],
     [
       "14,10",
-      "net3",
+      "net6",
     ],
     [
       "14,8",
-      "net3",
+      "net6",
     ],
     [
       "15,5",
-      "net2",
+      "net3",
     ],
     [
       "17,5",
-      "net2",
+      "net3",
+    ],
+    [
+      "17,7",
+      "net7",
     ],
     [
       "2,2",
@@ -258,54 +314,70 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
       "net0",
     ],
     [
+      "2,6",
+      "net1",
+    ],
+    [
       "8,4",
       "net0",
     ],
     [
       "8,6",
-      "net1",
+      "net2",
     ],
     [
       "8,8",
-      "net1",
+      "net2",
     ],
   ],
   "integrator": [
     [
-      "10,10",
-      "net1",
+      "0,6",
+      "net0",
     ],
     [
-      "10,4",
+      "0,8",
+      "net6",
+    ],
+    [
+      "10,10",
       "net2",
     ],
     [
+      "10,4",
+      "net3",
+    ],
+    [
       "10,6",
-      "net1",
+      "net2",
     ],
     [
       "10,8",
-      "net1",
+      "net2",
     ],
     [
       "12,10",
-      "net3",
+      "net4",
     ],
     [
       "12,8",
-      "net3",
+      "net4",
     ],
     [
       "14,5",
-      "net3",
+      "net4",
     ],
     [
       "14,8",
-      "net3",
+      "net4",
     ],
     [
       "16,5",
-      "net3",
+      "net4",
+    ],
+    [
+      "16,7",
+      "net5",
     ],
     [
       "2,6",
@@ -313,57 +385,61 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
     ],
     [
       "2,8",
-      "net0",
+      "net1",
     ],
     [
       "4,6",
       "net0",
     ],
     [
-      "6,2",
-      "net2",
-    ],
-    [
-      "6,4",
-      "net2",
-    ],
-    [
       "6,6",
-      "net1",
+      "net2",
     ],
     [
       "8,4",
-      "net2",
+      "net3",
     ],
   ],
   "inv-amp": [
     [
+      "0,6",
+      "net0",
+    ],
+    [
+      "0,8",
+      "net6",
+    ],
+    [
       "10,4",
-      "net2",
+      "net3",
     ],
     [
       "10,6",
-      "net1",
+      "net2",
     ],
     [
       "10,8",
-      "net1",
+      "net2",
     ],
     [
       "12,8",
-      "net3",
+      "net4",
     ],
     [
       "14,5",
-      "net3",
+      "net4",
     ],
     [
       "14,8",
-      "net3",
+      "net4",
     ],
     [
       "16,5",
-      "net3",
+      "net4",
+    ],
+    [
+      "16,7",
+      "net5",
     ],
     [
       "2,6",
@@ -371,33 +447,29 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
     ],
     [
       "2,8",
-      "net0",
+      "net1",
     ],
     [
       "4,6",
       "net0",
     ],
     [
-      "6,2",
-      "net2",
-    ],
-    [
-      "6,4",
-      "net2",
-    ],
-    [
       "6,6",
-      "net1",
+      "net2",
     ],
     [
       "8,4",
-      "net2",
+      "net3",
     ],
   ],
   "lc-hp": [
     [
-      "10,8",
-      "net2",
+      "0,2",
+      "net0",
+    ],
+    [
+      "0,4",
+      "net5",
     ],
     [
       "2,2",
@@ -408,34 +480,42 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
       "net0",
     ],
     [
+      "2,6",
+      "net1",
+    ],
+    [
       "4,4",
       "net0",
     ],
     [
       "6,4",
-      "net1",
+      "net2",
     ],
     [
       "6,6",
-      "net2",
+      "net3",
     ],
     [
       "6,8",
-      "net2",
+      "net3",
     ],
     [
       "8,4",
-      "net1",
+      "net2",
     ],
     [
-      "8,8",
-      "net2",
+      "8,6",
+      "net4",
     ],
   ],
   "lc-lp": [
     [
-      "10,8",
-      "net2",
+      "0,2",
+      "net0",
+    ],
+    [
+      "0,4",
+      "net5",
     ],
     [
       "2,2",
@@ -446,34 +526,42 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
       "net0",
     ],
     [
+      "2,6",
+      "net1",
+    ],
+    [
       "4,4",
       "net0",
     ],
     [
       "6,4",
-      "net1",
+      "net2",
     ],
     [
       "6,6",
-      "net2",
+      "net3",
     ],
     [
       "6,8",
-      "net2",
+      "net3",
     ],
     [
       "8,4",
-      "net1",
+      "net2",
     ],
     [
-      "8,8",
-      "net2",
+      "8,6",
+      "net4",
     ],
   ],
   "led-pwm": [
     [
-      "10,6",
-      "net2",
+      "0,2",
+      "net0",
+    ],
+    [
+      "0,4",
+      "net4",
     ],
     [
       "2,2",
@@ -484,26 +572,30 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
       "net0",
     ],
     [
+      "2,6",
+      "net1",
+    ],
+    [
       "4,4",
       "net0",
     ],
     [
       "6,4",
-      "net1",
+      "net2",
     ],
     [
       "8,4",
-      "net2",
+      "net3",
     ],
     [
       "8,6",
-      "net2",
+      "net3",
     ],
   ],
   "nmos-curve-family": [
     [
-      "10,10",
-      "net3",
+      "10,2",
+      "net6",
     ],
     [
       "10,4",
@@ -511,127 +603,151 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
     ],
     [
       "10,6",
-      "net2",
-    ],
-    [
-      "12,10",
       "net3",
-    ],
-    [
-      "4,5",
-      "net1",
-    ],
-    [
-      "6,5",
-      "net1",
-    ],
-    [
-      "8,10",
-      "net3",
-    ],
-    [
-      "8,2",
-      "net0",
-    ],
-    [
-      "8,4",
-      "net0",
-    ],
-    [
-      "8,6",
-      "net2",
-    ],
-    [
-      "8,8",
-      "net3",
-    ],
-  ],
-  "nmos-output-xy": [
-    [
-      "10,10",
-      "net3",
-    ],
-    [
-      "10,4",
-      "net0",
-    ],
-    [
-      "10,6",
-      "net2",
-    ],
-    [
-      "12,10",
-      "net3",
-    ],
-    [
-      "4,5",
-      "net1",
-    ],
-    [
-      "6,5",
-      "net1",
-    ],
-    [
-      "8,10",
-      "net3",
-    ],
-    [
-      "8,2",
-      "net0",
-    ],
-    [
-      "8,4",
-      "net0",
-    ],
-    [
-      "8,6",
-      "net2",
-    ],
-    [
-      "8,8",
-      "net3",
-    ],
-  ],
-  "noninv-amp": [
-    [
-      "10,10",
-      "net3",
-    ],
-    [
-      "10,4",
-      "net0",
-    ],
-    [
-      "10,6",
-      "net1",
     ],
     [
       "10,8",
-      "net3",
+      "net7",
     ],
     [
-      "12,10",
-      "net3",
+      "12,4",
+      "net0",
     ],
     [
       "12,6",
       "net1",
     ],
     [
-      "14,10",
+      "4,5",
+      "net2",
+    ],
+    [
+      "4,7",
+      "net4",
+    ],
+    [
+      "6,5",
+      "net2",
+    ],
+    [
+      "8,10",
+      "net5",
+    ],
+    [
+      "8,2",
+      "net0",
+    ],
+    [
+      "8,4",
+      "net0",
+    ],
+    [
+      "8,6",
       "net3",
     ],
     [
-      "14,5",
+      "8,8",
+      "net5",
+    ],
+  ],
+  "nmos-output-xy": [
+    [
+      "10,2",
+      "net5",
+    ],
+    [
+      "10,4",
+      "net0",
+    ],
+    [
+      "10,6",
+      "net3",
+    ],
+    [
+      "10,8",
+      "net6",
+    ],
+    [
+      "12,4",
+      "net0",
+    ],
+    [
+      "12,6",
+      "net1",
+    ],
+    [
+      "4,5",
       "net2",
+    ],
+    [
+      "6,5",
+      "net2",
+    ],
+    [
+      "8,10",
+      "net4",
+    ],
+    [
+      "8,2",
+      "net0",
+    ],
+    [
+      "8,4",
+      "net0",
+    ],
+    [
+      "8,6",
+      "net3",
+    ],
+    [
+      "8,8",
+      "net4",
+    ],
+  ],
+  "noninv-amp": [
+    [
+      "10,10",
+      "net4",
+    ],
+    [
+      "10,4",
+      "net0",
+    ],
+    [
+      "10,6",
+      "net2",
+    ],
+    [
+      "10,8",
+      "net4",
+    ],
+    [
+      "12,6",
+      "net2",
+    ],
+    [
+      "14,5",
+      "net3",
     ],
     [
       "14,6",
-      "net2",
+      "net3",
     ],
     [
       "16,5",
-      "net2",
+      "net3",
+    ],
+    [
+      "16,7",
+      "net5",
+    ],
+    [
+      "4,2",
+      "net0",
+    ],
+    [
+      "4,4",
+      "net6",
     ],
     [
       "6,2",
@@ -641,11 +757,19 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
       "6,4",
       "net0",
     ],
+    [
+      "6,6",
+      "net1",
+    ],
   ],
   "rc-hp": [
     [
-      "10,8",
-      "net2",
+      "0,2",
+      "net0",
+    ],
+    [
+      "0,4",
+      "net5",
     ],
     [
       "2,2",
@@ -656,34 +780,42 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
       "net0",
     ],
     [
+      "2,6",
+      "net1",
+    ],
+    [
       "4,4",
       "net0",
     ],
     [
       "6,4",
-      "net1",
+      "net2",
     ],
     [
       "6,6",
-      "net2",
+      "net3",
     ],
     [
       "6,8",
-      "net2",
+      "net3",
     ],
     [
       "8,4",
-      "net1",
+      "net2",
     ],
     [
-      "8,8",
-      "net2",
+      "8,6",
+      "net4",
     ],
   ],
   "rc-lp": [
     [
-      "10,8",
-      "net2",
+      "0,2",
+      "net0",
+    ],
+    [
+      "0,4",
+      "net5",
     ],
     [
       "2,2",
@@ -694,34 +826,42 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
       "net0",
     ],
     [
+      "2,6",
+      "net1",
+    ],
+    [
       "4,4",
       "net0",
     ],
     [
       "6,4",
-      "net1",
+      "net2",
     ],
     [
       "6,6",
-      "net2",
+      "net3",
     ],
     [
       "6,8",
-      "net2",
+      "net3",
     ],
     [
       "8,4",
-      "net1",
+      "net2",
     ],
     [
-      "8,8",
-      "net2",
+      "8,6",
+      "net4",
     ],
   ],
   "rl-hp": [
     [
-      "10,8",
-      "net2",
+      "0,2",
+      "net0",
+    ],
+    [
+      "0,4",
+      "net5",
     ],
     [
       "2,2",
@@ -732,34 +872,42 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
       "net0",
     ],
     [
+      "2,6",
+      "net1",
+    ],
+    [
       "4,4",
       "net0",
     ],
     [
       "6,4",
-      "net1",
+      "net2",
     ],
     [
       "6,6",
-      "net2",
+      "net3",
     ],
     [
       "6,8",
-      "net2",
+      "net3",
     ],
     [
       "8,4",
-      "net1",
+      "net2",
     ],
     [
-      "8,8",
-      "net2",
+      "8,6",
+      "net4",
     ],
   ],
   "rl-lp": [
     [
-      "10,8",
-      "net2",
+      "0,2",
+      "net0",
+    ],
+    [
+      "0,4",
+      "net5",
     ],
     [
       "2,2",
@@ -770,54 +918,62 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
       "net0",
     ],
     [
+      "2,6",
+      "net1",
+    ],
+    [
       "4,4",
       "net0",
     ],
     [
       "6,4",
-      "net1",
+      "net2",
     ],
     [
       "6,6",
-      "net2",
+      "net3",
     ],
     [
       "6,8",
-      "net2",
+      "net3",
     ],
     [
       "8,4",
-      "net1",
+      "net2",
     ],
     [
-      "8,8",
-      "net2",
+      "8,6",
+      "net4",
     ],
   ],
   "rlc-bandpass": [
     [
+      "0,2",
+      "net0",
+    ],
+    [
+      "0,4",
+      "net6",
+    ],
+    [
       "10,4",
-      "net2",
+      "net3",
     ],
     [
       "10,6",
-      "net3",
+      "net4",
     ],
     [
       "10,8",
-      "net3",
+      "net4",
     ],
     [
       "12,4",
-      "net2",
-    ],
-    [
-      "12,8",
       "net3",
     ],
     [
-      "14,8",
-      "net3",
+      "12,6",
+      "net5",
     ],
     [
       "2,2",
@@ -828,16 +984,20 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
       "net0",
     ],
     [
+      "2,6",
+      "net1",
+    ],
+    [
       "4,4",
       "net0",
     ],
     [
       "6,4",
-      "net1",
+      "net2",
     ],
     [
       "8,4",
-      "net1",
+      "net2",
     ],
   ],
   "signal-sine": [
@@ -846,53 +1006,77 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
       "net0",
     ],
     [
+      "2,6",
+      "net1",
+    ],
+    [
       "6,4",
       "net0",
     ],
     [
       "6,6",
-      "net1",
+      "net2",
     ],
     [
       "6,8",
-      "net1",
+      "net2",
     ],
     [
       "8,4",
       "net0",
     ],
     [
-      "8,8",
-      "net1",
+      "8,6",
+      "net3",
     ],
   ],
   "summing": [
     [
+      "0,4",
+      "net0",
+    ],
+    [
+      "0,6",
+      "net8",
+    ],
+    [
       "10,10",
-      "net1",
+      "net2",
     ],
     [
       "10,4",
-      "net3",
+      "net5",
     ],
     [
       "10,6",
-      "net1",
+      "net2",
     ],
     [
       "12,10",
-      "net4",
+      "net6",
     ],
     [
       "14,10",
-      "net4",
+      "net6",
     ],
     [
       "14,5",
-      "net4",
+      "net6",
     ],
     [
       "16,5",
+      "net6",
+    ],
+    [
+      "16,7",
+      "net7",
+    ],
+    [
+      "2,10",
+      "net3",
+    ],
+    [
+      "2,12",
       "net4",
     ],
     [
@@ -905,14 +1089,10 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
     ],
     [
       "2,8",
-      "net2",
+      "net1",
     ],
     [
-      "6,2",
-      "net3",
-    ],
-    [
-      "6,4",
+      "6,10",
       "net3",
     ],
     [
@@ -921,57 +1101,69 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
     ],
     [
       "6,8",
-      "net2",
-    ],
-    [
-      "8,4",
       "net3",
     ],
     [
+      "8,4",
+      "net5",
+    ],
+    [
       "8,6",
-      "net1",
+      "net2",
     ],
     [
       "8,8",
-      "net1",
+      "net2",
     ],
   ],
   "tia-ac": [
     [
-      "10,10",
-      "net1",
+      "0,6",
+      "net0",
     ],
     [
-      "10,4",
+      "0,8",
+      "net6",
+    ],
+    [
+      "10,10",
       "net2",
     ],
     [
+      "10,4",
+      "net3",
+    ],
+    [
       "10,6",
-      "net1",
+      "net2",
     ],
     [
       "10,8",
-      "net1",
+      "net2",
     ],
     [
       "12,10",
-      "net3",
+      "net4",
     ],
     [
       "12,8",
-      "net3",
+      "net4",
     ],
     [
       "14,5",
-      "net3",
+      "net4",
     ],
     [
       "14,8",
-      "net3",
+      "net4",
     ],
     [
       "16,5",
-      "net3",
+      "net4",
+    ],
+    [
+      "16,7",
+      "net5",
     ],
     [
       "2,6",
@@ -979,27 +1171,19 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
     ],
     [
       "2,8",
-      "net0",
+      "net1",
     ],
     [
       "4,6",
       "net0",
     ],
     [
-      "6,2",
-      "net2",
-    ],
-    [
-      "6,4",
-      "net2",
-    ],
-    [
       "6,6",
-      "net1",
+      "net2",
     ],
     [
       "8,4",
-      "net2",
+      "net3",
     ],
   ],
   "tia-photodiode": [
@@ -1040,16 +1224,16 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
       "net4",
     ],
     [
+      "16,7",
+      "net6",
+    ],
+    [
       "2,4",
       "net0",
     ],
     [
       "4,4",
       "net0",
-    ],
-    [
-      "4,8",
-      "net2",
     ],
     [
       "6,4",
@@ -1074,8 +1258,16 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
   ],
   "zener-iv": [
     [
+      "10,2",
+      "net4",
+    ],
+    [
       "2,4",
       "net0",
+    ],
+    [
+      "2,6",
+      "net1",
     ],
     [
       "4,2",
@@ -1087,23 +1279,27 @@ exports[`SCH-11 invariance: nets + circuits of the example library > computeNets
     ],
     [
       "6,2",
-      "net1",
-    ],
-    [
-      "6,4",
-      "net1",
-    ],
-    [
-      "6,6",
       "net2",
     ],
     [
+      "6,4",
+      "net2",
+    ],
+    [
+      "6,6",
+      "net3",
+    ],
+    [
       "6,8",
+      "net3",
+    ],
+    [
+      "8,2",
       "net2",
     ],
     [
       "8,4",
-      "net1",
+      "net2",
     ],
   ],
 }
@@ -1139,7 +1335,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "model": "IS=6.734f BF=300 NF=1 VAF=74 IKF=66.78m ISE=6.734f NE=1.259 BR=0.7371 RC=1 CJC=3.638p CJE=4.493p TF=301.2p TR=239.5n",
           "nodes": [
             "in",
-            "net1",
+            "net2",
             "scope2",
           ],
           "polarity": "npn",
@@ -1168,7 +1364,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "resistor",
           "nodes": [
             "in2",
-            "net1",
+            "net2",
           ],
           "ohms": 100000,
         },
@@ -1191,9 +1387,9 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "in",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": "scope2",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -1225,7 +1421,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "capacitor",
           "nodes": [
             "in",
-            "net1",
+            "net2",
           ],
         },
         {
@@ -1233,7 +1429,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "opamp",
           "model": "lmc662",
           "nodes": {
-            "inN": "net1",
+            "inN": "net2",
             "inP": "0",
             "out": "out",
           },
@@ -1243,7 +1439,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "id": "1",
           "kind": "resistor",
           "nodes": [
-            "net1",
+            "net2",
             "out",
           ],
           "ohms": 10000,
@@ -1258,9 +1454,9 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "out",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": "in",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -1358,7 +1554,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
       "ch1": "out",
       "ch1n": "out_n",
       "ch2": "out_n",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -1435,7 +1631,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "opamp",
           "model": "lmc662",
           "nodes": {
-            "inN": "0",
+            "inN": "net4",
             "inP": "in",
             "out": "ina1_oa1",
           },
@@ -1445,7 +1641,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "opamp",
           "model": "lmc662",
           "nodes": {
-            "inN": "0",
+            "inN": "net5",
             "inP": "0",
             "out": "ina1_oa2",
           },
@@ -1455,7 +1651,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "resistor",
           "nodes": [
             "ina1_oa1",
-            "0",
+            "net4",
           ],
           "ohms": 7500,
         },
@@ -1464,7 +1660,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "resistor",
           "nodes": [
             "ina1_oa2",
-            "0",
+            "net5",
           ],
           "ohms": 7500,
         },
@@ -1518,8 +1714,8 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "id": "1",
           "kind": "resistor",
           "nodes": [
-            "0",
-            "0",
+            "net4",
+            "net5",
           ],
           "ohms": 10000,
         },
@@ -1533,9 +1729,9 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "out",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": "in",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -1566,7 +1762,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "resistor",
           "nodes": [
             "in",
-            "net1",
+            "net2",
           ],
           "ohms": 10000,
         },
@@ -1575,7 +1771,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "opamp",
           "model": "lmc662",
           "nodes": {
-            "inN": "net1",
+            "inN": "net2",
             "inP": "0",
             "out": "out",
           },
@@ -1586,7 +1782,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "id": "1",
           "kind": "capacitor",
           "nodes": [
-            "net1",
+            "net2",
             "out",
           ],
         },
@@ -1594,7 +1790,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "id": "2",
           "kind": "resistor",
           "nodes": [
-            "net1",
+            "net2",
             "out",
           ],
           "ohms": 20000,
@@ -1609,9 +1805,9 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "out",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": "in",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -1642,7 +1838,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "resistor",
           "nodes": [
             "in",
-            "net1",
+            "net2",
           ],
           "ohms": 10000,
         },
@@ -1651,7 +1847,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "opamp",
           "model": "lmc662",
           "nodes": {
-            "inN": "net1",
+            "inN": "net2",
             "inP": "0",
             "out": "out",
           },
@@ -1661,7 +1857,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "id": "2",
           "kind": "resistor",
           "nodes": [
-            "net1",
+            "net2",
             "out",
           ],
           "ohms": 20000,
@@ -1676,9 +1872,9 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "out",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": "in",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -1732,9 +1928,9 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "out",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": "in",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -1788,9 +1984,9 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "out",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": "in",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -1821,7 +2017,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "resistor",
           "nodes": [
             "in",
-            "net1",
+            "net2",
           ],
           "ohms": 470,
         },
@@ -1832,7 +2028,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "diode",
           "n": 2,
           "nodes": [
-            "net1",
+            "net2",
             "0",
           ],
           "rs": 2,
@@ -1847,7 +2043,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "in",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": undefined,
       "ch2n": undefined,
     },
@@ -1924,9 +2120,9 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "in",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": "scope2",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -1959,14 +2155,14 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "model": "VTO=1.5 KP=0.005 LAMBDA=0.02",
           "nodes": [
             "in",
-            "net1",
+            "net2",
             "scope2",
           ],
         },
         {
           "id": "S1",
           "kind": "dcrail",
-          "node": "net1",
+          "node": "net2",
           "volts": 5,
         },
         {
@@ -1988,9 +2184,9 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "in",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": "scope2",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -2021,7 +2217,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "opamp",
           "model": "lmc662",
           "nodes": {
-            "inN": "net1",
+            "inN": "net2",
             "inP": "in",
             "out": "out",
           },
@@ -2031,7 +2227,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "id": "1",
           "kind": "resistor",
           "nodes": [
-            "net1",
+            "net2",
             "out",
           ],
           "ohms": 10000,
@@ -2040,7 +2236,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "id": "2",
           "kind": "resistor",
           "nodes": [
-            "net1",
+            "net2",
             "0",
           ],
           "ohms": 10000,
@@ -2055,9 +2251,9 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "out",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": "in",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -2111,9 +2307,9 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "out",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": "in",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -2167,9 +2363,9 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "out",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": "in",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -2223,9 +2419,9 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "out",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": "in",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -2279,9 +2475,9 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "out",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": "in",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -2313,7 +2509,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "inductor",
           "nodes": [
             "in",
-            "net1",
+            "net2",
           ],
         },
         {
@@ -2321,7 +2517,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "id": "1",
           "kind": "capacitor",
           "nodes": [
-            "net1",
+            "net2",
             "out",
           ],
         },
@@ -2344,9 +2540,9 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "out",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": "in",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -2391,7 +2587,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "in",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": undefined,
       "ch2n": undefined,
     },
@@ -2424,7 +2620,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "resistor",
           "nodes": [
             "in",
-            "net1",
+            "net2",
           ],
           "ohms": 10000,
         },
@@ -2452,7 +2648,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "resistor",
           "nodes": [
             "in2",
-            "net1",
+            "net2",
           ],
           "ohms": 10000,
         },
@@ -2461,7 +2657,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "opamp",
           "model": "lmc662",
           "nodes": {
-            "inN": "net1",
+            "inN": "net2",
             "inP": "0",
             "out": "out",
           },
@@ -2471,7 +2667,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "id": "3",
           "kind": "resistor",
           "nodes": [
-            "net1",
+            "net2",
             "out",
           ],
           "ohms": 10000,
@@ -2486,9 +2682,9 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "out",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": "in",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -2519,7 +2715,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "resistor",
           "nodes": [
             "in",
-            "net1",
+            "net2",
           ],
           "ohms": 10000,
         },
@@ -2528,7 +2724,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "kind": "opamp",
           "model": "lmc662",
           "nodes": {
-            "inN": "net1",
+            "inN": "net2",
             "inP": "0",
             "out": "out",
           },
@@ -2539,7 +2735,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "id": "1",
           "kind": "capacitor",
           "nodes": [
-            "net1",
+            "net2",
             "out",
           ],
         },
@@ -2547,7 +2743,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
           "id": "2",
           "kind": "resistor",
           "nodes": [
-            "net1",
+            "net2",
             "out",
           ],
           "ohms": 100000,
@@ -2562,9 +2758,9 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "out",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": "in",
-      "ch2n": "0",
+      "ch2n": undefined,
     },
     "warnings": [],
   },
@@ -2649,7 +2845,7 @@ exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit i
     },
     "probes": {
       "ch1": "out",
-      "ch1n": "0",
+      "ch1n": undefined,
       "ch2": undefined,
       "ch2n": undefined,
     },

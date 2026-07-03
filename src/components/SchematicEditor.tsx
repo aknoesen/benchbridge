@@ -5,7 +5,8 @@ import { useMemo, useRef, useState, useEffect, type ReactElement, type Dispatch,
 import {
   Schematic, SchComponent, SchKind, terminalsOf, localTerminals, toCircuit, ampCategory, computeNets,
   attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentWithWires,
-  mirrorComponentWithWires, canMirror, orthoRoute, deleteComponentsWithWires, type WireEndRef,
+  mirrorComponentWithWires, canMirror, orthoRoute, deleteComponentsWithWires, migrateSchematic,
+  type WireEndRef,
 } from '../core/schematic'
 import { symbolFor, alignTransform, matScale, inkedInner } from '../core/symbolArt'
 import { SYMBOL_CATALOG } from '../core/symbolCatalog'
@@ -379,7 +380,8 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         const src = fromLab ? d.schematic : d
         if (Array.isArray(src.components) && Array.isArray(src.wires)) {
           snapshot()
-          setSch({ components: src.components, wires: src.wires })
+          // migrate pre-two-terminal saves (standalone 1-/2- ports → the scope's − pin)
+          setSch(migrateSchematic({ components: src.components, wires: src.wires }))
           setSelected(null)
           setSelectedWire(null)
           setSimStatus(fromLab
@@ -745,19 +747,6 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, view: v === 'scope' ? undefined : v } : c) }))
   }
 
-  // Option B differential toggle: place/remove the channel's − reference port. These are the
-  // EXISTING adc1n/adc2n kinds (no model change) — the palette just no longer lists them raw.
-  function setDifferential(negKind: 'adc1n' | 'adc2n', plus: SchComponent, on: boolean) {
-    snapshot()
-    if (on) {
-      const c: SchComponent = { id: newId(negKind, sch.components), kind: negKind, gx: plus.gx, gy: plus.gy + 2 }
-      setSch((s) => ({ ...s, components: [...s.components, c] }))
-    } else {
-      const ids = new Set(sch.components.filter((c) => c.kind === negKind).map((c) => c.id))
-      setSch((s) => deleteComponentsWithWires(s, ids))
-    }
-  }
-
   // SCH-8: choose the ADALP2000 transistor part (sets the NPN/PNP or N/P-channel model body).
   function setSelPart(part: string) {
     if (!sel) return
@@ -1117,8 +1106,6 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
             )}
             {(sel.kind === 'scope1' || sel.kind === 'scope2') && (() => {
               const ch = sel.kind === 'scope1' ? 1 : 2
-              const negKind = ch === 1 ? 'adc1n' as const : 'adc2n' as const
-              const hasNeg = sch.components.some((c) => c.kind === negKind)
               return (
                 <>
                   <div className="control-row-inline">
@@ -1128,13 +1115,10 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                       <option value="voltmeter">Voltmeter</option>
                     </select>
                   </div>
-                  <div className="control-row-inline">
-                    <label>Differential</label>
-                    <input type="checkbox" checked={hasNeg} onChange={(e) => setDifferential(negKind, sel, e.target.checked)} />
-                  </div>
                   <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>
-                    The shared CH{ch} input — scope and voltmeter read these same pins. Differential
-                    adds the {ch}− reference lead; off = single-ended (referenced to GND).
+                    The shared CH{ch} input — scope and voltmeter read the same pins. Leave the
+                    {ch}− lead unwired for single-ended (referenced to GND); wire it to a node
+                    to measure differentially across a part.
                   </div>
                 </>
               )
@@ -1409,7 +1393,12 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
     const dst = localTerminals(c).map((t) => ({ x: ax + G(t.gx), y: ay + G(t.gy) }))
     const m = alignTransform(src, dst)
     const html = inkedInner(art.id, art.sym, matScale(m))
-    const ink = selected ? 'var(--accent-blue)' : 'var(--sch-ink)'
+    // M2K instruments keep their identity hue (channel orange/purple, generator amber)
+    const PORT_INK: Partial<Record<SchKind, string>> = {
+      scope1: 'var(--ch1-color)', scope2: 'var(--ch2-color)',
+      awg1: 'var(--awg-color)', awg2: 'var(--awg-color)',
+    }
+    const ink = selected ? 'var(--accent-blue)' : (PORT_INK[c.kind] ?? 'var(--sch-ink)')
     const cx = ax + G(1), y = ay
     const idText = (tx: number, ty: number, size = 10, fill = 'var(--text-secondary)') =>
       upright(tx, ty, <text x={tx} y={ty} fill={fill} fontSize={size} textAnchor="middle">{c.id}</text>)
@@ -1458,12 +1447,38 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
       case 'ground':
         labels.push(upright(ax, ay + 28, <text x={ax} y={ay + 28} fill="var(--sch-ink)" fontSize={9} textAnchor="middle">GND</text>))
         break
+      case 'awg1':
+      case 'awg2':
+        labels.push(upright(ax + 16, ay + G(1) + 3, <text x={ax + 16} y={ay + G(1) + 3} fill={ink} fontSize={10} textAnchor="start">{c.kind === 'awg1' ? 'W1' : 'W2'}</text>))
+        break
+      case 'scope1':
+      case 'scope2': {
+        const ch = c.kind === 'scope1' ? '1' : '2'
+        labels.push(upright(ax - 8, ay + 4, <text x={ax - 8} y={ay + 4} fill={ink} fontSize={10} textAnchor="end">{ch}+</text>))
+        labels.push(upright(ax - 8, ay + G(2) + 4, <text x={ax - 8} y={ay + G(2) + 4} fill={ink} fontSize={10} textAnchor="end">{ch}−</text>))
+        break
+      }
+    }
+    // W1/W2's return lead carries a DRAWN ground: the M2K bonds both returns to its one
+    // internal ground (node 0), so the schematic shows that honestly at the return pin.
+    let extraArt: ReactElement | null = null
+    if (c.kind === 'awg1' || c.kind === 'awg2') {
+      const gsym = SYMBOL_CATALOG['ground']
+      if (gsym) {
+        const gm = alignTransform([{ x: gsym.pins[0].x, y: gsym.pins[0].y }], [dst[1]])
+        extraArt = (
+          <g transform={`matrix(${gm.map((n) => +n.toFixed(5)).join(' ')})`}
+            style={{ color: ink }}
+            dangerouslySetInnerHTML={{ __html: inkedInner('ground', gsym, matScale(gm)) }} />
+        )
+      }
     }
     inner = (
       <g>
         <g transform={`matrix(${m.map((n) => +n.toFixed(5)).join(' ')})`}
           style={{ color: ink }}
           dangerouslySetInnerHTML={{ __html: html }} />
+        {extraArt}
         {labels.map((l, i) => <g key={i}>{l}</g>)}
       </g>
     )
@@ -1500,44 +1515,6 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
       <g style={{ color: col }}>
         {badgeArt(c.id, 'battery', x, y - 22)}
         {upright(x, y - 38, <text x={x} y={y - 38} fill={col} fontSize={10} textAnchor="middle">{lbl}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'awg1' || c.kind === 'awg2') {
-    // generator output: label + sine-source badge (the instrument the port IS)
-    const x = ax, y = ay
-    const col = selected ? 'var(--accent-blue)' : 'var(--awg-color)'
-    const lbl = c.kind === 'awg1' ? 'W1' : 'W2'
-    inner = (
-      <g style={{ color: col }}>
-        {badgeArt(c.id, 'vsource_sin', x, y - 22)}
-        {upright(x, y - 38, <text x={x} y={y - 38} fill={col} fontSize={10} textAnchor="middle">{lbl}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'scope1' || c.kind === 'scope2') {
-    // measurement input, + side: ONE oscilloscope badge per channel (it stands for both
-    // scope and voltmeter — the shared 1±/2± ADC input; the student picks the instrument
-    // downstream). The − port is the same channel's reference lead, not a second scope.
-    const x = ax, y = ay
-    const col = selected ? 'var(--accent-blue)' : c.kind === 'scope1' ? 'var(--ch1-color)' : 'var(--ch2-color)'
-    const lbl = c.kind === 'scope1' ? '1+' : '2+'
-    inner = (
-      <g style={{ color: col }}>
-        {badgeArt(c.id, c.view === 'voltmeter' ? 'voltmeter' : 'oscilloscope', x, y - 22)}
-        {upright(x, y - 38, <text x={x} y={y - 38} fill={col} fontSize={10} textAnchor="middle">{lbl}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'adc1n' || c.kind === 'adc2n') {
-    // measurement input, − side: the channel's negative/reference LEAD — a small "−"
-    // terminal in the channel colour, deliberately not an instrument glyph (one scope
-    // symbol per channel lives on the + input).
-    const x = ax, y = ay
-    const col = selected ? 'var(--accent-blue)' : c.kind === 'adc1n' ? 'var(--ch1-color)' : 'var(--ch2-color)'
-    const lbl = c.kind === 'adc1n' ? '1-' : '2-'
-    inner = (
-      <g>
-        <circle cx={x} cy={y - 18} r={7} fill="transparent" stroke={col} strokeWidth={1.6} />
-        <line x1={x - 3.5} y1={y - 18} x2={x + 3.5} y2={y - 18} stroke={col} strokeWidth={1.6} />
-        {upright(x, y - 31, <text x={x} y={y - 31} fill={col} fontSize={10} textAnchor="middle">{lbl}</text>)}
       </g>
     )
   } else {

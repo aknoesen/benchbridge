@@ -76,9 +76,18 @@ describe('symbolFor / alignTransform put catalog pins on grid terminals', () => 
   })
 
   it('unmapped kinds return null (keep their inline rendering)', () => {
-    for (const kind of ['ina125', 'probe', 'dcrail', 'awg1', 'awg2', 'scope1', 'scope2', 'adc1n', 'adc2n', 'vplus', 'vminus'] as SchKind[]) {
+    for (const kind of ['ina125', 'probe', 'dcrail', 'vplus', 'vminus'] as SchKind[]) {
       expect(symbolFor({ kind })).toBeNull()
     }
+  })
+
+  it('two-terminal instruments align as bipoles; the scope view swaps the glyph', () => {
+    for (const kind of ['awg1', 'awg2', 'scope1', 'scope2'] as SchKind[]) {
+      expectAligned(kind)
+    }
+    expect(symbolFor({ kind: 'scope1' })!.sym).toBe(SYMBOL_CATALOG['oscilloscope'])
+    expect(symbolFor({ kind: 'scope1', view: 'voltmeter' })!.sym).toBe(SYMBOL_CATALOG['voltmeter'])
+    expect(symbolFor({ kind: 'awg1' })!.sym).toBe(SYMBOL_CATALOG['vsource_sin'])
   })
 })
 

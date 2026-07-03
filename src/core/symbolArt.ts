@@ -24,7 +24,7 @@ export const DEFAULT_SYMBOL_SCALE = 48 / 56.7
  * Returns null for kinds that keep their existing inline rendering (ports,
  * INA125, probe, rails) — those are markers/parts with no catalog counterpart yet.
  */
-export function symbolFor(c: Pick<SchComponent, 'kind' | 'part'>): { id: string; sym: CatalogSymbol; pinIds: string[] } | null {
+export function symbolFor(c: Pick<SchComponent, 'kind' | 'part' | 'view'>): { id: string; sym: CatalogSymbol; pinIds: string[] } | null {
   const pick = (id: string, pinIds: string[]) => {
     const sym = SYMBOL_CATALOG[id]
     return sym ? { id, sym, pinIds } : null
@@ -42,6 +42,13 @@ export function symbolFor(c: Pick<SchComponent, 'kind' | 'part'>): { id: string;
     case 'photodiode': return pick('photodiode', ['p0', 'p1'])
     case 'vsource': return pick('vsource_sin', ['p0', 'p1'])
     case 'ground': return pick('ground', ['p0'])
+    // Two-terminal M2K instruments (SCH-11): catalog bipoles, p0 = top pin. W1/W2 = the sine
+    // source (its drawn ground return is added by the renderer); the scope/voltmeter view of
+    // the shared measurement input swaps glyphs presentationally (same pins, same nets).
+    case 'awg1':
+    case 'awg2': return pick('vsource_sin', ['p0', 'p1'])
+    case 'scope1':
+    case 'scope2': return pick(c.view === 'voltmeter' ? 'voltmeter' : 'oscilloscope', ['p0', 'p1'])
     // opamp: catalog pins are [A.+, A.−, out] = [p0, p1, p2]; app terminals are
     // [inP, inN, out]. circuitikz puts + on the LOWER input, the app on the upper —
     // the affine map flips the (symmetric) triangle vertically to honour the app's
