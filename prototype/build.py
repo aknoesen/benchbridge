@@ -68,6 +68,57 @@ SYMBOLS = {
         "body": r"\draw (0,0) to[oscope] (0,-3);",
         "pins": [(0, 0), (0, -3)],
     },
+    # --- expanded catalog (reader-matched circuitikz elements) --------------
+    "capacitor": {
+        "pre": "",
+        "body": r"\draw (0,0) to[C] (0,-2);",
+        "pins": [(0, 0), (0, -2)],
+    },
+    "inductor": {
+        "pre": "",
+        "body": r"\draw (0,0) to[L] (0,-2);",
+        "pins": [(0, 0), (0, -2)],
+    },
+    "diode": {
+        "pre": "",
+        "body": r"\draw (0,0) to[D] (0,-2);",
+        "pins": [(0, 0), (0, -2)],
+    },
+    "led": {
+        "pre": "",
+        "body": r"\draw (0,0) to[leD] (0,-2);",
+        "pins": [(0, 0), (0, -2)],
+    },
+    "zener": {
+        "pre": "",
+        "body": r"\draw (0,0) to[zD] (0,-2);",
+        "pins": [(0, 0), (0, -2)],
+    },
+    "battery": {  # reader uses battery1/battery2 for DC
+        "pre": "",
+        "body": r"\draw (0,0) to[battery1] (0,-2);",
+        "pins": [(0, 0), (0, -2)],
+    },
+    "dc_source": {  # american voltage source (circle, +/-)
+        "pre": "",
+        "body": r"\draw (0,0) to[V] (0,-2);",
+        "pins": [(0, 0), (0, -2)],
+    },
+    "current_source": {  # reader uses isource; [american] `I`
+        "pre": "",
+        "body": r"\draw (0,0) to[I] (0,-2);",
+        "pins": [(0, 0), (0, -2)],
+    },
+    "voltmeter": {  # reader draws the meter as smeter with t=V
+        "pre": "",
+        "body": r"\draw (0,0) to[smeter, t=V] (0,-2);",
+        "pins": [(0, 0), (0, -2)],
+    },
+    "opamp": {  # multi-terminal: pins are named anchors, not coords (inP/inN/out)
+        "pre": "",
+        "body": r"\node[op amp] (A) at (0,0){};",
+        "pins": ["A.+", "A.-", "A.out"],
+    },
 }
 
 
@@ -79,9 +130,14 @@ def tex_for(sym):
         rf"\definecolor{{pin{i}}}{{HTML}}{{{PIN_COLORS[i].lstrip('#').upper()}}}"
         for i in range(len(sym["pins"]))
     )
+    # A pin is either a numeric (x,y) coordinate or a raw tikz coordinate
+    # expression string (e.g. an op-amp anchor "A.+"), so multi-terminal parts
+    # can mark their named anchors, not just bipole endpoints.
+    def _coord(p):
+        return f"({p[0]},{p[1]})" if isinstance(p, (tuple, list)) else f"({p})"
     marks = "\n".join(
-        rf"\fill[pin{i}] ({x},{y}) circle ({MARKER_R});"
-        for i, (x, y) in enumerate(sym["pins"])
+        rf"\fill[pin{i}] {_coord(p)} circle ({MARKER_R});"
+        for i, p in enumerate(sym["pins"])
     )
     # [dvisvgm] class option: emit raw bbox specials for the latex->DVI->dvisvgm
     # route (dvisvgm can't read PDFs with Ghostscript >= 10.01 and no mutool).
