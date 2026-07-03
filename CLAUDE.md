@@ -3,8 +3,8 @@
 A React digital twin of the Analog Devices ADALM2000 (M2K) USB instrument, built for the
 EEC1 first-year ECE course at UC Davis. It is now a full Scopy-style bench: signal generator,
 two-channel oscilloscope (with XY mode), spectrum analyzer, network analyzer (Bode), voltmeter,
-power supply, a schematic editor with in-browser NGSpice (WASM) simulation, and a breadboard
-transfer/verify view — plus an example-circuit library. The original pedagogy (ADC bit depth,
+power supply, a curve tracer (parametric I-V families), a schematic editor with in-browser NGSpice
+(WASM) simulation, and a breadboard transfer/verify view — plus an example-circuit library. The original pedagogy (ADC bit depth,
 spectral analysis, quantization noise) lives on in the Spectrum Analyzer's Learning Mode.
 
 **Scope — analog only.** This is an *analog* digital twin. It models the M2K's analog instruments
@@ -58,7 +58,7 @@ src/
                                 undo/redo history, Layouts presets, renderPanel()
   App.css                     — nav panel + instrument-area (preset arrange-row/grid) layout
   index.css                   — Scopy dark theme CSS variables, shared controls
-  core/                       — pure logic, NO React
+  core/                       — pure logic, NO React (every module has a co-located *.test.ts; `npm test` = vitest)
     signal.ts                 — ALL signal math (see below); protected
     scope.ts                  — channel bus + oscilloscope capture/timebase
     trigger.ts                — edge/pulse/holdoff trigger engine
@@ -71,14 +71,23 @@ src/
                                 INA125 reference/sense/sleep straps), DIP geometry
     units.ts                  — value units + tune ranges (shared with Network Analyzer)
     examples.ts               — built-in example-circuit library (schematic + optional W1/scope preset)
+    opamps.ts                 — ADALP2000-kit op-amp macromodels (OP27/37/97/482/484; LMC662 fallback; SCH-9)
+    kit.ts                    — ADALP2000 passive-value catalog: only kit-real R/C/L values (SCH-10)
+    curvetracer.ts            — parametric curve-tracer engine (SWEEP-1): stepped .tran passes, W1 sweeps /
+                                W2 steps, current read across a sense R (CurveTracer.tsx is a thin orchestrator)
+    tia.ts                    — photodiode transimpedance-amp compensation math (feedback Cf for flat response; TIA-3)
+    boardsim.ts               — live-breadboard sim-state from the .tran result: node DC volts + LED currents (ARB-2)
+    partvisuals.ts            — kit-scoped part visuals: resistor colour bands, realistic DIP/part bodies (ARB-1)
   components/
     SignalGenerator.tsx  SpectrumAnalyzer.tsx  Oscilloscope.tsx  NetworkAnalyzer.tsx
-    Voltmeter.tsx  PowerSupply.tsx  SchematicEditor.tsx  Breadboard.tsx
+    Voltmeter.tsx  PowerSupply.tsx  CurveTracer.tsx  SchematicEditor.tsx  Breadboard.tsx
     Quickstart.tsx (in-app onboarding doc)  Welcome.tsx (landing)  About.tsx (credits)
+    ErrorBoundary.tsx (top-level React error boundary)
     exportImage.ts            — PNG export: SVG (schematic/board, white paper figure) + Plotly
                                 instruments (dark), via the native Save dialog (savePngBlob)
     Instrument.css (shared panel layout)
-docs/                         — CONVENTIONS.md, ROADMAP.md, PROGRESS.md, specs/*.md
+docs/                         — CONVENTIONS.md, ROADMAP.md, PROGRESS.md, NOTES.md, specs/*.md,
+                                reference/, private/ (gitignored: handoff log, beta/positioning notes)
 ```
 
 ## Architecture
@@ -244,6 +253,11 @@ npm run build          # outputs to dist/
 `vite.config.ts` has `base: '/benchbridge/'` — required for GitHub Pages subdirectory
 deployment. Asset paths break if this is removed.
 
+**Production is Render.** The live app deploys on push to `main` (Render, Blueprint-managed via
+`render.yaml`, `BASE_PATH=/`). The live URL is still `bridgem2k.onrender.com` — Render keeps the
+subdomain assigned at service creation and does not change it on rename; a branded `benchbridge.*`
+custom domain is a later step. GitHub Pages (if used) serves under the `/benchbridge/` subpath.
+
 ## Built since the original spec
 
 The oscilloscope (incl. XY mode), the schematic editor + NGSpice-WASM simulation, the
@@ -258,6 +272,12 @@ for OP27/37/97, quad 14-pin for OP482/484; the off-kit LMC662 fallback as an 8-p
 must be wired to the rails (the board Check enforces this). Off-kit op-amps still simulate but show a "not in your parts
 kit" badge. Every part the twin offers is buildable; `docs/ROADMAP.md` is the phase-by-phase status
 of record.
+
+Since then the bench has also gained a **curve tracer** (SWEEP-1: parametric I-V families built on
+the existing `.tran` path — W1 sweeps, W2 steps, current across a sense R) and a **photodiode
+transimpedance-amplifier** flow (BPW-34 photodiode example + feedback-Cf compensation math in
+`core/tia.ts`, exercised via the Network Analyzer's Bode sweep), plus the realistic active
+breadboard (ARB: live node voltages and LED brightness read back from the sim).
 
 ## Remaining / future ideas
 

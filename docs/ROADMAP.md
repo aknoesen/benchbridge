@@ -74,6 +74,7 @@ Spec: `docs/specs/schematic-ngspice.md` (these instruments couple to the simulat
 | PSU-1 | Power Supply instrument — 2 rails (0..+5 V / 0..-5 V), tracking + independent | SPICE-2 | DONE |
 | PSU-2 | Live per-rail current via `.op` (sum `i(Vrail)`) vs the ~50 mA M2K limit; W1/W2-not-power note | PSU-1 | DONE |
 | DMM-1 | Voltmeter instrument — 2-channel AC/DC (±25 V), reads node V via `.op`/RMS | SPICE-2 | DONE |
+| DMM-2 | **Voltmeter reads the shared sim, no private engine.** Today the panel runs its OWN ngspice `.op` on its own engine (warm singleton since 2026-07-02, so latency is ~100 ms, but it's still a second, redundant solve). The *right* fix: read the same settled node voltages App's always-on loop already computes for the scope/board probe — one sim of record, zero per-instrument engines. Touches the scope's sim path, so it's **post-beta** (do NOT destabilise the beta freeze). | DMM-1 | TODO |
 
 Notes:
 - These mirror real Scopy/M2K instruments (supplies 0..+5 V & 0..-5 V; voltmeter AC/DC ±25 V).
