@@ -28,18 +28,32 @@ const RANGES = [
 const CH1_COLOR = '#f0a030'
 const CH2_COLOR = '#40c0e0'
 
+// ── One warm engine for the whole session (module-level singleton) ──────────────────────────────
+// The ngspice WASM worker takes seconds to boot; the panel used to spawn it on every mount and
+// dispose it on unmount, so each visit paid the full worker + 20 MB WASM startup — the
+// "measuring…" latency. Created lazily on first use, then kept alive across panel switches: a .op
+// on a warm engine is ~100 ms, so readings appear near-instantly on every visit after the first.
+let sharedEngine: SpiceEngine | null = null
+function getEngine(): SpiceEngine {
+  if (!sharedEngine) sharedEngine = createSpiceEngine()
+  return sharedEngine
+}
+// The last readings survive the panel unmounting, so a revisit shows numbers immediately while the
+// warm engine refreshes them in the background.
+let lastCh1: number | null = null
+let lastCh2: number | null = null
+
 export default function Voltmeter({ circuit, probes, w1, w2, psu, compact }: Props) {
-  const engineRef = useRef<SpiceEngine | null>(null)
   const [range, setRange] = useState(0)
-  const [ch1, setCh1] = useState<number | null>(null)
-  const [ch2, setCh2] = useState<number | null>(null)
+  // Seed from the module-level cache: a revisit shows the previous numbers instantly.
+  const [ch1, setCh1] = useState<number | null>(lastCh1)
+  const [ch2, setCh2] = useState<number | null>(lastCh2)
   const [status, setStatus] = useState('idle')
   const [busy, setBusy] = useState(false)
   const runningRef = useRef(false)
 
   async function measure() {
-    const eng = engineRef.current
-    if (!eng || runningRef.current) return
+    if (runningRef.current) return
     runningRef.current = true
     setBusy(true)
     setStatus('measuring…')
@@ -47,13 +61,17 @@ export default function Voltmeter({ circuit, probes, w1, w2, psu, compact }: Pro
       let ckt = applyGeneratorParams(circuit, w1, w2)
       if (psu) ckt = applySupplyRails(ckt, psu)
       const nl = buildNetlist(ckt, { kind: 'op' })
-      const r = await eng.run(nl)
+      const r = await getEngine().run(nl)
       const read = (pos?: string, neg?: string) =>
         pos && hasNode(r, pos) ? differentialVoltage(r, pos, neg && hasNode(r, neg) ? neg : '0') : null
-      setCh1(read(probes?.ch1 ?? 'out', probes?.ch1n ?? 'out_n'))
-      setCh2(read(probes?.ch2 ?? 'scope2', probes?.ch2n ?? 'scope2_n'))
+      lastCh1 = read(probes?.ch1 ?? 'out', probes?.ch1n ?? 'out_n')
+      lastCh2 = read(probes?.ch2 ?? 'scope2', probes?.ch2n ?? 'scope2_n')
+      setCh1(lastCh1)
+      setCh2(lastCh2)
       setStatus('measured (.op)')
     } catch (e) {
+      lastCh1 = null
+      lastCh2 = null
       setCh1(null)
       setCh2(null)
       setStatus(e instanceof Error ? e.message : String(e))
@@ -63,11 +81,8 @@ export default function Voltmeter({ circuit, probes, w1, w2, psu, compact }: Pro
     }
   }
 
-  useEffect(() => {
-    engineRef.current = createSpiceEngine()
-    return () => { engineRef.current?.dispose(); engineRef.current = null }
-  }, [])
-  // Re-measure when the drawn circuit or generator settings change.
+  // Re-measure when the drawn circuit or generator settings change. The shared engine stays warm
+  // across mounts (no per-mount create/dispose), so this is just the fast .op.
   useEffect(() => { void measure() // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [circuit, probes, w1, w2, psu])
 

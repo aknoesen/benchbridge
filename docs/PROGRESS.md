@@ -8,7 +8,40 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
-## Next session: start here (updated 2026-07-02, batch 6 — flashlight pre-built board, freeze holds)
+## Next session: start here (updated 2026-07-02, batch 7 — flashlight → Voltmeter, unequal divider)
+
+**Two beta-review fixes from andre's live pass (`5400c72`, `6f470df`):**
+- **Flashlight measures on the Voltmeter** (it's steady DC — the scope showed a flat line). The
+  example was already supply-driven with CH1 pre-wired differentially across the resistor (batch 6);
+  the fix was the page: the measurement beat opens the **Voltmeter**, the copy carries Cowork's
+  latest revision (hover-any-node = that node's voltage, DMM framing), and the steady-DC note
+  explains why no signal generator / no scope. Page 5 gained the "W1 is your signal; W2 is the
+  second source, idle here" line. **Verified on the DEPLOYED build: Voltmeter CH1 = 3.20 V.**
+- **The divider is now UNEQUAL (10 kΩ over 20 kΩ)** and renamed — with equal resistors, CH1
+  (differential across the top R) and CH2 (single-ended midpoint) both read 2.5 V and the
+  single-vs-differential lesson was invisible. Now CH1 ≈ **1.7 V**, CH2 ≈ **3.3 V** — two different
+  numbers for two different kinds of measurement (ngspice `.op` test pins both). Page 4 rewritten
+  to the new copy ("open the Voltmeter and read" — never assert a reading); the blurb explains the
+  deliberate asymmetry. Changed the SHARED divider example rather than adding a duplicate (andre
+  left it CC's call); nothing depended on the ÷2 ratio.
+- The dev-tab Voltmeter "measuring…" hang chased during this batch does NOT reproduce on the
+  deployed build — stale-HMR/worker artifact of a heavily reloaded localhost tab; noted in the
+  handoff in case a tester ever reports it.
+- **Voltmeter latency fixed (andre's direct ask): the engine is now a module-level singleton.**
+  The panel used to spawn a fresh Web Worker + compile the ~20 MB ngspice WASM on EVERY mount and
+  dispose it on unmount — seconds of "measuring…" per visit. Now the worker boots once per session
+  and stays warm across panel switches, and the last readings are cached module-level so a revisit
+  shows numbers immediately while the fast `.op` (~100 ms) refreshes them. Measured: first visit
+  ~1.0 s (one-time worker boot), revisit reading visible in <100 ms. `Voltmeter.tsx` only. The
+  deeper unification (main loop applies PSU rails; voltmeter reads the shared settled node voltages
+  like the board hover probe, zero engines) is a post-beta refactor — it touches the scope's sim
+  path.
+- **Deployed verification sweep (changed rows):** divider on the LIVE deploy reads CH1 = 1.66 V /
+  CH2 = 3.34 V (the copy's "about 1.7 / 3.3"); flashlight Voltmeter CH1 = 3.20 V (previous deploy).
+
+---
+
+## Earlier on 2026-07-02 (batch 6 — flashlight pre-built board, freeze holds)
 
 **The last beta-freeze fix is in: the flashlight now actually glows on load.** Root cause: examples
 carried only a schematic, so the board loaded empty and the user never saw the ARB-2 glow.
