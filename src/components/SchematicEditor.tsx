@@ -8,6 +8,7 @@ import {
   mirrorComponentWithWires, canMirror, orthoRoute, deleteComponentsWithWires, type WireEndRef,
 } from '../core/schematic'
 import { symbolFor, alignTransform, matScale, inkedInner } from '../core/symbolArt'
+import { SYMBOL_CATALOG } from '../core/symbolCatalog'
 import { buildNetlist, TRANSISTOR_PARTS } from '../core/netlist'
 import { EXAMPLES } from '../core/examples'
 import { createSpiceEngine, type SpiceEngine, transferFunction } from '../core/spice'
@@ -1291,6 +1292,34 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   )
 }
 
+// SCH-11 I/O instrument badges: a small catalog glyph next to each M2K port's label, teaching
+// which instrument the port is (W1→generator, 1±/2±→scope/voltmeter input, V±→supply). The
+// glyph is clipped to its BODY (the bipole leads cropped away) and scaled to BADGE_PX, ink =
+// currentColor so identity/selection tinting flows through. Render-only: the port keeps its
+// single pin, its instrument binding, and the sim path untouched.
+const BADGE_PX = 20
+function badgeArt(uid: string, symId: string, cx: number, cy: number, bodyFrac = 0.5): ReactElement | null {
+  const sym = SYMBOL_CATALOG[symId]
+  if (!sym) return null
+  const [vx, vy, vw, vh] = sym.viewBox.split(/\s+/).map(Number)
+  const side = vw + 3 // bipole bodies are ≈ as tall as the glyph is wide (+ a little margin)
+  const bcx = vx + vw / 2
+  const bcy = vy + vh * bodyFrac // body centre as a fraction down the glyph (oscilloscope's is high)
+  const s = BADGE_PX / side
+  const clipId = `bclip-${uid}`
+  return (
+    <g transform={`translate(${(cx - bcx * s).toFixed(2)} ${(cy - bcy * s).toFixed(2)}) scale(${s.toFixed(4)})`}>
+      <clipPath id={clipId}>
+        <rect x={bcx - side / 2} y={bcy - side / 2} width={side} height={side} />
+      </clipPath>
+      {/* invisible grab pad: the glyph is unfilled line art, so without this a press inside
+          the badge falls through to the canvas (marquee) instead of dragging the port */}
+      <rect x={bcx - side / 2} y={bcy - side / 2} width={side} height={side} fill="transparent" stroke="none" />
+      <g clipPath={`url(#${clipId})`} dangerouslySetInnerHTML={{ __html: inkedInner(symId, sym, s) }} />
+    </g>
+  )
+}
+
 function renderSymbol(c: SchComponent, px: (g: number) => number, selected: boolean) {
   const stroke = selected ? 'var(--accent-blue)' : 'var(--sch-ink)'
   const sw = selected ? 2.5 : 1.8
@@ -1397,37 +1426,40 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
       </g>
     )
   } else if (c.kind === 'dcrail' || c.kind === 'vplus' || c.kind === 'vminus') {
+    // supply port: label + battery (supply) badge; single clean connection point at the pin
     const x = ax, y = ay
     const v = c.value ?? (c.kind === 'vminus' ? -5 : 5)
     const neg = c.kind === 'vminus' || v < 0
-    const col = neg ? '#2a6ad0' : '#c22a2a' // V- blue, V+ red (paper-contrast shades)
+    const col = selected ? 'var(--accent-blue)' : neg ? '#2a6ad0' : '#c22a2a' // V- blue, V+ red
     const lbl = c.kind === 'vplus' ? 'V+' : c.kind === 'vminus' ? 'V-' : (v >= 0 ? '+' : '') + v + 'V'
     inner = (
-      <g>
-        <line x1={x} y1={y} x2={x} y2={y - 14} stroke={col} strokeWidth={sw} />
-        <line x1={x - 8} y1={y - 14} x2={x + 8} y2={y - 14} stroke={col} strokeWidth={sw} />
-        {upright(x, y - 18, <text x={x} y={y - 18} fill={col} fontSize={9} textAnchor="middle">{lbl}</text>)}
+      <g style={{ color: col }}>
+        {badgeArt(c.id, 'battery', x, y - 22)}
+        {upright(x, y - 38, <text x={x} y={y - 38} fill={col} fontSize={10} textAnchor="middle">{lbl}</text>)}
       </g>
     )
   } else if (c.kind === 'awg1' || c.kind === 'awg2') {
+    // generator output: label + sine-source badge (the instrument the port IS)
     const x = ax, y = ay
+    const col = selected ? 'var(--accent-blue)' : 'var(--awg-color)'
     const lbl = c.kind === 'awg1' ? 'W1' : 'W2'
     inner = (
-      <g>
-        <circle cx={x} cy={y} r={11} fill="var(--bg-panel)" stroke="var(--awg-color)" strokeWidth={sw} />
-        <path d={`M ${x - 6} ${y} q 3 -6 6 0 q 3 6 6 0`} fill="none" stroke="var(--awg-color)" strokeWidth={1.4} />
-        {upright(x, y - 16, <text x={x} y={y - 16} fill="var(--awg-color)" fontSize={10} textAnchor="middle">{lbl}</text>)}
+      <g style={{ color: col }}>
+        {badgeArt(c.id, 'vsource_sin', x, y - 22)}
+        {upright(x, y - 38, <text x={x} y={y - 38} fill={col} fontSize={10} textAnchor="middle">{lbl}</text>)}
       </g>
     )
   } else if (c.kind === 'scope1' || c.kind === 'scope2' || c.kind === 'adc1n' || c.kind === 'adc2n') {
+    // measurement input: label + oscilloscope badge (stands for BOTH scope and voltmeter —
+    // the shared 1±/2± ADC input; the student picks the instrument downstream)
     const x = ax, y = ay
     const ch1 = c.kind === 'scope1' || c.kind === 'adc1n'
-    const col = ch1 ? 'var(--ch1-color)' : 'var(--ch2-color)'
+    const col = selected ? 'var(--accent-blue)' : ch1 ? 'var(--ch1-color)' : 'var(--ch2-color)'
     const lbl = c.kind === 'scope1' ? '1+' : c.kind === 'adc1n' ? '1-' : c.kind === 'scope2' ? '2+' : '2-'
     inner = (
-      <g>
-        <polygon points={`${x},${y - 9} ${x + 8},${y} ${x},${y + 9} ${x - 8},${y}`} fill="none" stroke={col} strokeWidth={sw} />
-        {upright(x, y - 13, <text x={x} y={y - 13} fill={col} fontSize={9} textAnchor="middle">{lbl}</text>)}
+      <g style={{ color: col }}>
+        {badgeArt(c.id, 'oscilloscope', x, y - 22)}
+        {upright(x, y - 38, <text x={x} y={y - 38} fill={col} fontSize={10} textAnchor="middle">{lbl}</text>)}
       </g>
     )
   } else {
