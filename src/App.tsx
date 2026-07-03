@@ -17,7 +17,7 @@ import Welcome from './components/Welcome'
 import Quickstart from './components/Quickstart'
 import ErrorBoundary from './components/ErrorBoundary'
 import { EXAMPLES } from './core/examples'
-import { type BoardLayout, PLACEABLE_KINDS, DIP_KINDS, autoRouteJumpers, buildHoles, normalizeBoardOrder, materializeAutoJumpers, schematicExpectation } from './core/breadboard'
+import { type BoardLayout, PLACEABLE_KINDS, DIP_KINDS, autoRouteJumpers, buildHoles, normalizeBoardOrder, materializeAutoJumpers, schematicExpectation, emptyBoard } from './core/breadboard'
 import Voltmeter from './components/Voltmeter'
 import PowerSupply from './components/PowerSupply'
 import './App.css'
@@ -489,9 +489,10 @@ export default function App() {
     if (!ex) return
     snapshotSchematic()
     setSchematic(JSON.parse(JSON.stringify(ex.schematic)))
-    // QS-4: an example may ship a pre-built, Check-passing board (the flashlight lands the user on
-    // a board with the LED already lit). Without one, the schematic-sync effect resets the board.
-    if (ex.board) setBoard(normalizeBoardOrder(JSON.parse(JSON.stringify(ex.board))))
+    // Loading an example HARD-RESETS the board: to the example's pre-built board when it ships one
+    // (the flashlight lands lit), else empty. The id-sync effect alone is not enough — a new
+    // example reusing ids (R1, U1, …) would keep the previous example's stale placements.
+    setBoard(ex.board ? normalizeBoardOrder(JSON.parse(JSON.stringify(ex.board))) : emptyBoard())
     setParams({ ...DEFAULT_PARAMS, ...ex.w1 })
     setParams2({ ...DEFAULT_PARAMS2, ...ex.w2 })
     setScopeReq({ xy: !!ex.xy, ch1Vdiv: ex.ch1Vdiv, ch2Vdiv: ex.ch2Vdiv })
@@ -512,7 +513,7 @@ export default function App() {
         return <SchematicEditor schematic={schematic} setSchematic={setSchematic}
           snapshot={snapshotSchematic} undo={undoSchematic} redo={redoSchematic}
           onLoadGenerators={(w1, w2) => { if (w1) setParams({ ...DEFAULT_PARAMS, ...w1 }); setParams2(w2 ? { ...DEFAULT_PARAMS2, ...w2 } : DEFAULT_PARAMS2) }}
-          onLoadBoard={(b) => setBoard(normalizeBoardOrder(JSON.parse(JSON.stringify(b))))}
+          onLoadBoard={(b) => setBoard(b ? normalizeBoardOrder(JSON.parse(JSON.stringify(b))) : emptyBoard())}
           onLoadScope={(req) => setScopeReq(req)} onOpenTracer={() => { setActive('curvetracer'); setPresetId(null) }} />
       case 'breadboard': {
         const vertical = boardOrient === 'stacked'
@@ -534,7 +535,7 @@ export default function App() {
                 <SchematicEditor schematic={schematic} setSchematic={setSchematic}
                   snapshot={snapshotSchematic} undo={undoSchematic} redo={redoSchematic}
                   onLoadGenerators={(w1, w2) => { if (w1) setParams({ ...DEFAULT_PARAMS, ...w1 }); setParams2(w2 ? { ...DEFAULT_PARAMS2, ...w2 } : DEFAULT_PARAMS2) }}
-                  onLoadBoard={(b) => setBoard(normalizeBoardOrder(JSON.parse(JSON.stringify(b))))}
+                  onLoadBoard={(b) => setBoard(b ? normalizeBoardOrder(JSON.parse(JSON.stringify(b))) : emptyBoard())}
                   onLoadScope={(req) => setScopeReq(req)} onOpenTracer={() => { setActive('curvetracer'); setPresetId(null) }} />
               </div>
               <div className={`board-splitter ${vertical ? 'horizontal' : 'vertical'}`} onPointerDown={onSplitterDown}

@@ -134,13 +134,16 @@ interface EditorProps {
   onLoadScope?: (req: { xy: boolean; ch1Vdiv?: number; ch2Vdiv?: number }) => void
   // Open the Curve Tracer when an example requests it (SWEEP-1 curve-family examples).
   onOpenTracer?: () => void
-  // Apply an example's pre-built breadboard on load (QS-4: the flashlight ships placed + wired).
-  onLoadBoard?: (b: import('../core/breadboard').BoardLayout) => void
+  // Reset the breadboard on an example load: to the example's pre-built board when it ships one
+  // (QS-4: the flashlight lands placed + wired + lit), else to empty (no stale placements).
+  onLoadBoard?: (b?: import('../core/breadboard').BoardLayout) => void
 }
 
 export default function SchematicEditor({ schematic, setSchematic, snapshot, undo, redo, onLoadGenerators, onLoadScope, onOpenTracer, onLoadBoard }: EditorProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  // Whether the pointer is over this panel — gates the global R handler (see the keydown effect).
+  const pointerInsideRef = useRef(false)
   const sch = schematic
   const setSch = setSchematic
   const [tool, setTool] = useState<Tool>('select')
@@ -481,7 +484,10 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         return
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && (selected || selectedWire !== null || selSet.size)) deleteSelected()
-      else if (e.key === 'r' || e.key === 'R') rotate()
+      // R rotates only when the pointer is over THIS panel: in the stacked Board view the
+      // Breadboard has its own global R (rotate the hovered board part), and without the gate one
+      // press hit both — rotating the selected schematic part while the user rotated a board part.
+      else if ((e.key === 'r' || e.key === 'R') && pointerInsideRef.current) rotate()
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
@@ -584,7 +590,9 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   })()
 
   return (
-    <div className="instrument-panel">
+    <div className="instrument-panel"
+      onMouseEnter={() => { pointerInsideRef.current = true }}
+      onMouseLeave={() => { pointerInsideRef.current = false }}>
       <div className="display-area">
         <div className="display-header">
           <span className="display-title">Schematic Editor</span>
@@ -608,7 +616,9 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                   // Drop to the Select tool so the first click on the canvas doesn't drop a resistor.
                   setTool('select'); setWireStart(null)
                   if (ex.w1 || ex.w2) onLoadGenerators?.(ex.w1, ex.w2)
-                  if (ex.board) onLoadBoard?.(ex.board) // QS-4: pre-built board (e.g. the flashlight)
+                  // Always: the board hard-resets on an example load (to the example's pre-built
+                  // board when it ships one, else empty — stale same-id placements must not survive).
+                  onLoadBoard?.(ex.board)
                   onLoadScope?.({ xy: !!ex.xy, ch1Vdiv: ex.ch1Vdiv, ch2Vdiv: ex.ch2Vdiv })
                   if (ex.tracer) onOpenTracer?.()
                   setSimStatus('loaded example: ' + ex.name)
