@@ -172,30 +172,34 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
       <>
         <h2 style={h2}>Build a flashlight</h2>
         <p style={{ marginTop: 6 }}>
-          The simplest useful circuit: a supply, a resistor, an LED.
+          The simplest useful circuit: the <b>power supply</b>, a resistor, an LED — steady DC.
         </p>
         <div style={btnRow}>
           <button style={goBtn} onClick={() => { onLoadExample('flashlight'); onGoTo('breadboard') }}>Load the flashlight →</button>
           <span style={{ alignSelf: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>→ opens the <b>Breadboard</b>, already built, with the <b>LED lit</b> on the real board.</span>
         </div>
         <p style={{ marginTop: 12 }}>
-          <b>Hover the LED</b> — it shows its current, about <b>6 mA</b>.
-        </p>
-        <p style={{ marginTop: 8 }}>
-          <b>Now make it a measurement, not just a light.</b> That brightness is really the{' '}
-          <b>current</b> — you can't <i>see</i> current, so measure it.
+          <b>Now make it a measurement, not just a light.</b> How bright <i>is</i> really how much{' '}
+          <b>current</b> — but the bench never hands you current directly. <b>Hover any point on the
+          board</b> and it shows that node's <b>voltage</b> (like touching a DMM probe there); to
+          find the current you measure a voltage and compute it.
         </p>
         <Beat>
-          <b>Measure the resistor's voltage — differentially.</b> Put CH1's two probes on the two
-          ends of the resistor and read the drop, about <b>3 V</b>. (Both probes are on live nodes,
-          neither at ground — that's a <i>differential</i> measurement; more on that next page.)
-          <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('scope')}>Open the Oscilloscope →</button></div>
+          <b>Read the resistor's voltage on the Voltmeter.</b> <b>CH1 is already wired across the
+          resistor</b> and reads the drop, about <b>3 V</b>. (Both of CH1's leads sit on live nodes,
+          neither at ground — that's a <i>differential</i> measurement, and the Voltmeter does it
+          for you. Single- vs differential is the next page.)
+          <div style={{ marginTop: 8 }}><button style={goBtn} onClick={() => onGoTo('voltmeter')}>Open the Voltmeter →</button></div>
         </Beat>
         <Beat>
           <b>Calculate the current.</b> Ohm's law: <b>I = V / R = 3 V / 470 Ω ≈ 6 mA</b> — the same
-          current the LED was showing. <b>That current is what lights it.</b> You've connected a
-          glowing LED to a number you measured.
+          current the LED was showing. <b>That current is what lights it.</b> You've tied a glowing
+          LED to a number you measured.
         </Beat>
+        <p style={note}>
+          It's steady DC — no signal generator, and the scope would just show a flat line, so we use
+          the Voltmeter.
+        </p>
       </>
     )
   }
@@ -284,7 +288,8 @@ export default function Quickstart({ onGoTo, onLoadExample }: Props) {
           <span style={{ alignSelf: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>→ a clean sine on the scope, one trace.</span>
         </div>
         <p style={note}>
-          (The signal is already live — the Signal Generator's button just toggles Stop/Run.)
+          (The signal is already live — the Signal Generator's button just toggles Stop/Run. <b>W1</b>{' '}
+          is your signal; <b>W2</b> is the second source, idle here.)
         </p>
         <Beat>
           <b>Change it and watch.</b> Drag the frequency up — the wave's period shrinks. Switch to a

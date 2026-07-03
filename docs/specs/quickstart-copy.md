@@ -24,18 +24,20 @@ Signals flow one way: the **sources** drive your circuit, the **scope and meter*
 circuit in between. Ready? `[Start the tour →]`
 
 ## Page 3 — Build a flashlight  *(~2 min)*
-The simplest useful circuit: a supply, a resistor, an LED.
+The simplest useful circuit: the **power supply**, a resistor, an LED — steady DC.
 `[Load the flashlight →]`  → opens the **Breadboard**, already built, with the **LED lit** on the real board.
-**Hover the LED** — it shows its current, about **6 mA**.
-**Now make it a measurement, not just a light.** That brightness is really the **current** — you can't *see*
-current, so measure it.
-- **Measure the resistor's voltage — differentially.** Put CH1's two probes on the two ends of the resistor
-  and read the drop, about **3 V**. (Both probes are on live nodes, neither at ground — that's a
-  *differential* measurement; more on that next page.) `[Open the Oscilloscope →]`
-- **Calculate the current.** Ohm's law: **I = V / R = 3 V / 470 Ω ≈ 6 mA** — the same current the LED was
-  showing. **That current is what lights it.** You've connected a glowing LED to a number you measured.
+**Now make it a measurement, not just a light.** How bright *is* really how much **current** — but the bench
+never hands you current directly, only **voltages**. **Try it: hover around the board** and watch each node's
+voltage pop up, like touching a DMM probe there. Current you can't probe — so to get the resistor's drop
+precisely, use the Voltmeter.
+- **Read the resistor's voltage on the Voltmeter.** `[Open the Voltmeter →]` — **CH1 is already wired across
+  the resistor**; read the drop (about **3 V**). (Both of CH1's leads sit on live nodes, neither at ground —
+  that's a *differential* measurement, and the Voltmeter does it for you. Single- vs differential is next page.)
+- **Calculate the current.** Ohm's law: **I = V / R ≈ 3 V / 470 Ω ≈ 6 mA**. **That current is what lights the
+  LED.** You've tied a glowing LED to a number you read and computed.
 `[← Back to the tour]`
-*(Live "turn it down and watch it dim" is the animated-glow enhancer GLOW-1 — post-beta. Beta = steady glow.)*
+*(It's steady DC — no signal generator, and the scope would just show a flat line, so we use the Voltmeter.
+Live "turn it down and watch it dim" is the animated-glow enhancer GLOW-1 — post-beta.)*
 
 ## Page 4 — The voltage divider  *(~2 min)*
 Two equal resistors split the supply in half.
@@ -51,7 +53,7 @@ against ground. `[Open the Voltmeter →]`   `[← Back to the tour]`
 
 ## Page 5 — Make a signal, see it in frequency  *(~2 min)*
 `[Load a signal →]`  → a clean sine on the scope, one trace. (The signal is already live — the Signal
-Generator's button just toggles Stop/Run.)
+Generator's button just toggles Stop/Run. **W1** is your signal; **W2** is the second source, idle here.)
 - **Change it and watch.** Drag the frequency up — the wave's period shrinks. Switch to a square wave.
   `[Open the Signal Generator →]`
 - **See it in frequency.** A sine is a single peak; a square wave sprouts a comb of harmonics.
