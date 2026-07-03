@@ -56,6 +56,7 @@ function tiaHintFor(sch: Schematic, pdId: string): { rfOhms: number; gbwHz: numb
 const GRID = 24
 const PAD = 16
 const PIN_SNAP_PX = 10 // magnetic radius for modeless pin-to-pin wiring (Stage 3)
+const PAPER_KEY = 'bm2k-paper-style'
 
 // SCH-11 "paper" canvas: the circuitikz symbols are line artwork, so the schematic
 // surface is a document skin INSIDE the dark app. These CSS custom properties are set
@@ -96,6 +97,7 @@ const PAPER_STYLES: Record<PaperStyle, CSSProperties & Record<string, string>> =
     '--ch2-color': '#7d3fa0',
     '--awg-color': '#9c7a00',
     '--sch-grid': '#c7d6b6',       // printed grid lines (== the snap grid pitch)
+    '--sch-grid-minor': '#e0e9d3', // the pad's fine 5×5 subdivision — barely-there
   },
   blueprint: {
     background: '#1d3a5f',
@@ -227,7 +229,16 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   const [placeRotation, setPlaceRotation] = useState(0)
   const [placeMirror, setPlaceMirror] = useState(false) // ghost pre-flip (Stage 4)
   // On-screen paper skin (white / green pad / blueprint) — view-only; export is always white.
-  const [paperStyle, setPaperStyle] = useState<PaperStyle>('white')
+  // Persisted; first run defaults to the GREEN pad (andre: the ruling is the point of
+  // engineering paper — it reads as a workspace and helps align parts).
+  const [paperStyle, setPaperStyle] = useState<PaperStyle>(() => {
+    try {
+      const r = localStorage.getItem(PAPER_KEY)
+      if (r === 'white' || r === 'green' || r === 'blueprint') return r
+    } catch { /* ignore */ }
+    return 'green'
+  })
+  useEffect(() => { try { localStorage.setItem(PAPER_KEY, paperStyle) } catch { /* quota */ } }, [paperStyle])
   // Right-click context menu on a part: rotate/flip/duplicate/delete without the keyboard.
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; id: string } | null>(null)
   // Place-time type selectors: when the Op-amp / In-amp tool is active a sub-selector below the
@@ -864,8 +875,15 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
             <pattern id="gridDots" x={PAD} y={PAD} width={GRID} height={GRID} patternUnits="userSpaceOnUse">
               {paperStyle === 'white'
                 ? <circle cx={0} cy={0} r={1} fill="var(--sch-grid)" />
-                // engineering pad / blueprint: a printed line grid, one cell = one snap step
-                : <path d={`M ${GRID} 0 L 0 0 0 ${GRID}`} fill="none" stroke="var(--sch-grid)" strokeWidth={0.6} />}
+                // engineering pad / blueprint: a printed line grid, one cell = one snap step;
+                // the green pad also gets the classic 5×5 minor subdivision, kept very faint
+                : <>
+                    {paperStyle === 'green' && (
+                      <path d={[1, 2, 3, 4].map((i) => `M ${i * GRID / 5} 0 V ${GRID} M 0 ${i * GRID / 5} H ${GRID}`).join(' ')}
+                        fill="none" stroke="var(--sch-grid-minor)" strokeWidth={0.4} />
+                    )}
+                    <path d={`M ${GRID} 0 L 0 0 0 ${GRID}`} fill="none" stroke="var(--sch-grid)" strokeWidth={0.6} />
+                  </>}
             </pattern>
           </defs>
           <rect x={0} y={0} width="100%" height="100%" fill="url(#gridDots)" />
