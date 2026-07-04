@@ -540,36 +540,9 @@ export const EXAMPLES: Example[] = [
       ],
     },
   },
-  {
-    id: 'ina125-amp', name: 'INA125 in-amp ×10', group: 'Amplifiers',
-    blurb: 'INA125 instrumentation amp, gain 10 set by R_G = 10 kΩ (G = 4 + 60 kΩ/R_G). A tiny differential input becomes a big output (CH2 in, CH1 out). Builds on the breadboard as a 16-pin DIP.',
-    w1: sine(1000, 0.3), ch1Vdiv: 1, ch2Vdiv: 0.2,
-    schematic: {
-      components: [
-        { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
-        { id: 'U1', kind: 'ina125', gx: 8, gy: 4 },           // pins: VIN+ (8,4) VIN− (8,6) VO (15,5) RG (10,8)(12,8) IAREF (14,8)
-        { id: 'RG', kind: 'resistor', gx: 10, gy: 10, value: 10000 }, // R_G, wired to the RG pins
-        { id: 'G1', kind: 'ground', gx: 8, gy: 8 },           // VIN− to ground
-        { id: 'G2', kind: 'ground', gx: 14, gy: 10 },         // IAREF to ground
-        { id: 'P1', kind: 'scope1', gx: 17, gy: 5 },  // 1+ on VO; 1− unwired = single-ended
-        { id: 'P2', kind: 'scope2', gx: 0, gy: 2 },   // 2+ on the input; 2− unwired
-      ],
-      // NOTE (two-terminal migration, deliberate FIX): the old "ground -> 1-/2-" stub wires ran
-      // along y=8 straight THROUGH the RG pins at (10,8)/(12,8), grounding and shorting the gain
-      // network — the example clipped at the +5 V rail instead of showing its stated ×10. With
-      // the reference stubs gone, RG carries only R_G and the amp reads gain 10 as documented.
-      wires: [
-        { x1: 2, y1: 4, x2: 8, y2: 4 },    // W1 -> VIN+
-        { x1: 2, y1: 4, x2: 2, y2: 2 },    // input -> up
-        { x1: 2, y1: 2, x2: 0, y2: 2 },    // -> 2+
-        { x1: 8, y1: 6, x2: 8, y2: 8 },    // VIN− -> ground
-        { x1: 10, y1: 8, x2: 10, y2: 10 }, // RG pin 8 -> R_G.a
-        { x1: 12, y1: 8, x2: 12, y2: 10 }, // RG pin 9 -> R_G.b
-        { x1: 14, y1: 8, x2: 14, y2: 10 }, // IAREF -> ground
-        { x1: 15, y1: 5, x2: 17, y2: 5 },  // VO -> 1+
-      ],
-    },
-  },
+  // (The former 'ina125-amp' example was REMOVED with the SCH-11 merge (andre, 2026-07-03): it
+  // shipped broken — its 1-/2- ground stubs shorted the RG pins — and INA/TIA example work is
+  // deferred. The INA125 PART stays fully placeable from the palette; only the example is gone.)
   {
     id: 'diode-iv', name: 'Diode I-V curve (XY)', group: 'Passive',
     blurb: 'Switch the scope to XY mode to see the curve. CH1 (X) = voltage across the diode, CH2 (Y) = current (I·Rsense). W1 is preset to a triangle sweep.',
