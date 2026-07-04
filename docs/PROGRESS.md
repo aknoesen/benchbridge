@@ -8,7 +8,46 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
-## Next session: start here (updated 2026-07-02, batch 8 — split view, key-gating, board reset)
+## Next session: start here (updated 2026-07-03 — SCH-11 merged: circuitikz schematic + two-terminal instruments)
+
+**The whole `sch11-ansi-symbols` branch landed on `main` (andre's acceptance, before the next survey
+wave). The schematic editor is now the textbook-style circuitikz bench.** The arc, one line each
+(details per stage in `docs/private/AGENT-HANDOFF.md` and the branch history `4063246..5561df7`):
+- **P3 Stage 1** (`0af1c19`): parts render from the generated 28-symbol circuitikz catalog
+  (`core/symbolCatalog.ts` + `core/symbolArt.ts` alignment affine), white "paper" canvas scoped to the
+  schematic svg; found+fixed a pre-existing PNG-export paint-pairing bug.
+- **Stage 2** (`685e273`): model-space flip (`mirror` on SchComponent, `mirrorComponentWithWires`);
+  R/F act on the hovered part (model-computed bbox hover), else the selection.
+- **Stage 3** (`e119f92`): pin-magnetic modeless wiring — ring on pins, orthogonal rubber-band
+  (`orthoRoute` in core), click-pin→click-pin commits, Esc cancels; grid Wire tool kept.
+- **Stage 4** (`d2a6bef`): ghost-place with R/F pre-rotate/flip, right-click part menu, hover hint
+  chip, paper skins (white/green pad/blueprint) with export forced white via `exportSvgToPng`'s
+  `vars` override.
+- **Port badges + green default + option-B palette** (`d334bbc`, `050cd70`, `daf0d2d`, `1546415`):
+  instrument glyph badges on the M2K ports (per-channel scope glyph after andre's course-correct),
+  ports draggable by badge, dot-on-dot cleanup, green engineering pad as the persisted first-run
+  paper style (`bm2k-paper-style`; export stays white — blob-pixel verified), palette lists
+  CH1/CH2 measurement with a presentational scope↔voltmeter `view` toggle.
+- **Two-terminal instruments** (`0aeeddb` baseline + `d088774`): the first sanctioned MODEL change —
+  scope1/scope2 are 2-pin (absorbing the removed `adc1n`/`adc2n` kinds; **unwired − = single-ended,
+  wired − = differential**), awg1/awg2 are 2-pin sources with a drawn ground return bonded to the
+  shared node 0. Verified by **sim-result equivalence**: `core/sch11-sim-equivalence.test.ts` replays
+  every example against a committed pre-migration waveform baseline (`__fixtures__/`). All examples
+  matched; the structural nets snapshot was regenerated deliberately. Legacy saves migrate via
+  `core/schematic.ts#migrateSchematic` (localStorage + Open).
+- **`ina125-amp` example REMOVED** (`5561df7`): it shipped broken (its old 1−/2− ground stubs ran
+  through the RG pins, shorting the gain network — CH1 rail-pinned at +5 V). The INA125 **part**
+  stays fully placeable; INA/TIA example work is deferred.
+
+**Watch-fors:** the suite is now 312 incl. the equivalence harness (runs ~24 ngspice sims, still <15 s);
+`baseTerminals` grew vertical 2-pin entries for scope/awg — anything placing those kinds
+programmatically must keep the second pin's grid point in mind (coincidence = connection); the
+Quickstart copy still says "1+/1− pre-wired" in places — re-read it against the new two-lead scope
+visuals next content pass.
+
+---
+
+## Earlier: 2026-07-02, batch 8 — split view, key-gating, board reset
 
 **The evening review round (`7eb0498..8b57214`), all andre-directed:**
 - **Observe-not-manipulate copy** on pages 6/8/9/10 (verbatim from the updated
