@@ -137,7 +137,11 @@ const TOOLS: { tool: Tool; label: string }[] = [
   { tool: 'bjt', label: 'BJT' },
   { tool: 'mosfet', label: 'MOSFET' },
   { tool: 'opamp', label: 'Op-amp' },
-  { tool: 'ina125', label: 'INA125' },
+  // INA125 palette button HIDDEN for the survey wave (andre, 2026-07-03). The part's whole
+  // stack stays intact (SchKind, terminals, netlist model, DIP boarding + straps, macromodel)
+  // and any placed/loaded INA125 still renders and simulates — re-enable by uncommenting this
+  // one line when the INA/TIA lab work lands.
+  // { tool: 'ina125', label: 'INA125' },
   { tool: 'awg1', label: 'W1' },
   { tool: 'awg2', label: 'W2' },
   // Option B (andre): ONE measurement input per channel — places the existing 1+/2+ port
