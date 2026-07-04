@@ -1,0 +1,2710 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`SCH-11 invariance: nets + circuits of the example library > computeNets is unchanged for every example 1`] = `
+{
+  "bjt-curve-family": [
+    [
+      "10,2",
+      "net7",
+    ],
+    [
+      "10,4",
+      "net0",
+    ],
+    [
+      "10,6",
+      "net3",
+    ],
+    [
+      "10,8",
+      "net8",
+    ],
+    [
+      "12,4",
+      "net0",
+    ],
+    [
+      "12,6",
+      "net1",
+    ],
+    [
+      "2,5",
+      "net4",
+    ],
+    [
+      "2,7",
+      "net5",
+    ],
+    [
+      "4,5",
+      "net4",
+    ],
+    [
+      "6,5",
+      "net2",
+    ],
+    [
+      "8,10",
+      "net6",
+    ],
+    [
+      "8,2",
+      "net0",
+    ],
+    [
+      "8,4",
+      "net0",
+    ],
+    [
+      "8,6",
+      "net3",
+    ],
+    [
+      "8,8",
+      "net6",
+    ],
+  ],
+  "differentiator": [
+    [
+      "0,6",
+      "net0",
+    ],
+    [
+      "0,8",
+      "net6",
+    ],
+    [
+      "10,4",
+      "net3",
+    ],
+    [
+      "10,6",
+      "net2",
+    ],
+    [
+      "10,8",
+      "net2",
+    ],
+    [
+      "12,8",
+      "net4",
+    ],
+    [
+      "14,5",
+      "net4",
+    ],
+    [
+      "14,8",
+      "net4",
+    ],
+    [
+      "16,5",
+      "net4",
+    ],
+    [
+      "16,7",
+      "net5",
+    ],
+    [
+      "2,6",
+      "net0",
+    ],
+    [
+      "2,8",
+      "net1",
+    ],
+    [
+      "4,6",
+      "net0",
+    ],
+    [
+      "6,6",
+      "net2",
+    ],
+    [
+      "8,4",
+      "net3",
+    ],
+  ],
+  "diode-iv": [
+    [
+      "10,2",
+      "net4",
+    ],
+    [
+      "2,4",
+      "net0",
+    ],
+    [
+      "2,6",
+      "net1",
+    ],
+    [
+      "4,2",
+      "net0",
+    ],
+    [
+      "4,4",
+      "net0",
+    ],
+    [
+      "6,2",
+      "net2",
+    ],
+    [
+      "6,4",
+      "net2",
+    ],
+    [
+      "6,6",
+      "net3",
+    ],
+    [
+      "6,8",
+      "net3",
+    ],
+    [
+      "8,2",
+      "net2",
+    ],
+    [
+      "8,4",
+      "net2",
+    ],
+  ],
+  "divider": [
+    [
+      "10,2",
+      "net1",
+    ],
+    [
+      "10,4",
+      "net1",
+    ],
+    [
+      "10,6",
+      "net3",
+    ],
+    [
+      "2,0",
+      "net0",
+    ],
+    [
+      "2,4",
+      "net0",
+    ],
+    [
+      "4,0",
+      "net0",
+    ],
+    [
+      "4,2",
+      "net1",
+    ],
+    [
+      "4,4",
+      "net0",
+    ],
+    [
+      "6,4",
+      "net1",
+    ],
+    [
+      "8,4",
+      "net1",
+    ],
+    [
+      "8,6",
+      "net2",
+    ],
+    [
+      "8,8",
+      "net2",
+    ],
+  ],
+  "flashlight": [
+    [
+      "2,0",
+      "net0",
+    ],
+    [
+      "2,4",
+      "net0",
+    ],
+    [
+      "4,0",
+      "net0",
+    ],
+    [
+      "4,2",
+      "net1",
+    ],
+    [
+      "4,4",
+      "net0",
+    ],
+    [
+      "6,2",
+      "net1",
+    ],
+    [
+      "6,4",
+      "net1",
+    ],
+    [
+      "8,4",
+      "net2",
+    ],
+    [
+      "8,6",
+      "net2",
+    ],
+  ],
+  "integrator": [
+    [
+      "0,6",
+      "net0",
+    ],
+    [
+      "0,8",
+      "net6",
+    ],
+    [
+      "10,10",
+      "net2",
+    ],
+    [
+      "10,4",
+      "net3",
+    ],
+    [
+      "10,6",
+      "net2",
+    ],
+    [
+      "10,8",
+      "net2",
+    ],
+    [
+      "12,10",
+      "net4",
+    ],
+    [
+      "12,8",
+      "net4",
+    ],
+    [
+      "14,5",
+      "net4",
+    ],
+    [
+      "14,8",
+      "net4",
+    ],
+    [
+      "16,5",
+      "net4",
+    ],
+    [
+      "16,7",
+      "net5",
+    ],
+    [
+      "2,6",
+      "net0",
+    ],
+    [
+      "2,8",
+      "net1",
+    ],
+    [
+      "4,6",
+      "net0",
+    ],
+    [
+      "6,6",
+      "net2",
+    ],
+    [
+      "8,4",
+      "net3",
+    ],
+  ],
+  "inv-amp": [
+    [
+      "0,6",
+      "net0",
+    ],
+    [
+      "0,8",
+      "net6",
+    ],
+    [
+      "10,4",
+      "net3",
+    ],
+    [
+      "10,6",
+      "net2",
+    ],
+    [
+      "10,8",
+      "net2",
+    ],
+    [
+      "12,8",
+      "net4",
+    ],
+    [
+      "14,5",
+      "net4",
+    ],
+    [
+      "14,8",
+      "net4",
+    ],
+    [
+      "16,5",
+      "net4",
+    ],
+    [
+      "16,7",
+      "net5",
+    ],
+    [
+      "2,6",
+      "net0",
+    ],
+    [
+      "2,8",
+      "net1",
+    ],
+    [
+      "4,6",
+      "net0",
+    ],
+    [
+      "6,6",
+      "net2",
+    ],
+    [
+      "8,4",
+      "net3",
+    ],
+  ],
+  "lc-hp": [
+    [
+      "0,2",
+      "net0",
+    ],
+    [
+      "0,4",
+      "net5",
+    ],
+    [
+      "2,2",
+      "net0",
+    ],
+    [
+      "2,4",
+      "net0",
+    ],
+    [
+      "2,6",
+      "net1",
+    ],
+    [
+      "4,4",
+      "net0",
+    ],
+    [
+      "6,4",
+      "net2",
+    ],
+    [
+      "6,6",
+      "net3",
+    ],
+    [
+      "6,8",
+      "net3",
+    ],
+    [
+      "8,4",
+      "net2",
+    ],
+    [
+      "8,6",
+      "net4",
+    ],
+  ],
+  "lc-lp": [
+    [
+      "0,2",
+      "net0",
+    ],
+    [
+      "0,4",
+      "net5",
+    ],
+    [
+      "2,2",
+      "net0",
+    ],
+    [
+      "2,4",
+      "net0",
+    ],
+    [
+      "2,6",
+      "net1",
+    ],
+    [
+      "4,4",
+      "net0",
+    ],
+    [
+      "6,4",
+      "net2",
+    ],
+    [
+      "6,6",
+      "net3",
+    ],
+    [
+      "6,8",
+      "net3",
+    ],
+    [
+      "8,4",
+      "net2",
+    ],
+    [
+      "8,6",
+      "net4",
+    ],
+  ],
+  "led-pwm": [
+    [
+      "0,2",
+      "net0",
+    ],
+    [
+      "0,4",
+      "net4",
+    ],
+    [
+      "2,2",
+      "net0",
+    ],
+    [
+      "2,4",
+      "net0",
+    ],
+    [
+      "2,6",
+      "net1",
+    ],
+    [
+      "4,4",
+      "net0",
+    ],
+    [
+      "6,4",
+      "net2",
+    ],
+    [
+      "8,4",
+      "net3",
+    ],
+    [
+      "8,6",
+      "net3",
+    ],
+  ],
+  "nmos-curve-family": [
+    [
+      "10,2",
+      "net6",
+    ],
+    [
+      "10,4",
+      "net0",
+    ],
+    [
+      "10,6",
+      "net3",
+    ],
+    [
+      "10,8",
+      "net7",
+    ],
+    [
+      "12,4",
+      "net0",
+    ],
+    [
+      "12,6",
+      "net1",
+    ],
+    [
+      "4,5",
+      "net2",
+    ],
+    [
+      "4,7",
+      "net4",
+    ],
+    [
+      "6,5",
+      "net2",
+    ],
+    [
+      "8,10",
+      "net5",
+    ],
+    [
+      "8,2",
+      "net0",
+    ],
+    [
+      "8,4",
+      "net0",
+    ],
+    [
+      "8,6",
+      "net3",
+    ],
+    [
+      "8,8",
+      "net5",
+    ],
+  ],
+  "nmos-output-xy": [
+    [
+      "10,2",
+      "net5",
+    ],
+    [
+      "10,4",
+      "net0",
+    ],
+    [
+      "10,6",
+      "net3",
+    ],
+    [
+      "10,8",
+      "net6",
+    ],
+    [
+      "12,4",
+      "net0",
+    ],
+    [
+      "12,6",
+      "net1",
+    ],
+    [
+      "4,5",
+      "net2",
+    ],
+    [
+      "6,5",
+      "net2",
+    ],
+    [
+      "8,10",
+      "net4",
+    ],
+    [
+      "8,2",
+      "net0",
+    ],
+    [
+      "8,4",
+      "net0",
+    ],
+    [
+      "8,6",
+      "net3",
+    ],
+    [
+      "8,8",
+      "net4",
+    ],
+  ],
+  "noninv-amp": [
+    [
+      "10,10",
+      "net4",
+    ],
+    [
+      "10,4",
+      "net0",
+    ],
+    [
+      "10,6",
+      "net2",
+    ],
+    [
+      "10,8",
+      "net4",
+    ],
+    [
+      "12,6",
+      "net2",
+    ],
+    [
+      "14,5",
+      "net3",
+    ],
+    [
+      "14,6",
+      "net3",
+    ],
+    [
+      "16,5",
+      "net3",
+    ],
+    [
+      "16,7",
+      "net5",
+    ],
+    [
+      "4,2",
+      "net0",
+    ],
+    [
+      "4,4",
+      "net6",
+    ],
+    [
+      "6,2",
+      "net0",
+    ],
+    [
+      "6,4",
+      "net0",
+    ],
+    [
+      "6,6",
+      "net1",
+    ],
+  ],
+  "rc-hp": [
+    [
+      "0,2",
+      "net0",
+    ],
+    [
+      "0,4",
+      "net5",
+    ],
+    [
+      "2,2",
+      "net0",
+    ],
+    [
+      "2,4",
+      "net0",
+    ],
+    [
+      "2,6",
+      "net1",
+    ],
+    [
+      "4,4",
+      "net0",
+    ],
+    [
+      "6,4",
+      "net2",
+    ],
+    [
+      "6,6",
+      "net3",
+    ],
+    [
+      "6,8",
+      "net3",
+    ],
+    [
+      "8,4",
+      "net2",
+    ],
+    [
+      "8,6",
+      "net4",
+    ],
+  ],
+  "rc-lp": [
+    [
+      "0,2",
+      "net0",
+    ],
+    [
+      "0,4",
+      "net5",
+    ],
+    [
+      "2,2",
+      "net0",
+    ],
+    [
+      "2,4",
+      "net0",
+    ],
+    [
+      "2,6",
+      "net1",
+    ],
+    [
+      "4,4",
+      "net0",
+    ],
+    [
+      "6,4",
+      "net2",
+    ],
+    [
+      "6,6",
+      "net3",
+    ],
+    [
+      "6,8",
+      "net3",
+    ],
+    [
+      "8,4",
+      "net2",
+    ],
+    [
+      "8,6",
+      "net4",
+    ],
+  ],
+  "rl-hp": [
+    [
+      "0,2",
+      "net0",
+    ],
+    [
+      "0,4",
+      "net5",
+    ],
+    [
+      "2,2",
+      "net0",
+    ],
+    [
+      "2,4",
+      "net0",
+    ],
+    [
+      "2,6",
+      "net1",
+    ],
+    [
+      "4,4",
+      "net0",
+    ],
+    [
+      "6,4",
+      "net2",
+    ],
+    [
+      "6,6",
+      "net3",
+    ],
+    [
+      "6,8",
+      "net3",
+    ],
+    [
+      "8,4",
+      "net2",
+    ],
+    [
+      "8,6",
+      "net4",
+    ],
+  ],
+  "rl-lp": [
+    [
+      "0,2",
+      "net0",
+    ],
+    [
+      "0,4",
+      "net5",
+    ],
+    [
+      "2,2",
+      "net0",
+    ],
+    [
+      "2,4",
+      "net0",
+    ],
+    [
+      "2,6",
+      "net1",
+    ],
+    [
+      "4,4",
+      "net0",
+    ],
+    [
+      "6,4",
+      "net2",
+    ],
+    [
+      "6,6",
+      "net3",
+    ],
+    [
+      "6,8",
+      "net3",
+    ],
+    [
+      "8,4",
+      "net2",
+    ],
+    [
+      "8,6",
+      "net4",
+    ],
+  ],
+  "rlc-bandpass": [
+    [
+      "0,2",
+      "net0",
+    ],
+    [
+      "0,4",
+      "net6",
+    ],
+    [
+      "10,4",
+      "net3",
+    ],
+    [
+      "10,6",
+      "net4",
+    ],
+    [
+      "10,8",
+      "net4",
+    ],
+    [
+      "12,4",
+      "net3",
+    ],
+    [
+      "12,6",
+      "net5",
+    ],
+    [
+      "2,2",
+      "net0",
+    ],
+    [
+      "2,4",
+      "net0",
+    ],
+    [
+      "2,6",
+      "net1",
+    ],
+    [
+      "4,4",
+      "net0",
+    ],
+    [
+      "6,4",
+      "net2",
+    ],
+    [
+      "8,4",
+      "net2",
+    ],
+  ],
+  "signal-sine": [
+    [
+      "2,4",
+      "net0",
+    ],
+    [
+      "2,6",
+      "net1",
+    ],
+    [
+      "6,4",
+      "net0",
+    ],
+    [
+      "6,6",
+      "net2",
+    ],
+    [
+      "6,8",
+      "net2",
+    ],
+    [
+      "8,4",
+      "net0",
+    ],
+    [
+      "8,6",
+      "net3",
+    ],
+  ],
+  "summing": [
+    [
+      "0,4",
+      "net0",
+    ],
+    [
+      "0,6",
+      "net8",
+    ],
+    [
+      "10,10",
+      "net2",
+    ],
+    [
+      "10,4",
+      "net5",
+    ],
+    [
+      "10,6",
+      "net2",
+    ],
+    [
+      "12,10",
+      "net6",
+    ],
+    [
+      "14,10",
+      "net6",
+    ],
+    [
+      "14,5",
+      "net6",
+    ],
+    [
+      "16,5",
+      "net6",
+    ],
+    [
+      "16,7",
+      "net7",
+    ],
+    [
+      "2,10",
+      "net3",
+    ],
+    [
+      "2,12",
+      "net4",
+    ],
+    [
+      "2,4",
+      "net0",
+    ],
+    [
+      "2,6",
+      "net0",
+    ],
+    [
+      "2,8",
+      "net1",
+    ],
+    [
+      "6,10",
+      "net3",
+    ],
+    [
+      "6,6",
+      "net0",
+    ],
+    [
+      "6,8",
+      "net3",
+    ],
+    [
+      "8,4",
+      "net5",
+    ],
+    [
+      "8,6",
+      "net2",
+    ],
+    [
+      "8,8",
+      "net2",
+    ],
+  ],
+  "tia-ac": [
+    [
+      "0,6",
+      "net0",
+    ],
+    [
+      "0,8",
+      "net6",
+    ],
+    [
+      "10,10",
+      "net2",
+    ],
+    [
+      "10,4",
+      "net3",
+    ],
+    [
+      "10,6",
+      "net2",
+    ],
+    [
+      "10,8",
+      "net2",
+    ],
+    [
+      "12,10",
+      "net4",
+    ],
+    [
+      "12,8",
+      "net4",
+    ],
+    [
+      "14,5",
+      "net4",
+    ],
+    [
+      "14,8",
+      "net4",
+    ],
+    [
+      "16,5",
+      "net4",
+    ],
+    [
+      "16,7",
+      "net5",
+    ],
+    [
+      "2,6",
+      "net0",
+    ],
+    [
+      "2,8",
+      "net1",
+    ],
+    [
+      "4,6",
+      "net0",
+    ],
+    [
+      "6,6",
+      "net2",
+    ],
+    [
+      "8,4",
+      "net3",
+    ],
+  ],
+  "tia-photodiode": [
+    [
+      "10,10",
+      "net3",
+    ],
+    [
+      "10,4",
+      "net1",
+    ],
+    [
+      "10,6",
+      "net3",
+    ],
+    [
+      "10,8",
+      "net3",
+    ],
+    [
+      "12,10",
+      "net4",
+    ],
+    [
+      "12,8",
+      "net4",
+    ],
+    [
+      "14,5",
+      "net4",
+    ],
+    [
+      "14,8",
+      "net4",
+    ],
+    [
+      "16,5",
+      "net4",
+    ],
+    [
+      "16,7",
+      "net6",
+    ],
+    [
+      "2,4",
+      "net0",
+    ],
+    [
+      "4,4",
+      "net0",
+    ],
+    [
+      "6,4",
+      "net1",
+    ],
+    [
+      "6,6",
+      "net2",
+    ],
+    [
+      "6,8",
+      "net2",
+    ],
+    [
+      "8,6",
+      "net5",
+    ],
+    [
+      "8,8",
+      "net5",
+    ],
+  ],
+  "zener-iv": [
+    [
+      "10,2",
+      "net4",
+    ],
+    [
+      "2,4",
+      "net0",
+    ],
+    [
+      "2,6",
+      "net1",
+    ],
+    [
+      "4,2",
+      "net0",
+    ],
+    [
+      "4,4",
+      "net0",
+    ],
+    [
+      "6,2",
+      "net2",
+    ],
+    [
+      "6,4",
+      "net2",
+    ],
+    [
+      "6,6",
+      "net3",
+    ],
+    [
+      "6,8",
+      "net3",
+    ],
+    [
+      "8,2",
+      "net2",
+    ],
+    [
+      "8,4",
+      "net2",
+    ],
+  ],
+}
+`;
+
+exports[`SCH-11 invariance: nets + circuits of the example library > toCircuit is unchanged for every example 1`] = `
+{
+  "bjt-curve-family": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "id": "1",
+          "kind": "bjt",
+          "model": "IS=6.734f BF=300 NF=1 VAF=74 IKF=66.78m ISE=6.734f NE=1.259 BR=0.7371 RC=1 CJC=3.638p CJE=4.493p TF=301.2p TR=239.5n",
+          "nodes": [
+            "in",
+            "net2",
+            "scope2",
+          ],
+          "polarity": "npn",
+        },
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W2",
+          "kind": "vsource",
+          "nodes": [
+            "w2_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout2",
+          "kind": "resistor",
+          "nodes": [
+            "w2_src",
+            "in2",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "in2",
+            "net2",
+          ],
+          "ohms": 100000,
+        },
+        {
+          "id": "2",
+          "kind": "resistor",
+          "nodes": [
+            "scope2",
+            "0",
+          ],
+          "ohms": 100,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "in",
+      "ch1n": undefined,
+      "ch2": "scope2",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "differentiator": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "farads": 1e-7,
+          "id": "1",
+          "kind": "capacitor",
+          "nodes": [
+            "in",
+            "net2",
+          ],
+        },
+        {
+          "id": "1",
+          "kind": "opamp",
+          "model": "lmc662",
+          "nodes": {
+            "inN": "net2",
+            "inP": "0",
+            "out": "out",
+          },
+          "part": "op484",
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "net2",
+            "out",
+          ],
+          "ohms": 10000,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "out",
+      "ch1n": undefined,
+      "ch2": "in",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "diode-iv": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "id": "1",
+          "kind": "diode",
+          "nodes": [
+            "in",
+            "out_n",
+          ],
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "out_n",
+            "0",
+          ],
+          "ohms": 470,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "in",
+      "ch1n": "out_n",
+      "ch2": "out_n",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "divider": {
+    "circuit": {
+      "components": [
+        {
+          "id": "S1",
+          "kind": "dcrail",
+          "node": "out",
+          "volts": 5,
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "out",
+            "out_n",
+          ],
+          "ohms": 10000,
+        },
+        {
+          "id": "2",
+          "kind": "resistor",
+          "nodes": [
+            "out_n",
+            "0",
+          ],
+          "ohms": 20000,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "out",
+      "ch1n": "out_n",
+      "ch2": "out_n",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "flashlight": {
+    "circuit": {
+      "components": [
+        {
+          "id": "S1",
+          "kind": "dcrail",
+          "node": "out",
+          "volts": 5,
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "out",
+            "out_n",
+          ],
+          "ohms": 470,
+        },
+        {
+          "bv": 100,
+          "id": "1",
+          "is": 7.576973956005033e-18,
+          "kind": "diode",
+          "n": 2,
+          "nodes": [
+            "out_n",
+            "0",
+          ],
+          "rs": 2,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "out",
+      "ch1n": "out_n",
+      "ch2": undefined,
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "integrator": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "in",
+            "net2",
+          ],
+          "ohms": 10000,
+        },
+        {
+          "id": "1",
+          "kind": "opamp",
+          "model": "lmc662",
+          "nodes": {
+            "inN": "net2",
+            "inP": "0",
+            "out": "out",
+          },
+          "part": "op484",
+        },
+        {
+          "farads": 1e-7,
+          "id": "1",
+          "kind": "capacitor",
+          "nodes": [
+            "net2",
+            "out",
+          ],
+        },
+        {
+          "id": "2",
+          "kind": "resistor",
+          "nodes": [
+            "net2",
+            "out",
+          ],
+          "ohms": 20000,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "out",
+      "ch1n": undefined,
+      "ch2": "in",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "inv-amp": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "in",
+            "net2",
+          ],
+          "ohms": 10000,
+        },
+        {
+          "id": "1",
+          "kind": "opamp",
+          "model": "lmc662",
+          "nodes": {
+            "inN": "net2",
+            "inP": "0",
+            "out": "out",
+          },
+          "part": "op484",
+        },
+        {
+          "id": "2",
+          "kind": "resistor",
+          "nodes": [
+            "net2",
+            "out",
+          ],
+          "ohms": 20000,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "out",
+      "ch1n": undefined,
+      "ch2": "in",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "lc-hp": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "farads": 0.000001,
+          "id": "1",
+          "kind": "capacitor",
+          "nodes": [
+            "in",
+            "out",
+          ],
+        },
+        {
+          "henries": 0.01,
+          "id": "1",
+          "kind": "inductor",
+          "nodes": [
+            "out",
+            "0",
+          ],
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "out",
+      "ch1n": undefined,
+      "ch2": "in",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "lc-lp": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "henries": 0.01,
+          "id": "1",
+          "kind": "inductor",
+          "nodes": [
+            "in",
+            "out",
+          ],
+        },
+        {
+          "farads": 0.000001,
+          "id": "1",
+          "kind": "capacitor",
+          "nodes": [
+            "out",
+            "0",
+          ],
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "out",
+      "ch1n": undefined,
+      "ch2": "in",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "led-pwm": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "in",
+            "net2",
+          ],
+          "ohms": 470,
+        },
+        {
+          "bv": 100,
+          "id": "1",
+          "is": 7.576973956005033e-18,
+          "kind": "diode",
+          "n": 2,
+          "nodes": [
+            "net2",
+            "0",
+          ],
+          "rs": 2,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "in",
+      "ch1n": undefined,
+      "ch2": undefined,
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "nmos-curve-family": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "channel": "nmos",
+          "id": "1",
+          "kind": "mosfet",
+          "model": "VTO=1.5 KP=0.005 LAMBDA=0.02",
+          "nodes": [
+            "in",
+            "in2",
+            "scope2",
+          ],
+        },
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W2",
+          "kind": "vsource",
+          "nodes": [
+            "w2_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout2",
+          "kind": "resistor",
+          "nodes": [
+            "w2_src",
+            "in2",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "scope2",
+            "0",
+          ],
+          "ohms": 10,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "in",
+      "ch1n": undefined,
+      "ch2": "scope2",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "nmos-output-xy": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "channel": "nmos",
+          "id": "1",
+          "kind": "mosfet",
+          "model": "VTO=1.5 KP=0.005 LAMBDA=0.02",
+          "nodes": [
+            "in",
+            "net2",
+            "scope2",
+          ],
+        },
+        {
+          "id": "S1",
+          "kind": "dcrail",
+          "node": "net2",
+          "volts": 5,
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "scope2",
+            "0",
+          ],
+          "ohms": 100,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "in",
+      "ch1n": undefined,
+      "ch2": "scope2",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "noninv-amp": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "id": "1",
+          "kind": "opamp",
+          "model": "lmc662",
+          "nodes": {
+            "inN": "net2",
+            "inP": "in",
+            "out": "out",
+          },
+          "part": "op484",
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "net2",
+            "out",
+          ],
+          "ohms": 10000,
+        },
+        {
+          "id": "2",
+          "kind": "resistor",
+          "nodes": [
+            "net2",
+            "0",
+          ],
+          "ohms": 10000,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "out",
+      "ch1n": undefined,
+      "ch2": "in",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "rc-hp": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "farads": 1e-7,
+          "id": "1",
+          "kind": "capacitor",
+          "nodes": [
+            "in",
+            "out",
+          ],
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "out",
+            "0",
+          ],
+          "ohms": 1500,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "out",
+      "ch1n": undefined,
+      "ch2": "in",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "rc-lp": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "in",
+            "out",
+          ],
+          "ohms": 1500,
+        },
+        {
+          "farads": 1e-7,
+          "id": "1",
+          "kind": "capacitor",
+          "nodes": [
+            "out",
+            "0",
+          ],
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "out",
+      "ch1n": undefined,
+      "ch2": "in",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "rl-hp": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "in",
+            "out",
+          ],
+          "ohms": 1000,
+        },
+        {
+          "henries": 0.01,
+          "id": "1",
+          "kind": "inductor",
+          "nodes": [
+            "out",
+            "0",
+          ],
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "out",
+      "ch1n": undefined,
+      "ch2": "in",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "rl-lp": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "henries": 0.01,
+          "id": "1",
+          "kind": "inductor",
+          "nodes": [
+            "in",
+            "out",
+          ],
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "out",
+            "0",
+          ],
+          "ohms": 1000,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "out",
+      "ch1n": undefined,
+      "ch2": "in",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "rlc-bandpass": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "henries": 0.1,
+          "id": "1",
+          "kind": "inductor",
+          "nodes": [
+            "in",
+            "net2",
+          ],
+        },
+        {
+          "farads": 1e-7,
+          "id": "1",
+          "kind": "capacitor",
+          "nodes": [
+            "net2",
+            "out",
+          ],
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "out",
+            "0",
+          ],
+          "ohms": 100,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "out",
+      "ch1n": undefined,
+      "ch2": "in",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "signal-sine": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "in",
+            "0",
+          ],
+          "ohms": 1000000,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "in",
+      "ch1n": undefined,
+      "ch2": undefined,
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "summing": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "in",
+            "net2",
+          ],
+          "ohms": 10000,
+        },
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W2",
+          "kind": "vsource",
+          "nodes": [
+            "w2_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout2",
+          "kind": "resistor",
+          "nodes": [
+            "w2_src",
+            "in2",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "id": "2",
+          "kind": "resistor",
+          "nodes": [
+            "in2",
+            "net2",
+          ],
+          "ohms": 10000,
+        },
+        {
+          "id": "1",
+          "kind": "opamp",
+          "model": "lmc662",
+          "nodes": {
+            "inN": "net2",
+            "inP": "0",
+            "out": "out",
+          },
+          "part": "op484",
+        },
+        {
+          "id": "3",
+          "kind": "resistor",
+          "nodes": [
+            "net2",
+            "out",
+          ],
+          "ohms": 10000,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "out",
+      "ch1n": undefined,
+      "ch2": "in",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "tia-ac": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "in",
+            "net2",
+          ],
+          "ohms": 10000,
+        },
+        {
+          "id": "1",
+          "kind": "opamp",
+          "model": "lmc662",
+          "nodes": {
+            "inN": "net2",
+            "inP": "0",
+            "out": "out",
+          },
+          "part": "op484",
+        },
+        {
+          "farads": 1e-10,
+          "id": "1",
+          "kind": "capacitor",
+          "nodes": [
+            "net2",
+            "out",
+          ],
+        },
+        {
+          "id": "2",
+          "kind": "resistor",
+          "nodes": [
+            "net2",
+            "out",
+          ],
+          "ohms": 100000,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "out",
+      "ch1n": undefined,
+      "ch2": "in",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "tia-photodiode": {
+    "circuit": {
+      "components": [
+        {
+          "id": "S1",
+          "kind": "dcrail",
+          "node": "net0",
+          "volts": 5,
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "net0",
+            "net1",
+          ],
+          "ohms": 10000,
+        },
+        {
+          "id": "2",
+          "kind": "resistor",
+          "nodes": [
+            "net1",
+            "0",
+          ],
+          "ohms": 1000,
+        },
+        {
+          "id": "1",
+          "kind": "opamp",
+          "model": "lmc662",
+          "nodes": {
+            "inN": "net3",
+            "inP": "net1",
+            "out": "out",
+          },
+          "part": "tlv9062",
+        },
+        {
+          "bv": 32,
+          "cj0": 7.2e-11,
+          "id": "1",
+          "iphoto": 0.00008,
+          "iphotoAc": 1,
+          "is": 1e-10,
+          "kind": "diode",
+          "n": 1,
+          "nodes": [
+            "0",
+            "net3",
+          ],
+          "rs": 10,
+        },
+        {
+          "farads": 1e-9,
+          "id": "1",
+          "kind": "capacitor",
+          "nodes": [
+            "net3",
+            "out",
+          ],
+        },
+        {
+          "id": "3",
+          "kind": "resistor",
+          "nodes": [
+            "net3",
+            "out",
+          ],
+          "ohms": 33000,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "out",
+      "ch1n": undefined,
+      "ch2": undefined,
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+  "zener-iv": {
+    "circuit": {
+      "components": [
+        {
+          "acMag": 1,
+          "dc": 0,
+          "id": "W1",
+          "kind": "vsource",
+          "nodes": [
+            "w1_src",
+            "0",
+          ],
+        },
+        {
+          "id": "aout1",
+          "kind": "resistor",
+          "nodes": [
+            "w1_src",
+            "in",
+          ],
+          "ohms": 49.9,
+        },
+        {
+          "bv": 3.3,
+          "id": "1",
+          "kind": "diode",
+          "nodes": [
+            "in",
+            "out_n",
+          ],
+        },
+        {
+          "id": "1",
+          "kind": "resistor",
+          "nodes": [
+            "out_n",
+            "0",
+          ],
+          "ohms": 470,
+        },
+        {
+          "id": "0",
+          "kind": "ground",
+          "node": "0",
+        },
+      ],
+      "title": "Schematic",
+    },
+    "probes": {
+      "ch1": "in",
+      "ch1n": "out_n",
+      "ch2": "out_n",
+      "ch2n": undefined,
+    },
+    "warnings": [],
+  },
+}
+`;

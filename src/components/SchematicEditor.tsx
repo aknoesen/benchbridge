@@ -1,12 +1,15 @@
 // Schematic editor (SCH-1) — a lightweight node-and-wire editor (NOT KiCad). Place R/C/L/V/
 // op-amp/ground/probe on a grid, draw wires, edit values. Produces a SPICE-2 Circuit via
 // toCircuit(). See docs/specs/schematic-ngspice.md (SCH-1).
-import { useMemo, useRef, useState, useEffect, type ReactElement, type Dispatch, type SetStateAction } from 'react'
+import { useMemo, useRef, useState, useEffect, type ReactElement, type Dispatch, type SetStateAction, type CSSProperties } from 'react'
 import {
-  Schematic, SchComponent, SchKind, terminalsOf, toCircuit, ampCategory, computeNets,
+  Schematic, SchComponent, SchKind, terminalsOf, localTerminals, toCircuit, ampCategory, computeNets,
   attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentWithWires,
-  deleteComponentsWithWires, type WireEndRef,
+  mirrorComponentWithWires, canMirror, orthoRoute, deleteComponentsWithWires, migrateSchematic,
+  type WireEndRef,
 } from '../core/schematic'
+import { symbolFor, alignTransform, matScale, inkedInner } from '../core/symbolArt'
+import { SYMBOL_CATALOG } from '../core/symbolCatalog'
 import { buildNetlist, TRANSISTOR_PARTS } from '../core/netlist'
 import { EXAMPLES } from '../core/examples'
 import { createSpiceEngine, type SpiceEngine, transferFunction } from '../core/spice'
@@ -53,6 +56,71 @@ function tiaHintFor(sch: Schematic, pdId: string): { rfOhms: number; gbwHz: numb
 
 const GRID = 24
 const PAD = 16
+const PIN_SNAP_PX = 10 // magnetic radius for modeless pin-to-pin wiring (Stage 3)
+const PAPER_KEY = 'bm2k-paper-style'
+
+// SCH-11 "paper" canvas: the circuitikz symbols are line artwork, so the schematic
+// surface is a document skin INSIDE the dark app. These CSS custom properties are set
+// on the schematic <svg> only, so every var()-coloured element inside re-resolves per
+// skin without touching the app-wide dark theme. Three paper styles (Stage 4, andre):
+// white (default — and what the PNG export ALWAYS uses, via the export `vars` override),
+// green engineering pad (pale sage + fine line grid == the snap grid), and blueprint.
+// The skins are on-screen editing surfaces only; exported figures stay publication-white.
+type PaperStyle = 'white' | 'green' | 'blueprint'
+const PAPER_STYLES: Record<PaperStyle, CSSProperties & Record<string, string>> = {
+  white: {
+    background: '#fdfdfa',
+    '--sch-ink': '#1c1c1c',        // symbol + remaining inline part ink
+    '--wire-color': '#1c1c1c',     // wires read as ink, like the reader's figures
+    '--node-color': '#2a6ad0',     // terminal dots: visible wiring targets on paper
+    '--accent-blue': '#1d6fd8',    // selection/marquee: darker blue for white bg
+    '--text-primary': '#1c1c1c',
+    '--text-secondary': '#5a5a5a',
+    '--bg-panel': '#ffffff',       // body fill of the remaining inline parts (INA125)
+    '--theory-color': '#0a8a4a',   // legacy probe marker
+    '--ch1-color': '#c05f00',      // 1+/1− port markers (darkened CH1 orange)
+    '--ch2-color': '#7d3fa0',      // 2+/2− port markers (darkened CH2 purple)
+    '--awg-color': '#9c7a00',      // W1/W2 port markers (darkened from the dark theme's #e0c020)
+    '--sch-grid': '#d8d8d2',       // grid dots
+  },
+  green: {
+    // the classic sage computation pad: tint kept very light so ink and port hues pop
+    background: '#edf2e3',
+    '--sch-ink': '#1c1c1c',
+    '--wire-color': '#1c1c1c',
+    '--node-color': '#2a6ad0',
+    '--accent-blue': '#1d6fd8',
+    '--text-primary': '#1c1c1c',
+    '--text-secondary': '#55604a',
+    '--bg-panel': '#f6f9ef',
+    '--theory-color': '#0a8a4a',
+    '--ch1-color': '#c05f00',
+    '--ch2-color': '#7d3fa0',
+    '--awg-color': '#9c7a00',
+    '--sch-grid': '#c7d6b6',       // printed grid lines (== the snap grid pitch)
+    '--sch-grid-minor': '#e0e9d3', // the pad's fine 5×5 subdivision — barely-there
+  },
+  blueprint: {
+    background: '#1d3a5f',
+    '--sch-ink': '#e6edf5',        // white-line drawing on blue
+    '--wire-color': '#e6edf5',
+    '--node-color': '#7ab8ff',
+    '--accent-blue': '#7ab8ff',
+    '--text-primary': '#e6edf5',
+    '--text-secondary': '#9fb4cc',
+    '--bg-panel': '#1d3a5f',
+    '--theory-color': '#4adf95',
+    '--ch1-color': '#f0a030',      // bright channel hues read fine on deep blue
+    '--ch2-color': '#c98fe8',
+    '--awg-color': '#e0c020',
+    '--sch-grid': '#33557f',
+  },
+}
+// The PNG export is a publication figure: always the white-paper palette, whatever
+// skin is on screen (passed to exportSvgToPng as the `vars` override).
+const EXPORT_PAPER_VARS = Object.fromEntries(
+  Object.entries(PAPER_STYLES.white).filter(([k]) => k.startsWith('--')),
+) as Record<string, string>
 
 type Tool = 'select' | 'wire' | SchKind
 
@@ -72,10 +140,11 @@ const TOOLS: { tool: Tool; label: string }[] = [
   { tool: 'ina125', label: 'INA125' },
   { tool: 'awg1', label: 'W1' },
   { tool: 'awg2', label: 'W2' },
-  { tool: 'scope1', label: '1+' },
-  { tool: 'adc1n', label: '1-' },
-  { tool: 'scope2', label: '2+' },
-  { tool: 'adc2n', label: '2-' },
+  // Option B (andre): ONE measurement input per channel — places the existing 1+/2+ port
+  // (single-ended; the − lead comes from the differential toggle on the placed input).
+  // The raw 1-/2- terminals are no longer palette buttons; the kinds still exist.
+  { tool: 'scope1', label: 'CH1 meas' },
+  { tool: 'scope2', label: 'CH2 meas' },
   { tool: 'vplus', label: 'V+' },
   { tool: 'vminus', label: 'V-' },
   { tool: 'ground', label: 'GND' },
@@ -160,12 +229,32 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     | null
   >(null)
   const [placeRotation, setPlaceRotation] = useState(0)
+  const [placeMirror, setPlaceMirror] = useState(false) // ghost pre-flip (Stage 4)
+  // On-screen paper skin (white / green pad / blueprint) — view-only; export is always white.
+  // Persisted; first run defaults to the GREEN pad (andre: the ruling is the point of
+  // engineering paper — it reads as a workspace and helps align parts).
+  const [paperStyle, setPaperStyle] = useState<PaperStyle>(() => {
+    try {
+      const r = localStorage.getItem(PAPER_KEY)
+      if (r === 'white' || r === 'green' || r === 'blueprint') return r
+    } catch { /* ignore */ }
+    return 'green'
+  })
+  useEffect(() => { try { localStorage.setItem(PAPER_KEY, paperStyle) } catch { /* quota */ } }, [paperStyle])
+  // Right-click context menu on a part: rotate/flip/duplicate/delete without the keyboard.
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; id: string } | null>(null)
   // Place-time type selectors: when the Op-amp / In-amp tool is active a sub-selector below the
   // toolbar picks the exact part to drop. These map to (kind, opModel) at placement time.
   const [simStatus, setSimStatus] = useState('')
   const [simBusy, setSimBusy] = useState(false)
   const engineRef = useRef<SpiceEngine | null>(null)
   const [hoverGrid, setHoverGrid] = useState<{ gx: number; gy: number } | null>(null)
+  // Part under the cursor — R/F act on it in preference to the selection (Stage 2 hover-targeting).
+  const [hoverPartId, setHoverPartId] = useState<string | null>(null)
+  // Stage 3 pin-magnetic modeless wiring (Select tool): the pin under the cursor (magnetic
+  // highlight + snap target) and the start pin of a wiring gesture in progress.
+  const [hoverPin, setHoverPin] = useState<{ x: number; y: number } | null>(null)
+  const [pinWire, setPinWire] = useState<{ x: number; y: number } | null>(null)
   const [selectedWire, setSelectedWire] = useState<number | null>(null)
 
   // ---- Clipboard (copy/paste/cut). Undo/redo (snapshot/undo/redo) come from App via props. -----
@@ -291,7 +380,8 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         const src = fromLab ? d.schematic : d
         if (Array.isArray(src.components) && Array.isArray(src.wires)) {
           snapshot()
-          setSch({ components: src.components, wires: src.wires })
+          // migrate pre-two-terminal saves (standalone 1-/2- ports → the scope's − pin)
+          setSch(migrateSchematic({ components: src.components, wires: src.wires }))
           setSelected(null)
           setSelectedWire(null)
           setSimStatus(fromLab
@@ -317,6 +407,40 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     }
   }
 
+  // Nearest wireable pin (a component terminal or an existing wire endpoint) within the magnetic
+  // radius of the RAW mouse position — sub-grid distance, so the snap feels magnetic rather than
+  // cell-quantized. Recomputed in the down handlers (not read from hover state) to avoid staleness.
+  function pinNear(e: React.MouseEvent): { x: number; y: number } | null {
+    const r = svgRef.current!.getBoundingClientRect()
+    const mx = e.clientX - r.left, my = e.clientY - r.top
+    let best: { x: number; y: number } | null = null
+    let bd = PIN_SNAP_PX
+    const consider = (gx: number, gy: number) => {
+      const d = Math.hypot(mx - (gx * GRID + PAD), my - (gy * GRID + PAD))
+      if (d < bd) { bd = d; best = { x: gx, y: gy } }
+    }
+    for (const c of sch.components) for (const t of terminalsOf(c)) consider(t.gx, t.gy)
+    for (const w of sch.wires) { consider(w.x1, w.y1); consider(w.x2, w.y2) }
+    return best
+  }
+
+  // Pin-magnetic wiring gesture: first pin-down starts it, second commits the orthogonal route,
+  // a down anywhere that is not a pin cancels (the grid-click Wire tool remains the free-form path).
+  function pinWireDown(target: { x: number; y: number } | null) {
+    if (!pinWire) {
+      if (target) setPinWire(target)
+      return
+    }
+    if (target && (target.x !== pinWire.x || target.y !== pinWire.y)) {
+      const segs = orthoRoute(pinWire, target)
+      if (segs.length) {
+        snapshot()
+        setSch((s) => ({ ...s, wires: [...s.wires, ...segs] }))
+      }
+    }
+    setPinWire(null)
+  }
+
   // Background mouse-down: in the Select tool, start a marquee (drag a box to select). Components
   // stop propagation on their own mouse-down, so this only fires on empty canvas.
   // Bounding box (grid units) of the current multi-selection, or null if nothing is boxed.
@@ -330,6 +454,10 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
 
   function onSvgDown(e: React.MouseEvent) {
     if (tool !== 'select') return
+    // Pin-magnetic wiring takes precedence: a down on a pin starts/commits a wire; a down
+    // anywhere else while wiring cancels it (and does not fall through to marquee/drag).
+    const pin = pinNear(e)
+    if (pinWire || pin) { pinWireDown(pin); return }
     const { gx, gy } = gridAt(e)
     marqueeMoved.current = false
     dragSnapped.current = false
@@ -362,7 +490,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     // place-time sub-selector; everything else places its own kind directly.
     const kind = tool as SchKind
     // Op-amp places kind 'opamp' (LMC662); INA125 places kind 'ina125'. Power implied in sim, DIP on board.
-    const c: SchComponent = { id: newId(kind, sch.components), kind, gx, gy, rotation: placeRotation, value: DEFAULT_VALUE[kind], part: DEFAULT_PART[kind] }
+    const c: SchComponent = { id: newId(kind, sch.components), kind, gx, gy, rotation: placeRotation, mirror: (placeMirror && canMirror(kind)) || undefined, value: DEFAULT_VALUE[kind], part: DEFAULT_PART[kind] }
     snapshot()
     setSch((s) => ({ ...s, components: [...s.components, c] }))
     setSelected(c.id)
@@ -372,6 +500,12 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
 
   function onComponentDown(e: React.MouseEvent, id: string) {
     e.stopPropagation()
+    // Grab a pin → wire; grab the body → select/drag (the standard EDA split). Terminal dots
+    // paint inside the component group, so the wiring check must run here too.
+    if (tool === 'select') {
+      const pin = pinNear(e)
+      if (pinWire || pin) { pinWireDown(pin); return }
+    }
     setSelectedWire(null)
     dragSnapped.current = false
     if (e.shiftKey) {
@@ -395,12 +529,30 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   function onWireClick(e: React.MouseEvent, i: number) {
     e.stopPropagation()
     if (tool === 'wire') return // don't select while drawing wires
+    if (pinWire || pinNear(e)) return // the down already started/committed a pin wire — not a select
     setSelectedWire(i)
     setSelected(null)
+  }
+  // Hover-targeting (Stage 2): the part whose terminal bounding box contains the snapped grid
+  // point — computed from the model, not DOM enter/leave on the artwork, so the gaps between a
+  // symbol's thin strokes still count as "over the part". Topmost (last rendered) wins.
+  function partAt(gx: number, gy: number): string | null {
+    for (let i = sch.components.length - 1; i >= 0; i--) {
+      const ts = terminalsOf(sch.components[i])
+      let minx = ts[0].gx, maxx = ts[0].gx, miny = ts[0].gy, maxy = ts[0].gy
+      for (const t of ts) {
+        minx = Math.min(minx, t.gx); maxx = Math.max(maxx, t.gx)
+        miny = Math.min(miny, t.gy); maxy = Math.max(maxy, t.gy)
+      }
+      if (gx >= minx && gx <= maxx && gy >= miny && gy <= maxy) return sch.components[i].id
+    }
+    return null
   }
   function onMouseMove(e: React.MouseEvent) {
     const { gx, gy } = gridAt(e)
     setHoverGrid({ gx, gy }) // live snap indicator for the wire tool
+    setHoverPartId(partAt(gx, gy))
+    setHoverPin(tool === 'select' && !drag && !marquee ? pinNear(e) : null)
     if (marquee) {
       if (gx !== marquee.x0 || gy !== marquee.y0) marqueeMoved.current = true
       setMarquee((m) => (m ? { ...m, x1: gx, y1: gy } : m))
@@ -444,6 +596,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
 
   function deleteSelected() {
     if (selectedWire === null && selSet.size === 0 && !selected) return
+    setHoverPartId(null) // a removed element fires no mouseleave — drop the hover id explicitly
     snapshot()
     if (selectedWire !== null) {
       setSch((s) => ({ ...s, wires: s.wires.filter((_, i) => i !== selectedWire) }))
@@ -460,13 +613,57 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     setSch((s) => deleteComponentsWithWires(s, new Set([selected])))
     setSelSet(new Set()); setSelWires(new Set()); setSelected(null)
   }
+  // R/F target: the part under the cursor wins, else the selection. Resolved against the live
+  // component list because a delete can leave a stale hover id (no mouseleave fires for a
+  // removed element).
+  function keyTarget(): SchComponent | null {
+    for (const id of [hoverPartId, selected]) {
+      const c = id ? sch.components.find((x) => x.id === id) : undefined
+      if (c) return c
+    }
+    return null
+  }
+  // With a part tool active the user is placing: R/F pre-rotate/pre-flip the ghost that rides
+  // the cursor (Stage 4), never a part already on the canvas.
+  const placing = tool !== 'select' && tool !== 'wire'
   function rotate() {
-    if (selected) {
+    if (placing) { setPlaceRotation((r) => (r + 1) % 4); return }
+    const target = keyTarget()
+    if (target) {
       snapshot()
-      setSch((s) => rotateComponentWithWires(s, selected))
+      setSch((s) => rotateComponentWithWires(s, target.id))
     } else {
       setPlaceRotation((r) => (r + 1) % 4)
     }
+  }
+  function flip() {
+    if (placing) { if (canMirror(tool as SchKind)) setPlaceMirror((m) => !m); return }
+    const target = keyTarget()
+    if (!target || !canMirror(target.kind)) return
+    snapshot()
+    setSch((s) => mirrorComponentWithWires(s, target.id))
+  }
+  function rotatePart(id: string) {
+    snapshot()
+    setSch((s) => rotateComponentWithWires(s, id))
+  }
+  function flipPart(id: string) {
+    snapshot()
+    setSch((s) => mirrorComponentWithWires(s, id))
+  }
+  function duplicatePart(id: string) {
+    const c = sch.components.find((x) => x.id === id)
+    if (!c) return
+    const copy: SchComponent = { ...c, id: newId(c.kind, sch.components), gx: c.gx + 1, gy: c.gy + 1 }
+    snapshot()
+    setSch((s) => ({ ...s, components: [...s.components, copy] }))
+    setSelected(copy.id); setSelSet(new Set([copy.id])); setSelWires(new Set())
+  }
+  function deletePart(id: string) {
+    setHoverPartId(null)
+    snapshot()
+    setSch((s) => deleteComponentsWithWires(s, new Set([id])))
+    setSelSet(new Set()); setSelWires(new Set()); setSelected(null)
   }
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -483,16 +680,27 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         else if (k === 'x') { e.preventDefault(); cutSelection() }
         return
       }
-      // Delete and R act only when the pointer is over THIS panel: in the stacked Board view the
+      // Delete/R/F act only when the pointer is over THIS panel: in the stacked Board view the
       // Breadboard is mounted alongside with its own global keys, and without the gate one press
       // hit both — deleting/rotating the selected schematic part while the user worked the board.
+      // Within the panel, R/F prefer the part under the cursor over the selection (keyTarget).
       if (!pointerInsideRef.current) return
       if ((e.key === 'Delete' || e.key === 'Backspace') && (selected || selectedWire !== null || selSet.size)) deleteSelected()
       else if (e.key === 'r' || e.key === 'R') rotate()
+      else if (e.key === 'f' || e.key === 'F') flip()
+      else if (e.key === 'Escape') { setPinWire(null); setWireStart(null); setCtxMenu(null) } // abandon gesture/menu
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   })
+
+  // Any press outside the context menu dismisses it (the menu stops its own mousedown).
+  useEffect(() => {
+    if (!ctxMenu) return
+    const close = () => setCtxMenu(null)
+    window.addEventListener('mousedown', close)
+    return () => window.removeEventListener('mousedown', close)
+  }, [ctxMenu])
 
   const sel = sch.components.find((c) => c.id === selected) || null
 
@@ -529,6 +737,14 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     snapshot()
     const value = k === 'led' ? 2.0 : k === 'zener' ? 3.3 : k === 'photodiode' ? 80e-6 : undefined
     setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, kind: k, value } : c) }))
+  }
+
+  // Option B: presentational scope/voltmeter view on the shared measurement input (1+/2+).
+  // Same port, same nets, same sim — only the badge glyph changes.
+  function setSelView(v: 'scope' | 'voltmeter') {
+    if (!sel) return
+    snapshot()
+    setSch((s) => ({ ...s, components: s.components.map((c) => c.id === sel.id ? { ...c, view: v === 'scope' ? undefined : v } : c) }))
   }
 
   // SCH-8: choose the ADALP2000 transistor part (sets the NPN/PNP or N/P-channel model body).
@@ -600,13 +816,20 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
           <div className="display-controls">
             <button className="run-btn active" onClick={simulate} disabled={simBusy}>{simBusy ? 'Simulating…' : '▶ Simulate'}</button>
             <button className="run-btn" onClick={rotate}>Rotate (R)</button>
+            <button className="run-btn" onClick={flip}>Flip (F)</button>
             <button className="run-btn" onClick={deleteSelected} disabled={!selected && selectedWire === null}>Delete</button>
             <button className="run-btn" onClick={saveCircuit}>Save</button>
             <button className="run-btn" onClick={() => fileRef.current?.click()}>Open</button>
-            <button className="run-btn" title="Save the schematic as a PNG (transparent background) for your prelab"
-              onClick={() => { if (svgRef.current) exportSvgToPng(svgRef.current, 'schematic.png', { light: true }).catch((e) => setSimStatus('Export failed: ' + e.message)) }}>
+            <button className="run-btn" title="Save the schematic as a white-paper PNG figure for your prelab"
+              onClick={() => { if (svgRef.current) exportSvgToPng(svgRef.current, 'schematic.png', { paper: true, vars: EXPORT_PAPER_VARS }).catch((e) => setSimStatus('Export failed: ' + e.message)) }}>
               Export PNG
             </button>
+            <select className="run-btn" title="Paper style — on-screen editing skin only; the PNG export is always white"
+              value={paperStyle} onChange={(e) => setPaperStyle(e.target.value as PaperStyle)}>
+              <option value="white">White paper</option>
+              <option value="green">Green pad</option>
+              <option value="blueprint">Blueprint</option>
+            </select>
             <select className="run-btn" title="Load an example circuit" value=""
               onChange={(e) => {
                 const ex = EXAMPLES.find((x) => x.id === e.target.value)
@@ -641,17 +864,37 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         <svg
           ref={svgRef}
           className="plotly-display"
-          style={{ background: 'var(--bg-display)', cursor: tool !== 'select' ? 'crosshair' : (overSelection ? 'move' : 'default') }}
+          style={{ ...PAPER_STYLES[paperStyle], cursor: tool !== 'select' || hoverPin || pinWire ? 'crosshair' : (overSelection ? 'move' : 'default') }}
           onClick={onBackgroundClick}
           onMouseDown={onSvgDown}
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}
-          onMouseLeave={() => { setMarquee(null); setDrag(null) }}
+          onMouseLeave={() => { setMarquee(null); setDrag(null); setHoverPartId(null); setHoverPin(null); setHoverGrid(null) }}
+          onContextMenu={(e) => {
+            // Right-click a part → action menu (mouse/touch discoverability for R/F etc.).
+            e.preventDefault()
+            const { gx, gy } = gridAt(e)
+            const id = partAt(gx, gy)
+            if (id) {
+              setSelected(id); setSelSet(new Set([id])); setSelWires(new Set()); setSelectedWire(null)
+              setCtxMenu({ x: e.clientX, y: e.clientY, id })
+            } else setCtxMenu(null)
+          }}
         >
           {/* grid dots */}
           <defs>
             <pattern id="gridDots" x={PAD} y={PAD} width={GRID} height={GRID} patternUnits="userSpaceOnUse">
-              <circle cx={0} cy={0} r={1} fill="#333" />
+              {paperStyle === 'white'
+                ? <circle cx={0} cy={0} r={1} fill="var(--sch-grid)" />
+                // engineering pad / blueprint: a printed line grid, one cell = one snap step;
+                // the green pad also gets the classic 5×5 minor subdivision, kept very faint
+                : <>
+                    {paperStyle === 'green' && (
+                      <path d={[1, 2, 3, 4].map((i) => `M ${i * GRID / 5} 0 V ${GRID} M 0 ${i * GRID / 5} H ${GRID}`).join(' ')}
+                        fill="none" stroke="var(--sch-grid-minor)" strokeWidth={0.4} />
+                    )}
+                    <path d={`M ${GRID} 0 L 0 0 0 ${GRID}`} fill="none" stroke="var(--sch-grid)" strokeWidth={0.6} />
+                  </>}
             </pattern>
           </defs>
           <rect x={0} y={0} width="100%" height="100%" fill="url(#gridDots)" />
@@ -682,6 +925,23 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
             <circle cx={px(hoverGrid.gx)} cy={px(hoverGrid.gy)} r={5} fill="none"
               stroke="var(--accent-blue)" strokeWidth={1.5} pointerEvents="none" />
           )}
+
+          {/* Stage 3 pin-magnetic wiring: highlight ring on the snapped pin, and while a gesture
+              is live, the exact orthogonal route that a commit would add (dashed). */}
+          {hoverPin && !drag && !marquee && (
+            <circle cx={px(hoverPin.x)} cy={px(hoverPin.y)} r={7} fill="none"
+              stroke="var(--accent-blue)" strokeWidth={2} pointerEvents="none" />
+          )}
+          {pinWire && (
+            <circle cx={px(pinWire.x)} cy={px(pinWire.y)} r={4.5} fill="var(--accent-blue)" pointerEvents="none" />
+          )}
+          {pinWire && hoverGrid && (() => {
+            const end = hoverPin ?? { x: hoverGrid.gx, y: hoverGrid.gy }
+            return orthoRoute(pinWire, end).map((w, i) => (
+              <line key={`pw${i}`} x1={px(w.x1)} y1={px(w.y1)} x2={px(w.x2)} y2={px(w.y2)}
+                stroke="var(--accent-blue)" strokeWidth={1.5} strokeDasharray="5 3" pointerEvents="none" />
+            ))
+          })()}
           {/* marquee box-select */}
           {marquee && (
             <rect x={px(Math.min(marquee.x0, marquee.x1))} y={px(Math.min(marquee.y0, marquee.y1))}
@@ -714,6 +974,25 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
             </g>
           ))}
 
+          {/* Stage 4 ghost-place: the active palette part rides the cursor (R/F pre-rotate/flip);
+              the click that commits it is unchanged (onBackgroundClick places at the same snap). */}
+          {placing && hoverGrid && (() => {
+            const kind = tool as SchKind
+            const ghost: SchComponent = {
+              id: newId(kind, sch.components), kind, gx: hoverGrid.gx, gy: hoverGrid.gy,
+              rotation: placeRotation, mirror: (placeMirror && canMirror(kind)) || undefined,
+              value: DEFAULT_VALUE[kind], part: DEFAULT_PART[kind],
+            }
+            return (
+              <g opacity={0.45} pointerEvents="none">
+                {renderSymbol(ghost, px, false)}
+                {terminalsOf(ghost).map((t, i) => (
+                  <circle key={i} cx={px(t.gx)} cy={px(t.gy)} r={3} fill="var(--node-color)" />
+                ))}
+              </g>
+            )
+          })()}
+
           {/* junction dots — a filled dot where two pins butt together (a touch-connection) or three
               or more pins/wires meet, so "these are electrically connected here" is always visible. */}
           {(() => {
@@ -732,7 +1011,34 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
             }
             return dots
           })()}
+
+          {/* Stage 4 hover hint chip — fades in while a part is under the cursor */}
+          <g pointerEvents="none" style={{ opacity: tool === 'select' && hoverPartId && !drag && !marquee && !pinWire ? 0.92 : 0, transition: 'opacity 0.25s' }}>
+            <rect x={8} y={8} width={198} height={20} rx={10} fill="var(--bg-panel)" stroke="var(--sch-grid)" />
+            <text x={107} y={22} fontSize={10} fill="var(--text-secondary)" textAnchor="middle">R rotate · F flip · right-click: menu</text>
+          </g>
         </svg>
+
+        {/* Stage 4 right-click menu — rotate/flip/duplicate/delete without the keyboard */}
+        {ctxMenu && (() => {
+          const c = sch.components.find((x) => x.id === ctxMenu.id)
+          if (!c) return null
+          const item = (label: string, fn: () => void, disabled = false) => (
+            <button key={label} className="run-btn" disabled={disabled}
+              style={{ display: 'block', width: '100%', textAlign: 'left' }}
+              onClick={() => { fn(); setCtxMenu(null) }}>{label}</button>
+          )
+          return (
+            <div onMouseDown={(e) => e.stopPropagation()}
+              style={{ position: 'fixed', left: ctxMenu.x, top: ctxMenu.y, zIndex: 1000, background: 'var(--bg-panel)', border: '1px solid #4a4a4a', borderRadius: 6, padding: 4, minWidth: 150, boxShadow: '0 4px 14px rgba(0,0,0,0.45)' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-secondary)', padding: '2px 6px 4px' }}>{c.id} ({c.kind})</div>
+              {item('Rotate (R)', () => rotatePart(c.id))}
+              {item('Flip (F)', () => flipPart(c.id), !canMirror(c.kind))}
+              {item('Duplicate', () => duplicatePart(c.id))}
+              {item('Delete', () => deletePart(c.id))}
+            </div>
+          )
+        })()}
       </div>
 
       <div className="settings-panel">
@@ -761,19 +1067,25 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         </div>
 
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4 }}>
-          Place angle: {placeRotation * 90}° &nbsp;(press R to rotate; rotates selected part if one is selected)
+          Place angle: {placeRotation * 90}°{placeMirror ? ' · flipped' : ''} &nbsp;(placing: R/F turn and flip the ghost on the cursor; otherwise R/F act on the part under the cursor, else the selection)
         </div>
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>
           Select tool: <b>drag a box</b> over parts to select them (or Shift+click), then drag any to move the group{selSet.size > 1 ? ` (${selSet.size} selected)` : ''}.
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>
+          Wiring: <b>click a pin</b> (blue ring), then another pin — no Wire tool needed. Esc cancels.
         </div>
 
         <div className="section-title">Selected</div>
         {sel ? (
           <div>
             <div style={{ fontSize: 11, color: 'var(--text-primary)', marginBottom: 6 }}>
-              {sel.id} ({sel.kind}) — {(sel.rotation ?? 0) * 90}°
+              {sel.id} ({sel.kind}) — {(sel.rotation ?? 0) * 90}°{sel.mirror ? ' · flipped' : ''}
             </div>
-            <button className="run-btn" style={{ marginBottom: 8 }} onClick={rotate}>Rotate this part (R)</button>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+              <button className="run-btn" onClick={rotate}>Rotate (R)</button>
+              {canMirror(sel.kind) && <button className="run-btn" onClick={flip}>Flip (F)</button>}
+            </div>
             <div className="control-row-inline">
               <label>Ref</label>
               <input type="text" defaultValue={sel.id} key={'ref-' + sel.id}
@@ -792,6 +1104,25 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                 </select>
               </div>
             )}
+            {(sel.kind === 'scope1' || sel.kind === 'scope2') && (() => {
+              const ch = sel.kind === 'scope1' ? 1 : 2
+              return (
+                <>
+                  <div className="control-row-inline">
+                    <label>View as</label>
+                    <select value={sel.view ?? 'scope'} onChange={(e) => setSelView(e.target.value as 'scope' | 'voltmeter')} style={{ width: 150 }}>
+                      <option value="scope">Oscilloscope</option>
+                      <option value="voltmeter">Voltmeter</option>
+                    </select>
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>
+                    The shared CH{ch} input — scope and voltmeter read the same pins. Leave the
+                    {ch}− lead unwired for single-ended (referenced to GND); wire it to a node
+                    to measure differentially across a part.
+                  </div>
+                </>
+              )
+            })()}
             {(sel.kind === 'bjt' || sel.kind === 'mosfet') && (
               <div className="control-row-inline">
                 <label>Part</label>
@@ -1009,8 +1340,36 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   )
 }
 
+// SCH-11 I/O instrument badges: a small catalog glyph next to each M2K port's label, teaching
+// which instrument the port is (W1→generator, 1±/2±→scope/voltmeter input, V±→supply). The
+// glyph is clipped to its BODY (the bipole leads cropped away) and scaled to BADGE_PX, ink =
+// currentColor so identity/selection tinting flows through. Render-only: the port keeps its
+// single pin, its instrument binding, and the sim path untouched.
+const BADGE_PX = 20
+function badgeArt(uid: string, symId: string, cx: number, cy: number, bodyFrac = 0.5): ReactElement | null {
+  const sym = SYMBOL_CATALOG[symId]
+  if (!sym) return null
+  const [vx, vy, vw, vh] = sym.viewBox.split(/\s+/).map(Number)
+  const side = vw + 3 // bipole bodies are ≈ as tall as the glyph is wide (+ a little margin)
+  const bcx = vx + vw / 2
+  const bcy = vy + vh * bodyFrac // body centre as a fraction down the glyph (oscilloscope's is high)
+  const s = BADGE_PX / side
+  const clipId = `bclip-${uid}`
+  return (
+    <g transform={`translate(${(cx - bcx * s).toFixed(2)} ${(cy - bcy * s).toFixed(2)}) scale(${s.toFixed(4)})`}>
+      <clipPath id={clipId}>
+        <rect x={bcx - side / 2} y={bcy - side / 2} width={side} height={side} />
+      </clipPath>
+      {/* invisible grab pad: the glyph is unfilled line art, so without this a press inside
+          the badge falls through to the canvas (marquee) instead of dragging the port */}
+      <rect x={bcx - side / 2} y={bcy - side / 2} width={side} height={side} fill="transparent" stroke="none" />
+      <g clipPath={`url(#${clipId})`} dangerouslySetInnerHTML={{ __html: inkedInner(symId, sym, s) }} />
+    </g>
+  )
+}
+
 function renderSymbol(c: SchComponent, px: (g: number) => number, selected: boolean) {
-  const stroke = selected ? 'var(--accent-blue)' : 'var(--ch1-color)'
+  const stroke = selected ? 'var(--accent-blue)' : 'var(--sch-ink)'
   const sw = selected ? 2.5 : 1.8
   const ax = px(c.gx), ay = px(c.gy)
   const rot = (c.rotation ?? 0) * 90
@@ -1021,162 +1380,106 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
   )
 
   let inner: ReactElement
-  if (c.kind === 'resistor') {
-    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
-    // American zigzag resistor
-    const zig = `${x1},${y} ${cx - 18},${y} ${cx - 15},${y - 7} ${cx - 9},${y + 7} ${cx - 3},${y - 7} ${cx + 3},${y + 7} ${cx + 9},${y - 7} ${cx + 15},${y + 7} ${cx + 18},${y} ${x2},${y}`
+  // SCH-11: kinds with a circuitikz catalog symbol render from it, the artwork
+  // transformed so every catalog pin sits exactly on the app's grid terminals
+  // (baseTerminals stays authoritative — the symbol conforms to the model).
+  const art = symbolFor(c)
+  if (art) {
+    const pinById = new Map(art.sym.pins.map((p) => [p.id, p]))
+    const src = art.pinIds.map((id) => pinById.get(id)!).filter(Boolean)
+    // localTerminals bakes the model-space mirror into the destination points, so the
+    // alignment transform re-derives a flipped render — no scaleX stacked on top (which
+    // would double-flip symbols whose alignment already reflects, like the op-amp).
+    const dst = localTerminals(c).map((t) => ({ x: ax + G(t.gx), y: ay + G(t.gy) }))
+    const m = alignTransform(src, dst)
+    const html = inkedInner(art.id, art.sym, matScale(m))
+    // M2K instruments keep their identity hue (channel orange/purple, generator amber)
+    const PORT_INK: Partial<Record<SchKind, string>> = {
+      scope1: 'var(--ch1-color)', scope2: 'var(--ch2-color)',
+      awg1: 'var(--awg-color)', awg2: 'var(--awg-color)',
+    }
+    const ink = selected ? 'var(--accent-blue)' : (PORT_INK[c.kind] ?? 'var(--sch-ink)')
+    const cx = ax + G(1), y = ay
+    const idText = (tx: number, ty: number, size = 10, fill = 'var(--text-secondary)') =>
+      upright(tx, ty, <text x={tx} y={ty} fill={fill} fontSize={size} textAnchor="middle">{c.id}</text>)
+    const valText = (tx: number, ty: number) =>
+      upright(tx, ty, <text x={tx} y={ty} fill="var(--text-primary)" fontSize={9} textAnchor="middle">{fmtEng(c.value ?? 0)}{UNIT[c.kind] ?? ''}</text>)
+    const labels: ReactElement[] = []
+    switch (c.kind) {
+      case 'resistor':
+      case 'capacitor':
+      case 'inductor':
+        labels.push(idText(cx, y - 15), valText(cx, y + 20))
+        break
+      case 'vsource':
+        labels.push(idText(cx, y - 18))
+        break
+      case 'diode':
+      case 'zener':
+        labels.push(idText(cx, y - 15, 9))
+        break
+      case 'led':
+      case 'photodiode':
+        labels.push(idText(cx, y + 20, 9))
+        break
+      case 'bjt':
+      case 'mosfet':
+        labels.push(idText(cx, ay - 5, 9))
+        labels.push(upright(cx, ay + G(2) + 13, <text x={cx} y={ay + G(2) + 13} fill="var(--text-primary)" fontSize={8} textAnchor="middle">{c.part ?? (c.kind === 'bjt' ? 'BJT' : 'MOSFET')}</text>))
+        break
+      case 'opamp':
+        labels.push(idText(ax + G(2) + 4, ay + G(1) + 4))
+        break
+      case 'lmc662': {
+        // catalog DIP body is unlabeled — keep the app's pin/name labels on top
+        const w = G(4), bx0 = ax + 12, bx1 = ax + w - 12, cxm = ax + w / 2
+        // pin columns swap sides when the DIP is mirrored — labels follow the pins
+        const colA = ['OUTA', '−A', '+A', 'V−'], colB = ['V+', 'OUTB', '−B', '+B']
+        const [lLab, rLab] = c.mirror ? [colB, colA] : [colA, colB]
+        for (let i = 0; i < 4; i++) {
+          labels.push(upright(bx0 + 13, ay + G(i) + 3, <text x={bx0 + 13} y={ay + G(i) + 3} fill="var(--text-secondary)" fontSize={8} textAnchor="start">{lLab[i]}</text>))
+          labels.push(upright(bx1 - 13, ay + G(i) + 3, <text x={bx1 - 13} y={ay + G(i) + 3} fill="var(--text-secondary)" fontSize={8} textAnchor="end">{rLab[i]}</text>))
+        }
+        labels.push(idText(cxm, ay + G(1) + 2, 9, 'var(--sch-ink)'))
+        labels.push(upright(cxm, ay + G(2) + 2, <text x={cxm} y={ay + G(2) + 2} fill="var(--text-secondary)" fontSize={8} textAnchor="middle">LMC662</text>))
+        break
+      }
+      case 'ground':
+        labels.push(upright(ax, ay + 28, <text x={ax} y={ay + 28} fill="var(--sch-ink)" fontSize={9} textAnchor="middle">GND</text>))
+        break
+      case 'awg1':
+      case 'awg2':
+        labels.push(upright(ax + 16, ay + G(1) + 3, <text x={ax + 16} y={ay + G(1) + 3} fill={ink} fontSize={10} textAnchor="start">{c.kind === 'awg1' ? 'W1' : 'W2'}</text>))
+        break
+      case 'scope1':
+      case 'scope2': {
+        const ch = c.kind === 'scope1' ? '1' : '2'
+        labels.push(upright(ax - 8, ay + 4, <text x={ax - 8} y={ay + 4} fill={ink} fontSize={10} textAnchor="end">{ch}+</text>))
+        labels.push(upright(ax - 8, ay + G(2) + 4, <text x={ax - 8} y={ay + G(2) + 4} fill={ink} fontSize={10} textAnchor="end">{ch}−</text>))
+        break
+      }
+    }
+    // W1/W2's return lead carries a DRAWN ground: the M2K bonds both returns to its one
+    // internal ground (node 0), so the schematic shows that honestly at the return pin.
+    let extraArt: ReactElement | null = null
+    if (c.kind === 'awg1' || c.kind === 'awg2') {
+      const gsym = SYMBOL_CATALOG['ground']
+      if (gsym) {
+        const gm = alignTransform([{ x: gsym.pins[0].x, y: gsym.pins[0].y }], [dst[1]])
+        extraArt = (
+          <g transform={`matrix(${gm.map((n) => +n.toFixed(5)).join(' ')})`}
+            style={{ color: ink }}
+            dangerouslySetInnerHTML={{ __html: inkedInner('ground', gsym, matScale(gm)) }} />
+        )
+      }
+    }
     inner = (
       <g>
-        <polyline points={zig} fill="none" stroke={stroke} strokeWidth={sw} />
-        {upright(cx, y - 13, <text x={cx} y={y - 13} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
-        {upright(cx, y + 18, <text x={cx} y={y + 18} fill="var(--text-primary)" fontSize={9} textAnchor="middle">{fmtEng(c.value ?? 0)}{UNIT[c.kind] ?? ''}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'capacitor') {
-    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
-    inner = (
-      <g>
-        <line x1={x1} y1={y} x2={cx - 4} y2={y} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 4} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx - 4} y1={y - 11} x2={cx - 4} y2={y + 11} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 4} y1={y - 11} x2={cx + 4} y2={y + 11} stroke={stroke} strokeWidth={sw} />
-        {upright(cx, y - 15, <text x={cx} y={y - 15} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
-        {upright(cx, y + 20, <text x={cx} y={y + 20} fill="var(--text-primary)" fontSize={9} textAnchor="middle">{fmtEng(c.value ?? 0)}{UNIT[c.kind] ?? ''}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'diode') {
-    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
-    inner = (
-      <g>
-        <line x1={x1} y1={y} x2={cx - 7} y2={y} stroke={stroke} strokeWidth={sw} />
-        {/* anode triangle pointing to the cathode bar */}
-        <polygon points={`${cx - 7},${y - 9} ${cx - 7},${y + 9} ${cx + 5},${y}`} fill={stroke} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
-        <line x1={cx + 5} y1={y - 9} x2={cx + 5} y2={y + 9} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 5} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
-        {upright(cx, y - 15, <text x={cx} y={y - 15} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'led') {
-    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
-    inner = (
-      <g>
-        <line x1={x1} y1={y} x2={cx - 7} y2={y} stroke={stroke} strokeWidth={sw} />
-        <polygon points={`${cx - 7},${y - 9} ${cx - 7},${y + 9} ${cx + 5},${y}`} fill={stroke} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
-        <line x1={cx + 5} y1={y - 9} x2={cx + 5} y2={y + 9} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 5} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
-        {/* two emission arrows (light coming out) */}
-        <line x1={cx - 1} y1={y - 11} x2={cx + 6} y2={y - 19} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx + 6} y1={y - 19} x2={cx + 2.5} y2={y - 17.5} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx + 6} y1={y - 19} x2={cx + 5} y2={y - 15.5} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx + 5} y1={y - 10} x2={cx + 12} y2={y - 18} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx + 12} y1={y - 18} x2={cx + 8.5} y2={y - 16.5} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx + 12} y1={y - 18} x2={cx + 11} y2={y - 14.5} stroke={stroke} strokeWidth={1.3} />
-        {upright(cx, y + 18, <text x={cx} y={y + 18} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{c.id}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'zener') {
-    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
-    inner = (
-      <g>
-        <line x1={x1} y1={y} x2={cx - 7} y2={y} stroke={stroke} strokeWidth={sw} />
-        <polygon points={`${cx - 7},${y - 9} ${cx - 7},${y + 9} ${cx + 5},${y}`} fill={stroke} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
-        {/* Zener cathode bar with bent ends (the "Z" flag) */}
-        <line x1={cx + 5} y1={y - 9} x2={cx + 5} y2={y + 9} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 5} y1={y - 9} x2={cx + 1} y2={y - 9} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 5} y1={y + 9} x2={cx + 9} y2={y + 9} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 5} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
-        {upright(cx, y - 15, <text x={cx} y={y - 15} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{c.id}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'photodiode') {
-    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
-    inner = (
-      <g>
-        <line x1={x1} y1={y} x2={cx - 7} y2={y} stroke={stroke} strokeWidth={sw} />
-        <polygon points={`${cx - 7},${y - 9} ${cx - 7},${y + 9} ${cx + 5},${y}`} fill={stroke} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
-        <line x1={cx + 5} y1={y - 9} x2={cx + 5} y2={y + 9} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 5} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
-        {/* two arrows pointing IN (incoming light) — the photodiode convention, opposite the LED */}
-        <line x1={cx + 6} y1={y - 19} x2={cx - 1} y2={y - 11} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx - 1} y1={y - 11} x2={cx + 2.5} y2={y - 10} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx - 1} y1={y - 11} x2={cx} y2={y - 14.5} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx + 12} y1={y - 18} x2={cx + 5} y2={y - 10} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx + 5} y1={y - 10} x2={cx + 8.5} y2={y - 9} stroke={stroke} strokeWidth={1.3} />
-        <line x1={cx + 5} y1={y - 10} x2={cx + 6} y2={y - 13.5} stroke={stroke} strokeWidth={1.3} />
-        {upright(cx, y + 18, <text x={cx} y={y + 18} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{c.id}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'bjt') {
-    // terminals: collector (2,0) top-right, base (0,1) left, emitter (2,2) bottom-right.
-    const npn = (c.part ? TRANSISTOR_PARTS[c.part]?.type : 'npn') !== 'pnp'
-    const bx = ax + 18 // base bar x
-    inner = (
-      <g>
-        <line x1={ax} y1={ay + G(1)} x2={bx} y2={ay + G(1)} stroke={stroke} strokeWidth={sw} />
-        <line x1={bx} y1={ay + 12} x2={bx} y2={ay + 36} stroke={stroke} strokeWidth={sw} />
-        <line x1={bx} y1={ay + 18} x2={ax + G(2)} y2={ay} stroke={stroke} strokeWidth={sw} />
-        <line x1={bx} y1={ay + 30} x2={ax + G(2)} y2={ay + G(2)} stroke={stroke} strokeWidth={sw} />
-        {/* emitter arrow: NPN points out toward the emitter; PNP points in toward the base */}
-        <polygon points={npn
-          ? `${ax + 42},${ay + 44} ${ax + 34},${ay + 45} ${ax + 39},${ay + 37}`
-          : `${ax + 28},${ay + 36} ${ax + 32},${ay + 43} ${ax + 36},${ay + 36}`}
-          fill={stroke} stroke={stroke} strokeWidth={1} strokeLinejoin="round" />
-        {upright(ax + G(1), ay - 5, <text x={ax + G(1)} y={ay - 5} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{c.id}</text>)}
-        {upright(ax + G(1), ay + G(2) + 13, <text x={ax + G(1)} y={ay + G(2) + 13} fill="var(--text-primary)" fontSize={8} textAnchor="middle">{c.part ?? 'BJT'}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'mosfet') {
-    // terminals: drain (2,0) top-right, gate (0,1) left, source (2,2) bottom-right.
-    const nch = (c.part ? TRANSISTOR_PARTS[c.part]?.type : 'nmos') !== 'pmos'
-    const gp = ax + 12 // gate plate x
-    const chx = ax + 18 // channel x
-    inner = (
-      <g>
-        <line x1={ax} y1={ay + G(1)} x2={gp} y2={ay + G(1)} stroke={stroke} strokeWidth={sw} />
-        <line x1={gp} y1={ay + 11} x2={gp} y2={ay + 37} stroke={stroke} strokeWidth={sw} />
-        {/* enhancement channel: three broken bars */}
-        <line x1={chx} y1={ay + 11} x2={chx} y2={ay + 19} stroke={stroke} strokeWidth={sw} />
-        <line x1={chx} y1={ay + 20} x2={chx} y2={ay + 28} stroke={stroke} strokeWidth={sw} />
-        <line x1={chx} y1={ay + 29} x2={chx} y2={ay + 37} stroke={stroke} strokeWidth={sw} />
-        {/* drain (top-right) */}
-        <line x1={chx} y1={ay + 15} x2={ax + 34} y2={ay + 15} stroke={stroke} strokeWidth={sw} />
-        <line x1={ax + 34} y1={ay + 15} x2={ax + 34} y2={ay} stroke={stroke} strokeWidth={sw} />
-        <line x1={ax + 34} y1={ay} x2={ax + G(2)} y2={ay} stroke={stroke} strokeWidth={sw} />
-        {/* source (bottom-right) */}
-        <line x1={chx} y1={ay + 33} x2={ax + 34} y2={ay + 33} stroke={stroke} strokeWidth={sw} />
-        <line x1={ax + 34} y1={ay + 33} x2={ax + 34} y2={ay + G(2)} stroke={stroke} strokeWidth={sw} />
-        <line x1={ax + 34} y1={ay + G(2)} x2={ax + G(2)} y2={ay + G(2)} stroke={stroke} strokeWidth={sw} />
-        {/* channel-type arrow on the source stub: NMOS points in toward the channel, PMOS out */}
-        <polygon points={nch
-          ? `${chx + 3},${ay + 33} ${chx + 9},${ay + 30} ${chx + 9},${ay + 36}`
-          : `${ax + 31},${ay + 33} ${ax + 25},${ay + 30} ${ax + 25},${ay + 36}`}
-          fill={stroke} stroke={stroke} strokeWidth={1} strokeLinejoin="round" />
-        {upright(ax + G(1), ay - 5, <text x={ax + G(1)} y={ay - 5} fill="var(--text-secondary)" fontSize={9} textAnchor="middle">{c.id}</text>)}
-        {upright(ax + G(1), ay + G(2) + 13, <text x={ax + G(1)} y={ay + G(2) + 13} fill="var(--text-primary)" fontSize={8} textAnchor="middle">{c.part ?? 'MOSFET'}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'vsource') {
-    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
-    inner = (
-      <g>
-        <line x1={x1} y1={y} x2={cx - 14} y2={y} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 14} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
-        <circle cx={cx} cy={y} r={14} fill="none" stroke={stroke} strokeWidth={sw} />
-        {upright(cx, y - 18, <text x={cx} y={y - 18} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
-        {upright(cx, y + 4, <text x={cx} y={y + 4} fill="var(--text-primary)" fontSize={11} textAnchor="middle">V</text>)}
-      </g>
-    )
-  } else if (c.kind === 'inductor') {
-    const x1 = ax, x2 = ax + G(2), y = ay, cx = ax + G(1)
-    // coil = four upward semicircle humps across 36px, centered on cx
-    const coil = `M ${cx - 18} ${y} a 4.5 4.5 0 0 1 9 0 a 4.5 4.5 0 0 1 9 0 a 4.5 4.5 0 0 1 9 0 a 4.5 4.5 0 0 1 9 0`
-    inner = (
-      <g>
-        <line x1={x1} y1={y} x2={cx - 18} y2={y} stroke={stroke} strokeWidth={sw} />
-        <line x1={cx + 18} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={sw} />
-        <path d={coil} fill="none" stroke={stroke} strokeWidth={sw} />
-        {upright(cx, y - 13, <text x={cx} y={y - 13} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
-        {upright(cx, y + 18, <text x={cx} y={y + 18} fill="var(--text-primary)" fontSize={9} textAnchor="middle">{fmtEng(c.value ?? 0)}{UNIT[c.kind] ?? ''}</text>)}
+        <g transform={`matrix(${m.map((n) => +n.toFixed(5)).join(' ')})`}
+          style={{ color: ink }}
+          dangerouslySetInnerHTML={{ __html: html }} />
+        {extraArt}
+        {labels.map((l, i) => <g key={i}>{l}</g>)}
       </g>
     )
   } else if (c.kind === 'ina125') {
@@ -1201,90 +1504,17 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
         {upright(ax + G(3.5), top - 4, <text x={ax + G(3.5)} y={top - 4} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
       </g>
     )
-  } else if (c.kind === 'opamp') {
-    const xL = ax, yT = ay, yB = ay + G(2), xR = ax + G(4), yM = ay + G(1)
-    inner = (
-      <g>
-        <line x1={xL} y1={yT} x2={xL + 10} y2={yT} stroke={stroke} strokeWidth={sw} />
-        <line x1={xL} y1={yB} x2={xL + 10} y2={yB} stroke={stroke} strokeWidth={sw} />
-        <line x1={xR - 6} y1={yM} x2={xR} y2={yM} stroke={stroke} strokeWidth={sw} />
-        <polygon points={`${xL + 10},${yT - 8} ${xL + 10},${yB + 8} ${xR - 6},${yM}`} fill="var(--bg-panel)" stroke={stroke} strokeWidth={sw} />
-        {upright(xL + 17, yT + 4, <text x={xL + 17} y={yT + 4} fill="var(--text-primary)" fontSize={11} textAnchor="middle">+</text>)}
-        {upright(xL + 17, yB + 1, <text x={xL + 17} y={yB + 1} fill="var(--text-primary)" fontSize={13} textAnchor="middle">−</text>)}
-        {upright(xL + 30, yM + 4, <text x={xL + 30} y={yM + 4} fill="var(--text-secondary)" fontSize={10} textAnchor="middle">{c.id}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'lmc662') {
-    // 8-pin DIP. Left pins 1-4 (OUTA,-A,+A,V-), right pins top→bottom (V+,OUTB,-B,+B).
-    const w = G(4)
-    const bx0 = ax + 12, bx1 = ax + w - 12, by0 = ay - 10, by1 = ay + G(3) + 10
-    const cxm = (bx0 + bx1) / 2
-    const lLab = ['OUTA', '−A', '+A', 'V−']
-    const rLab = ['V+', 'OUTB', '−B', '+B']
-    inner = (
-      <g>
-        <rect x={bx0} y={by0} width={bx1 - bx0} height={by1 - by0} rx={4} fill="var(--bg-panel)" stroke={stroke} strokeWidth={sw} />
-        <path d={`M ${cxm - 7},${by0} a 7 7 0 0 0 14 0`} fill="none" stroke={stroke} strokeWidth={sw} />
-        {[0, 1, 2, 3].map((i) => (
-          <g key={'l' + i}>
-            <line x1={ax} y1={ay + G(i)} x2={bx0} y2={ay + G(i)} stroke={stroke} strokeWidth={sw} />
-            {upright(bx0 + 13, ay + G(i) + 3, <text x={bx0 + 13} y={ay + G(i) + 3} fill="var(--text-secondary)" fontSize={8} textAnchor="start">{lLab[i]}</text>)}
-          </g>
-        ))}
-        {[0, 1, 2, 3].map((i) => (
-          <g key={'r' + i}>
-            <line x1={ax + w} y1={ay + G(i)} x2={bx1} y2={ay + G(i)} stroke={stroke} strokeWidth={sw} />
-            {upright(bx1 - 13, ay + G(i) + 3, <text x={bx1 - 13} y={ay + G(i) + 3} fill="var(--text-secondary)" fontSize={8} textAnchor="end">{rLab[i]}</text>)}
-          </g>
-        ))}
-        {upright(cxm, ay + G(1) + 2, <text x={cxm} y={ay + G(1) + 2} fill="var(--ch1-color)" fontSize={9} textAnchor="middle">{c.id}</text>)}
-        {upright(cxm, ay + G(2) + 2, <text x={cxm} y={ay + G(2) + 2} fill="var(--text-secondary)" fontSize={8} textAnchor="middle">LMC662</text>)}
-      </g>
-    )
-  } else if (c.kind === 'ground') {
-    const x = ax, y = ay
-    const col = '#cccccc' // GND = black wire; rendered light for contrast on the dark canvas
-    inner = (
-      <g>
-        <line x1={x} y1={y} x2={x} y2={y + 10} stroke={col} strokeWidth={sw} />
-        <line x1={x - 9} y1={y + 10} x2={x + 9} y2={y + 10} stroke={col} strokeWidth={sw} />
-        <line x1={x - 5} y1={y + 14} x2={x + 5} y2={y + 14} stroke={col} strokeWidth={sw} />
-        <line x1={x - 2} y1={y + 18} x2={x + 2} y2={y + 18} stroke={col} strokeWidth={sw} />
-        {upright(x, y + 30, <text x={x} y={y + 30} fill={col} fontSize={9} textAnchor="middle">GND</text>)}
-      </g>
-    )
   } else if (c.kind === 'dcrail' || c.kind === 'vplus' || c.kind === 'vminus') {
+    // supply port: label + battery (supply) badge; single clean connection point at the pin
     const x = ax, y = ay
     const v = c.value ?? (c.kind === 'vminus' ? -5 : 5)
     const neg = c.kind === 'vminus' || v < 0
-    const col = neg ? '#4a9eff' : '#e04040' // V- blue, V+ red
+    const col = selected ? 'var(--accent-blue)' : neg ? '#2a6ad0' : '#c22a2a' // V- blue, V+ red
     const lbl = c.kind === 'vplus' ? 'V+' : c.kind === 'vminus' ? 'V-' : (v >= 0 ? '+' : '') + v + 'V'
     inner = (
-      <g>
-        <line x1={x} y1={y} x2={x} y2={y - 14} stroke={col} strokeWidth={sw} />
-        <line x1={x - 8} y1={y - 14} x2={x + 8} y2={y - 14} stroke={col} strokeWidth={sw} />
-        {upright(x, y - 18, <text x={x} y={y - 18} fill={col} fontSize={9} textAnchor="middle">{lbl}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'awg1' || c.kind === 'awg2') {
-    const x = ax, y = ay
-    const lbl = c.kind === 'awg1' ? 'W1' : 'W2'
-    inner = (
-      <g>
-        <circle cx={x} cy={y} r={11} fill="var(--bg-panel)" stroke="#e0c020" strokeWidth={sw} />
-        <path d={`M ${x - 6} ${y} q 3 -6 6 0 q 3 6 6 0`} fill="none" stroke="#e0c020" strokeWidth={1.4} />
-        {upright(x, y - 16, <text x={x} y={y - 16} fill="#e0c020" fontSize={10} textAnchor="middle">{lbl}</text>)}
-      </g>
-    )
-  } else if (c.kind === 'scope1' || c.kind === 'scope2' || c.kind === 'adc1n' || c.kind === 'adc2n') {
-    const x = ax, y = ay
-    const ch1 = c.kind === 'scope1' || c.kind === 'adc1n'
-    const col = ch1 ? 'var(--ch1-color)' : 'var(--ch2-color)'
-    const lbl = c.kind === 'scope1' ? '1+' : c.kind === 'adc1n' ? '1-' : c.kind === 'scope2' ? '2+' : '2-'
-    inner = (
-      <g>
-        <polygon points={`${x},${y - 9} ${x + 8},${y} ${x},${y + 9} ${x - 8},${y}`} fill="none" stroke={col} strokeWidth={sw} />
-        {upright(x, y - 13, <text x={x} y={y - 13} fill={col} fontSize={9} textAnchor="middle">{lbl}</text>)}
+      <g style={{ color: col }}>
+        {badgeArt(c.id, 'battery', x, y - 22)}
+        {upright(x, y - 38, <text x={x} y={y - 38} fill={col} fontSize={10} textAnchor="middle">{lbl}</text>)}
       </g>
     )
   } else {

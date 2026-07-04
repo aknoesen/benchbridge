@@ -123,8 +123,10 @@ export function boardNets(holes: Hole[], jumpers: Jumper[] = [], terminals: Term
 
 // Canonical M2K port names, keyed by the schematic port kind. These anchor the board↔schematic
 // mapping during the equivalence check.
+// The two-terminal instruments (SCH-11) map t0 here; their second pins ('1-'/'2-' and the
+// W1/W2 ground returns) are handled explicitly in schematicExpectation.
 export const PORT_NAME: Partial<Record<SchKind, string>> = {
-  awg1: 'W1', awg2: 'W2', scope1: '1+', adc1n: '1-', scope2: '2+', adc2n: '2-',
+  awg1: 'W1', awg2: 'W2', scope1: '1+', scope2: '2+',
   vplus: 'V+', vminus: 'V-', ground: 'GND',
 }
 // 2-pin parts a student places on the board (F-2): passives plus the 2-terminal semiconductors.
@@ -553,6 +555,7 @@ export function schematicExpectation(s: Schematic): SchematicExpectation {
   const dips: SchematicExpectation['dips'] = []
   const transistors: SchematicExpectation['transistors'] = []
   const ports = new Map<string, string>()
+  let awgReturnNet: string | undefined
   for (const c of s.components) {
     const ts = terminalsOf(c)
     if (PLACEABLE_KINDS.has(c.kind)) {
@@ -606,8 +609,17 @@ export function schematicExpectation(s: Schematic): SchematicExpectation {
     } else {
       const name = PORT_NAME[c.kind]
       if (name && !ports.has(name)) ports.set(name, netOf(ts[0].gx, ts[0].gy))
+      // two-terminal scope: the − pin anchors the channel's adapter reference terminal
+      if (c.kind === 'scope1' && !ports.has('1-')) ports.set('1-', netOf(ts[1].gx, ts[1].gy))
+      if (c.kind === 'scope2' && !ports.has('2-')) ports.set('2-', netOf(ts[1].gx, ts[1].gy))
+      // W1/W2 ground return: bonded to the adapter's GND rail internally — anchor GND to it
+      // only when no standalone ground symbol does so (the drawn ground symbol wins)
+      if ((c.kind === 'awg1' || c.kind === 'awg2') && awgReturnNet === undefined) {
+        awgReturnNet = netOf(ts[1].gx, ts[1].gy)
+      }
     }
   }
+  if (!ports.has('GND') && awgReturnNet !== undefined) ports.set('GND', awgReturnNet)
   return { parts, dips, transistors, ports: [...ports].map(([name, net]) => ({ name, net })) }
 }
 
@@ -908,20 +920,36 @@ export function boardNodeMap(s: Schematic, board: BoardLayout, holes: Hole[]): M
   const rawNetOf = (c: { gx: number; gy: number }) => nets.get(`${c.gx},${c.gy}`)
 
   // Mirror of toCircuit's port scan → rename chain (ground first, then the named instrument nets).
+  // Two-terminal instruments (SCH-11): the scope's − pin is the reference only when WIRED
+  // (something else shares its grid point); the W1/W2 return net is a ground net.
+  const occ = new Map<string, number>()
+  const bump = (k: string) => occ.set(k, (occ.get(k) ?? 0) + 1)
+  for (const c of s.components) for (const t of terminalsOf(c)) bump(`${t.gx},${t.gy}`)
+  for (const w of s.wires) { bump(`${w.x1},${w.y1}`); bump(`${w.x2},${w.y2}`) }
+  const connected = (t: { gx: number; gy: number }) => (occ.get(`${t.gx},${t.gy}`) ?? 0) > 1
+
   const groundNets = new Set<string>()
   let inNet: string | undefined, in2Net: string | undefined
   let outNet: string | undefined, outRefNet: string | undefined
   let scope2Net: string | undefined, scope2RefNet: string | undefined
   for (const c of s.components) {
-    const net = rawNetOf(terminalsOf(c)[0])
+    const ts = terminalsOf(c)
+    const net = rawNetOf(ts[0])
     if (!net) continue
     if (c.kind === 'ground') groundNets.add(net)
-    else if (c.kind === 'probe' || c.kind === 'scope1') outNet = net
-    else if (c.kind === 'adc1n') outRefNet = net
-    else if (c.kind === 'scope2') scope2Net = net
-    else if (c.kind === 'adc2n') scope2RefNet = net
-    else if (c.kind === 'vsource' || c.kind === 'awg1') inNet = net
-    else if (c.kind === 'awg2') in2Net = net
+    else if (c.kind === 'probe') outNet = net
+    else if (c.kind === 'scope1') {
+      outNet = net
+      if (connected(ts[1])) outRefNet = rawNetOf(ts[1])
+    } else if (c.kind === 'scope2') {
+      scope2Net = net
+      if (connected(ts[1])) scope2RefNet = rawNetOf(ts[1])
+    } else if (c.kind === 'vsource') inNet = net
+    else if (c.kind === 'awg1' || c.kind === 'awg2') {
+      if (c.kind === 'awg1') inNet = net; else in2Net = net
+      const ret = rawNetOf(ts[1])
+      if (ret) groundNets.add(ret)
+    }
   }
   const rename = (net: string): string =>
     groundNets.has(net) ? '0'

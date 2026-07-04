@@ -43,6 +43,9 @@ const sine = (frequency: number, amplitude = 1): SignalParams =>
 
 // --- shared amp skeletons (inverting / non-inverting) — kit OP484 (rail-to-rail), auto ±5 V rails --
 
+// Two-terminal instruments (SCH-11): W1 carries its own drawn ground return (gy+2); the
+// scopes' − leads (gy+2) stay unwired = single-ended. P2 sits at (0,6) so W1's return pin
+// at (2,8) has its grid point to itself.
 function invertingAmp(): Schematic {
   return {
     components: [
@@ -51,22 +54,18 @@ function invertingAmp(): Schematic {
       { id: 'U1', kind: 'opamp', gx: 10, gy: 4, part: 'op484' },
       { id: 'Rf', kind: 'resistor', gx: 10, gy: 8, value: 20000 },
       { id: 'G1', kind: 'ground', gx: 8, gy: 4 },
-      { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },
-      { id: 'P2', kind: 'scope2', gx: 2, gy: 8 },   // 2+ on the input (CH2 = drive)
-      { id: 'A1', kind: 'adc1n', gx: 6, gy: 4 },    // 1- to ground (single-ended CH1)
-      { id: 'A2', kind: 'adc2n', gx: 6, gy: 2 },    // 2- to ground (single-ended CH2)
+      { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },  // 1+ on out; 1− (16,7) unwired = single-ended
+      { id: 'P2', kind: 'scope2', gx: 0, gy: 6 },   // 2+ on the input (CH2 = drive), single-ended
     ],
     wires: [
       { x1: 2, y1: 6, x2: 4, y2: 6 },   // W1 -> Rin.a
-      { x1: 2, y1: 6, x2: 2, y2: 8 },   // input -> 2+
+      { x1: 0, y1: 6, x2: 2, y2: 6 },   // 2+ -> input
       { x1: 6, y1: 6, x2: 10, y2: 6 },  // Rin.b -> inN (summing node)
       { x1: 10, y1: 4, x2: 8, y2: 4 },  // inP -> ground
       { x1: 10, y1: 6, x2: 10, y2: 8 }, // inN -> Rf.a
       { x1: 14, y1: 5, x2: 14, y2: 8 }, // out -> down
       { x1: 14, y1: 8, x2: 12, y2: 8 }, // -> Rf.b  (feedback)
       { x1: 14, y1: 5, x2: 16, y2: 5 }, // out -> 1+
-      { x1: 6, y1: 4, x2: 8, y2: 4 },   // 1- -> ground (inP node)
-      { x1: 6, y1: 2, x2: 6, y2: 4 },   // 2- -> 1- (ground)
     ],
   }
 }
@@ -79,20 +78,17 @@ function nonInvertingAmp(): Schematic {
       { id: 'Rf', kind: 'resistor', gx: 12, gy: 6, value: 10000 },
       { id: 'Rg', kind: 'resistor', gx: 10, gy: 6, rotation: 1, value: 10000 },
       { id: 'G1', kind: 'ground', gx: 10, gy: 10 },
-      { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },
-      { id: 'P2', kind: 'scope2', gx: 6, gy: 2 },   // 2+ on the input (CH2 = drive)
-      { id: 'A1', kind: 'adc1n', gx: 12, gy: 10 },  // 1- to ground (single-ended CH1)
-      { id: 'A2', kind: 'adc2n', gx: 14, gy: 10 },  // 2- to ground (single-ended CH2)
+      { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },  // 1+ on out; 1− unwired = single-ended
+      { id: 'P2', kind: 'scope2', gx: 4, gy: 2 },   // 2+ on the input; 2− (4,4) unwired = single-ended
     ],
     wires: [
       { x1: 6, y1: 4, x2: 10, y2: 4 },  // W1 -> inP
-      { x1: 6, y1: 4, x2: 6, y2: 2 },   // input -> 2+
+      { x1: 6, y1: 4, x2: 6, y2: 2 },   // input -> up
+      { x1: 6, y1: 2, x2: 4, y2: 2 },   // -> 2+
       { x1: 10, y1: 6, x2: 12, y2: 6 }, // inN -> Rf.a (Rg.a shares inN at 10,6)
       { x1: 14, y1: 6, x2: 14, y2: 5 }, // Rf.b -> out
       { x1: 14, y1: 5, x2: 16, y2: 5 }, // out -> 1+
       { x1: 10, y1: 8, x2: 10, y2: 10 },// Rg.b -> ground (explicit, so moves follow)
-      { x1: 10, y1: 10, x2: 12, y2: 10 }, // ground -> 1-
-      { x1: 12, y1: 10, x2: 14, y2: 10 }, // ground -> 2-
     ],
   }
 }
@@ -106,13 +102,16 @@ const FLASHLIGHT_SCHEMATIC: Schematic = {
     { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 470 },  // a=(4,4) b=(6,4)
     { id: 'D1', kind: 'led', gx: 6, gy: 4, value: 1.8 },       // anode=(6,4)=R1.b  cathode=(8,4); Vf 1.8 → red
     { id: 'G1', kind: 'ground', gx: 8, gy: 6 },
-    { id: 'P1', kind: 'scope1', gx: 2, gy: 2 },                // 1+ on the V+ end of the resistor
-    { id: 'A1', kind: 'adc1n', gx: 6, gy: 2 },                 // 1− on the R/LED junction → CH1 = V across R
+    // Two-terminal scope: 1+ (4,0) on the V+ end, 1− (4,2) wired to the R/LED junction —
+    // the differential read across R1, now visibly two leads of ONE instrument.
+    { id: 'P1', kind: 'scope1', gx: 4, gy: 0 },
   ],
   wires: [
     { x1: 2, y1: 4, x2: 4, y2: 4 },   // V+ -> R1.a
-    { x1: 2, y1: 4, x2: 2, y2: 2 },   // V+ -> 1+
-    { x1: 6, y1: 4, x2: 6, y2: 2 },   // R1.b / LED anode -> 1−  (differential across R1)
+    { x1: 4, y1: 0, x2: 2, y2: 0 },   // 1+ -> left
+    { x1: 2, y1: 0, x2: 2, y2: 4 },   // -> V+ node
+    { x1: 4, y1: 2, x2: 6, y2: 2 },   // 1− -> right
+    { x1: 6, y1: 2, x2: 6, y2: 4 },   // -> R1.b / LED anode (differential across R1)
     { x1: 8, y1: 4, x2: 8, y2: 6 },   // LED cathode -> ground
   ],
 }
@@ -164,19 +163,20 @@ export const EXAMPLES: Example[] = [
         { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 10000 },              // a=(4,4) b=(6,4)
         { id: 'R2', kind: 'resistor', gx: 8, gy: 4, rotation: 1, value: 20000 }, // a=(8,4) b=(8,6)
         { id: 'G1', kind: 'ground', gx: 8, gy: 8 },
-        { id: 'P1', kind: 'scope1', gx: 2, gy: 2 },   // 1+ on the applied V+ (top of R1)
-        { id: 'A1', kind: 'adc1n', gx: 10, gy: 2 },   // 1− on the midpoint → CH1 differential across R1
-        { id: 'P2', kind: 'scope2', gx: 10, gy: 4 },  // 2+ on the midpoint
-        { id: 'A2', kind: 'adc2n', gx: 10, gy: 8 },   // 2− to ground → CH2 single-ended across R2
+        // Two-terminal scopes: CH1's two leads read ACROSS R1 (1+ on V+, 1− wired to the
+        // midpoint = differential); CH2's − lead stays unwired = single-ended across R2.
+        { id: 'P1', kind: 'scope1', gx: 4, gy: 0 },   // 1+ (4,0) → V+; 1− (4,2) → midpoint
+        { id: 'P2', kind: 'scope2', gx: 10, gy: 4 },  // 2+ on the midpoint; 2− (10,6) unwired
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },   // V+ -> R1.a (applied)
-        { x1: 2, y1: 4, x2: 2, y2: 2 },   // V+ -> 1+
+        { x1: 4, y1: 0, x2: 2, y2: 0 },   // 1+ -> left
+        { x1: 2, y1: 0, x2: 2, y2: 4 },   // -> V+ node
         { x1: 6, y1: 4, x2: 8, y2: 4 },   // R1.b -> R2.a (the midpoint link)
         { x1: 8, y1: 4, x2: 10, y2: 4 },  // midpoint -> 2+
-        { x1: 10, y1: 4, x2: 10, y2: 2 }, // midpoint -> 1−  (differential across R1)
+        { x1: 4, y1: 2, x2: 10, y2: 2 },  // 1− -> right
+        { x1: 10, y1: 2, x2: 10, y2: 4 }, // -> midpoint (differential across R1)
         { x1: 8, y1: 6, x2: 8, y2: 8 },   // R2.b -> ground
-        { x1: 8, y1: 8, x2: 10, y2: 8 },  // ground -> 2−
       ],
     },
   },
@@ -193,14 +193,12 @@ export const EXAMPLES: Example[] = [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
         { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 1e6 }, // the scope's 1 MΩ input; a=(6,4) b=(6,6)
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
-        { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },   // 1+ straight on W1
-        { id: 'A1', kind: 'adc1n', gx: 8, gy: 8 },    // 1− to ground (single-ended CH1)
+        { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },   // 1+ straight on W1; 1− (8,6) unwired = single-ended
       ],
       wires: [
         { x1: 2, y1: 4, x2: 6, y2: 4 },   // W1 -> R1.a
         { x1: 6, y1: 4, x2: 8, y2: 4 },   // -> 1+
         { x1: 6, y1: 6, x2: 6, y2: 8 },   // R1.b -> ground
-        { x1: 6, y1: 8, x2: 8, y2: 8 },   // ground -> 1−
       ],
     },
   },
@@ -219,17 +217,14 @@ export const EXAMPLES: Example[] = [
         { id: 'C1', kind: 'capacitor', gx: 6, gy: 4, rotation: 1, value: 1e-7 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
-        { id: 'P2', kind: 'scope2', gx: 2, gy: 2 },   // 2+ on the W1 input (see both in and out)
-        { id: 'A1', kind: 'adc1n', gx: 8, gy: 8 },     // 1- to ground (single-ended CH1)
-        { id: 'A2', kind: 'adc2n', gx: 10, gy: 8 },    // 2- to ground (single-ended CH2)
+        { id: 'P2', kind: 'scope2', gx: 0, gy: 2 },   // 2+ on the W1 input; 2− (0,4) unwired = single-ended
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },
         { x1: 6, y1: 4, x2: 8, y2: 4 },
         { x1: 6, y1: 6, x2: 6, y2: 8 },   // shunt leg -> ground (explicit, so moves follow)
-        { x1: 2, y1: 4, x2: 2, y2: 2 },   // W1 input -> 2+ (probe the drive)
-        { x1: 6, y1: 8, x2: 8, y2: 8 },   // ground -> 1-
-        { x1: 8, y1: 8, x2: 10, y2: 8 },  // ground -> 2-
+        { x1: 2, y1: 4, x2: 2, y2: 2 },   // W1 input -> up
+        { x1: 2, y1: 2, x2: 0, y2: 2 },   // -> 2+
       ],
     },
   },
@@ -244,17 +239,14 @@ export const EXAMPLES: Example[] = [
         { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 1500 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
-        { id: 'P2', kind: 'scope2', gx: 2, gy: 2 },   // 2+ on the W1 input (see both in and out)
-        { id: 'A1', kind: 'adc1n', gx: 8, gy: 8 },     // 1- to ground (single-ended CH1)
-        { id: 'A2', kind: 'adc2n', gx: 10, gy: 8 },    // 2- to ground (single-ended CH2)
+        { id: 'P2', kind: 'scope2', gx: 0, gy: 2 },   // 2+ on the W1 input; 2− (0,4) unwired = single-ended
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },
         { x1: 6, y1: 4, x2: 8, y2: 4 },
         { x1: 6, y1: 6, x2: 6, y2: 8 },   // shunt leg -> ground (explicit, so moves follow)
-        { x1: 2, y1: 4, x2: 2, y2: 2 },   // W1 input -> 2+ (probe the drive)
-        { x1: 6, y1: 8, x2: 8, y2: 8 },   // ground -> 1-
-        { x1: 8, y1: 8, x2: 10, y2: 8 },  // ground -> 2-
+        { x1: 2, y1: 4, x2: 2, y2: 2 },   // W1 input -> up
+        { x1: 2, y1: 2, x2: 0, y2: 2 },   // -> 2+
       ],
     },
   },
@@ -269,17 +261,14 @@ export const EXAMPLES: Example[] = [
         { id: 'C1', kind: 'capacitor', gx: 6, gy: 4, rotation: 1, value: 1e-6 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
-        { id: 'P2', kind: 'scope2', gx: 2, gy: 2 },   // 2+ on the W1 input (see both in and out)
-        { id: 'A1', kind: 'adc1n', gx: 8, gy: 8 },     // 1- to ground (single-ended CH1)
-        { id: 'A2', kind: 'adc2n', gx: 10, gy: 8 },    // 2- to ground (single-ended CH2)
+        { id: 'P2', kind: 'scope2', gx: 0, gy: 2 },   // 2+ on the W1 input; 2− (0,4) unwired = single-ended
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },
         { x1: 6, y1: 4, x2: 8, y2: 4 },
         { x1: 6, y1: 6, x2: 6, y2: 8 },   // shunt leg -> ground (explicit, so moves follow)
-        { x1: 2, y1: 4, x2: 2, y2: 2 },   // W1 input -> 2+ (probe the drive)
-        { x1: 6, y1: 8, x2: 8, y2: 8 },   // ground -> 1-
-        { x1: 8, y1: 8, x2: 10, y2: 8 },  // ground -> 2-
+        { x1: 2, y1: 4, x2: 2, y2: 2 },   // W1 input -> up
+        { x1: 2, y1: 2, x2: 0, y2: 2 },   // -> 2+
       ],
     },
   },
@@ -294,17 +283,14 @@ export const EXAMPLES: Example[] = [
         { id: 'L1', kind: 'inductor', gx: 6, gy: 4, rotation: 1, value: 1e-2 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
-        { id: 'P2', kind: 'scope2', gx: 2, gy: 2 },   // 2+ on the W1 input (see both in and out)
-        { id: 'A1', kind: 'adc1n', gx: 8, gy: 8 },     // 1- to ground (single-ended CH1)
-        { id: 'A2', kind: 'adc2n', gx: 10, gy: 8 },    // 2- to ground (single-ended CH2)
+        { id: 'P2', kind: 'scope2', gx: 0, gy: 2 },   // 2+ on the W1 input; 2− (0,4) unwired = single-ended
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },
         { x1: 6, y1: 4, x2: 8, y2: 4 },
         { x1: 6, y1: 6, x2: 6, y2: 8 },   // shunt leg -> ground (explicit, so moves follow)
-        { x1: 2, y1: 4, x2: 2, y2: 2 },   // W1 input -> 2+ (probe the drive)
-        { x1: 6, y1: 8, x2: 8, y2: 8 },   // ground -> 1-
-        { x1: 8, y1: 8, x2: 10, y2: 8 },  // ground -> 2-
+        { x1: 2, y1: 4, x2: 2, y2: 2 },   // W1 input -> up
+        { x1: 2, y1: 2, x2: 0, y2: 2 },   // -> 2+
       ],
     },
   },
@@ -319,17 +305,14 @@ export const EXAMPLES: Example[] = [
         { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 1000 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
-        { id: 'P2', kind: 'scope2', gx: 2, gy: 2 },   // 2+ on the W1 input (see both in and out)
-        { id: 'A1', kind: 'adc1n', gx: 8, gy: 8 },     // 1- to ground (single-ended CH1)
-        { id: 'A2', kind: 'adc2n', gx: 10, gy: 8 },    // 2- to ground (single-ended CH2)
+        { id: 'P2', kind: 'scope2', gx: 0, gy: 2 },   // 2+ on the W1 input; 2− (0,4) unwired = single-ended
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },
         { x1: 6, y1: 4, x2: 8, y2: 4 },
         { x1: 6, y1: 6, x2: 6, y2: 8 },   // shunt leg -> ground (explicit, so moves follow)
-        { x1: 2, y1: 4, x2: 2, y2: 2 },   // W1 input -> 2+ (probe the drive)
-        { x1: 6, y1: 8, x2: 8, y2: 8 },   // ground -> 1-
-        { x1: 8, y1: 8, x2: 10, y2: 8 },  // ground -> 2-
+        { x1: 2, y1: 4, x2: 2, y2: 2 },   // W1 input -> up
+        { x1: 2, y1: 2, x2: 0, y2: 2 },   // -> 2+
       ],
     },
   },
@@ -344,17 +327,14 @@ export const EXAMPLES: Example[] = [
         { id: 'L1', kind: 'inductor', gx: 6, gy: 4, rotation: 1, value: 1e-2 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
-        { id: 'P2', kind: 'scope2', gx: 2, gy: 2 },   // 2+ on the W1 input (see both in and out)
-        { id: 'A1', kind: 'adc1n', gx: 8, gy: 8 },     // 1- to ground (single-ended CH1)
-        { id: 'A2', kind: 'adc2n', gx: 10, gy: 8 },    // 2- to ground (single-ended CH2)
+        { id: 'P2', kind: 'scope2', gx: 0, gy: 2 },   // 2+ on the W1 input; 2− (0,4) unwired = single-ended
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },
         { x1: 6, y1: 4, x2: 8, y2: 4 },
         { x1: 6, y1: 6, x2: 6, y2: 8 },   // shunt leg -> ground (explicit, so moves follow)
-        { x1: 2, y1: 4, x2: 2, y2: 2 },   // W1 input -> 2+ (probe the drive)
-        { x1: 6, y1: 8, x2: 8, y2: 8 },   // ground -> 1-
-        { x1: 8, y1: 8, x2: 10, y2: 8 },  // ground -> 2-
+        { x1: 2, y1: 4, x2: 2, y2: 2 },   // W1 input -> up
+        { x1: 2, y1: 2, x2: 0, y2: 2 },   // -> 2+
       ],
     },
   },
@@ -387,8 +367,7 @@ export const EXAMPLES: Example[] = [
         { id: 'Rf', kind: 'resistor', gx: 10, gy: 10, value: 33000 },           // feedback R (a(10,10) b(12,10))
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },                              // divider bottom → GND
         { id: 'G2', kind: 'ground', gx: 8, gy: 8 },                              // photodiode anode → GND
-        { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },                             // 1+ on the output
-        { id: 'A1', kind: 'adc1n', gx: 4, gy: 8 },                               // 1- to ground (single-ended CH1)
+        { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },                             // 1+ on the output; 1− (16,7) unwired = single-ended
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },    // V+ → Rt.a
@@ -401,7 +380,6 @@ export const EXAMPLES: Example[] = [
         { x1: 14, y1: 8, x2: 12, y2: 8 },  // → Cf.b (out side)
         { x1: 12, y1: 8, x2: 12, y2: 10 }, // Cf.b → Rf.b
         { x1: 14, y1: 5, x2: 16, y2: 5 },  // out → 1+
-        { x1: 4, y1: 8, x2: 6, y2: 8 },    // 1- -> ground
       ],
     },
   },
@@ -426,14 +404,12 @@ export const EXAMPLES: Example[] = [
         { id: 'Cf', kind: 'capacitor', gx: 10, gy: 8, value: 100e-12 },   // feedback cap: sets ~16 kHz bandwidth
         { id: 'Rf', kind: 'resistor', gx: 10, gy: 10, value: 100000 },    // feedback R = transimpedance (100 kΩ)
         { id: 'G1', kind: 'ground', gx: 8, gy: 4 },                       // inP -> ground (virtual ground = 0 V)
-        { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },                      // 1+ on out
-        { id: 'P2', kind: 'scope2', gx: 2, gy: 8 },                       // 2+ on the W1 drive
-        { id: 'A1', kind: 'adc1n', gx: 6, gy: 4 },                        // 1- to ground (inP node)
-        { id: 'A2', kind: 'adc2n', gx: 6, gy: 2 },                        // 2- to ground (single-ended CH2)
+        { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },                      // 1+ on out; 1− unwired = single-ended
+        { id: 'P2', kind: 'scope2', gx: 0, gy: 6 },                       // 2+ on the W1 drive; 2− unwired
       ],
       wires: [
         { x1: 2, y1: 6, x2: 4, y2: 6 },    // W1 -> Rin.a
-        { x1: 2, y1: 6, x2: 2, y2: 8 },    // input -> 2+
+        { x1: 0, y1: 6, x2: 2, y2: 6 },    // 2+ -> input
         { x1: 6, y1: 6, x2: 10, y2: 6 },   // Rin.b -> inN (summing node)
         { x1: 10, y1: 4, x2: 8, y2: 4 },   // inP -> ground
         { x1: 10, y1: 6, x2: 10, y2: 8 },  // inN -> Cf.a
@@ -442,8 +418,6 @@ export const EXAMPLES: Example[] = [
         { x1: 14, y1: 8, x2: 12, y2: 8 },  // -> Cf.b (out side)
         { x1: 12, y1: 8, x2: 12, y2: 10 }, // Cf.b -> Rf.b
         { x1: 14, y1: 5, x2: 16, y2: 5 },  // out -> 1+
-        { x1: 6, y1: 4, x2: 8, y2: 4 },    // 1- -> ground (inP node)
-        { x1: 6, y1: 2, x2: 6, y2: 4 },    // 2- -> ground
       ],
     },
   },
@@ -458,19 +432,16 @@ export const EXAMPLES: Example[] = [
         { id: 'C1', kind: 'capacitor', gx: 8, gy: 4, value: 1e-7 },         // a=(8,4) b=(10,4)
         { id: 'R1', kind: 'resistor', gx: 10, gy: 4, rotation: 1, value: 100 }, // a=(10,4) b=(10,6)
         { id: 'G1', kind: 'ground', gx: 10, gy: 8 },
-        { id: 'P1', kind: 'scope1', gx: 12, gy: 4 },
-        { id: 'P2', kind: 'scope2', gx: 2, gy: 2 },   // 2+ on the W1 input
-        { id: 'A1', kind: 'adc1n', gx: 12, gy: 8 },   // 1- to ground (single-ended CH1)
-        { id: 'A2', kind: 'adc2n', gx: 14, gy: 8 },   // 2- to ground (single-ended CH2)
+        { id: 'P1', kind: 'scope1', gx: 12, gy: 4 },  // 1+ across R; 1− (12,6) unwired = single-ended
+        { id: 'P2', kind: 'scope2', gx: 0, gy: 2 },   // 2+ on the W1 input; 2− (0,4) unwired
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },    // W1 -> L.a
         { x1: 6, y1: 4, x2: 8, y2: 4 },    // L.b -> C.a (series link, explicit)
         { x1: 10, y1: 4, x2: 12, y2: 4 },  // node (across R) -> 1+
         { x1: 10, y1: 6, x2: 10, y2: 8 },  // R.b -> ground (explicit, so moves follow)
-        { x1: 2, y1: 4, x2: 2, y2: 2 },    // W1 input -> 2+
-        { x1: 10, y1: 8, x2: 12, y2: 8 },  // ground -> 1-
-        { x1: 12, y1: 8, x2: 14, y2: 8 },  // ground -> 2-
+        { x1: 2, y1: 4, x2: 2, y2: 2 },    // W1 input -> up
+        { x1: 2, y1: 2, x2: 0, y2: 2 },    // -> 2+
       ],
     },
   },
@@ -490,14 +461,12 @@ export const EXAMPLES: Example[] = [
         { id: 'Cf', kind: 'capacitor', gx: 10, gy: 8, value: 1e-7 },
         { id: 'Rf', kind: 'resistor', gx: 10, gy: 10, value: 20000 },
         { id: 'G1', kind: 'ground', gx: 8, gy: 4 },
-        { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },
-        { id: 'P2', kind: 'scope2', gx: 2, gy: 8 },
-        { id: 'A1', kind: 'adc1n', gx: 6, gy: 4 },   // 1- to ground (single-ended CH1)
-        { id: 'A2', kind: 'adc2n', gx: 6, gy: 2 },   // 2- to ground (single-ended CH2)
+        { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },  // 1+ on out; 1− unwired = single-ended
+        { id: 'P2', kind: 'scope2', gx: 0, gy: 6 },   // 2+ on the W1 drive; 2− unwired
       ],
       wires: [
         { x1: 2, y1: 6, x2: 4, y2: 6 },    // W1 -> Rin.a
-        { x1: 2, y1: 6, x2: 2, y2: 8 },    // input -> 2+ (probe the drive)
+        { x1: 0, y1: 6, x2: 2, y2: 6 },    // 2+ -> input (probe the drive)
         { x1: 6, y1: 6, x2: 10, y2: 6 },   // Rin.b -> inN
         { x1: 10, y1: 4, x2: 8, y2: 4 },   // inP -> ground
         { x1: 10, y1: 6, x2: 10, y2: 8 },  // inN -> Cf.a
@@ -506,8 +475,6 @@ export const EXAMPLES: Example[] = [
         { x1: 14, y1: 5, x2: 14, y2: 8 },  // out -> down
         { x1: 14, y1: 8, x2: 12, y2: 8 },  // -> feedback (out side)
         { x1: 14, y1: 5, x2: 16, y2: 5 },  // out -> 1+
-        { x1: 6, y1: 4, x2: 8, y2: 4 },    // 1- -> ground (inP node)
-        { x1: 6, y1: 2, x2: 6, y2: 4 },    // 2- -> 1- (ground)
       ],
     },
   },
@@ -526,22 +493,18 @@ export const EXAMPLES: Example[] = [
         { id: 'U1', kind: 'opamp', gx: 10, gy: 4, part: 'op484' },
         { id: 'Rf', kind: 'resistor', gx: 10, gy: 8, value: 10000 },
         { id: 'G1', kind: 'ground', gx: 8, gy: 4 },
-        { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },
-        { id: 'P2', kind: 'scope2', gx: 2, gy: 8 },
-        { id: 'A1', kind: 'adc1n', gx: 6, gy: 4 },   // 1- to ground (single-ended CH1)
-        { id: 'A2', kind: 'adc2n', gx: 6, gy: 2 },   // 2- to ground (single-ended CH2)
+        { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },  // 1+ on out; 1− unwired = single-ended
+        { id: 'P2', kind: 'scope2', gx: 0, gy: 6 },   // 2+ on the W1 drive; 2− unwired
       ],
       wires: [
         { x1: 2, y1: 6, x2: 4, y2: 6 },    // W1 -> Cin.a
-        { x1: 2, y1: 6, x2: 2, y2: 8 },    // input -> 2+ (probe the drive)
+        { x1: 0, y1: 6, x2: 2, y2: 6 },    // 2+ -> input (probe the drive)
         { x1: 6, y1: 6, x2: 10, y2: 6 },   // Cin.b -> inN
         { x1: 10, y1: 4, x2: 8, y2: 4 },   // inP -> ground
         { x1: 10, y1: 6, x2: 10, y2: 8 },  // inN -> Rf.a
         { x1: 14, y1: 5, x2: 14, y2: 8 },  // out -> down
         { x1: 14, y1: 8, x2: 12, y2: 8 },  // -> Rf.b (feedback)
         { x1: 14, y1: 5, x2: 16, y2: 5 },  // out -> 1+
-        { x1: 6, y1: 4, x2: 8, y2: 4 },    // 1- -> ground (inP node)
-        { x1: 6, y1: 2, x2: 6, y2: 4 },    // 2- -> 1- (ground)
       ],
     },
   },
@@ -551,63 +514,35 @@ export const EXAMPLES: Example[] = [
     w1: sine(1000), w2: sine(2000), ch1Vdiv: 0.5,
     schematic: {
       components: [
-        { id: 'W1', kind: 'awg1', gx: 2, gy: 6 },
+        { id: 'W1', kind: 'awg1', gx: 2, gy: 6 },     // return (2,8) — its own drawn ground
         { id: 'Ra', kind: 'resistor', gx: 6, gy: 6, value: 10000 },
-        { id: 'W2', kind: 'awg2', gx: 2, gy: 8 },
+        { id: 'W2', kind: 'awg2', gx: 2, gy: 10 },    // below W1's return; its own return (2,12)
         { id: 'Rb', kind: 'resistor', gx: 6, gy: 8, value: 10000 },
         { id: 'U1', kind: 'opamp', gx: 10, gy: 4, part: 'op484' },
         { id: 'Rf', kind: 'resistor', gx: 10, gy: 10, value: 10000 },
         { id: 'G1', kind: 'ground', gx: 8, gy: 4 },
-        { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },
-        { id: 'P2', kind: 'scope2', gx: 2, gy: 4 },   // 2+ on the W1 input
-        { id: 'A1', kind: 'adc1n', gx: 6, gy: 4 },   // 1- to ground (single-ended CH1)
-        { id: 'A2', kind: 'adc2n', gx: 6, gy: 2 },   // 2- to ground (single-ended CH2)
+        { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },  // 1+ on out; 1− unwired = single-ended
+        { id: 'P2', kind: 'scope2', gx: 0, gy: 4 },   // 2+ on the W1 input; 2− (0,6) unwired
       ],
       wires: [
         { x1: 2, y1: 6, x2: 6, y2: 6 },    // W1 -> Ra.a
         { x1: 8, y1: 6, x2: 10, y2: 6 },   // Ra.b -> inN
-        { x1: 2, y1: 8, x2: 6, y2: 8 },    // W2 -> Rb.a
+        { x1: 2, y1: 10, x2: 6, y2: 10 },  // W2 -> right
+        { x1: 6, y1: 10, x2: 6, y2: 8 },   // -> Rb.a
         { x1: 8, y1: 8, x2: 8, y2: 6 },    // Rb.b -> summing node (Ra.b)
         { x1: 10, y1: 4, x2: 8, y2: 4 },   // inP -> ground
         { x1: 10, y1: 6, x2: 10, y2: 10 }, // inN -> Rf.a
         { x1: 14, y1: 5, x2: 14, y2: 10 }, // out -> down
         { x1: 14, y1: 10, x2: 12, y2: 10 },// -> Rf.b (feedback)
         { x1: 14, y1: 5, x2: 16, y2: 5 },  // out -> 1+
-        { x1: 2, y1: 4, x2: 2, y2: 6 },    // W1 input -> 2+
-        { x1: 6, y1: 4, x2: 8, y2: 4 },    // 1- -> ground (inP node)
-        { x1: 6, y1: 2, x2: 6, y2: 4 },    // 2- -> 1- (ground)
+        { x1: 0, y1: 4, x2: 2, y2: 4 },    // 2+ -> right
+        { x1: 2, y1: 4, x2: 2, y2: 6 },    // -> W1 input
       ],
     },
   },
-  {
-    id: 'ina125-amp', name: 'INA125 in-amp ×10', group: 'Amplifiers',
-    blurb: 'INA125 instrumentation amp, gain 10 set by R_G = 10 kΩ (G = 4 + 60 kΩ/R_G). A tiny differential input becomes a big output (CH2 in, CH1 out). Builds on the breadboard as a 16-pin DIP.',
-    w1: sine(1000, 0.3), ch1Vdiv: 1, ch2Vdiv: 0.2,
-    schematic: {
-      components: [
-        { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
-        { id: 'U1', kind: 'ina125', gx: 8, gy: 4 },           // pins: VIN+ (8,4) VIN− (8,6) VO (15,5) RG (10,8)(12,8) IAREF (14,8)
-        { id: 'RG', kind: 'resistor', gx: 10, gy: 10, value: 10000 }, // R_G, wired to the RG pins
-        { id: 'G1', kind: 'ground', gx: 8, gy: 8 },           // VIN− to ground
-        { id: 'G2', kind: 'ground', gx: 14, gy: 10 },         // IAREF to ground
-        { id: 'P1', kind: 'scope1', gx: 17, gy: 5 },
-        { id: 'P2', kind: 'scope2', gx: 2, gy: 2 },
-        { id: 'A1', kind: 'adc1n', gx: 10, gy: 8 },           // 1- to ground (single-ended CH1)
-        { id: 'A2', kind: 'adc2n', gx: 12, gy: 8 },           // 2- to ground (single-ended CH2)
-      ],
-      wires: [
-        { x1: 2, y1: 4, x2: 8, y2: 4 },    // W1 -> VIN+
-        { x1: 2, y1: 4, x2: 2, y2: 2 },    // input -> 2+
-        { x1: 8, y1: 6, x2: 8, y2: 8 },    // VIN− -> ground
-        { x1: 10, y1: 8, x2: 10, y2: 10 }, // RG pin 8 -> R_G.a
-        { x1: 12, y1: 8, x2: 12, y2: 10 }, // RG pin 9 -> R_G.b
-        { x1: 14, y1: 8, x2: 14, y2: 10 }, // IAREF -> ground
-        { x1: 15, y1: 5, x2: 17, y2: 5 },  // VO -> 1+
-        { x1: 8, y1: 8, x2: 10, y2: 8 },   // ground -> 1-
-        { x1: 10, y1: 8, x2: 12, y2: 8 },  // ground -> 2-
-      ],
-    },
-  },
+  // (The former 'ina125-amp' example was REMOVED with the SCH-11 merge (andre, 2026-07-03): it
+  // shipped broken — its 1-/2- ground stubs shorted the RG pins — and INA/TIA example work is
+  // deferred. The INA125 PART stays fully placeable from the palette; only the example is gone.)
   {
     id: 'diode-iv', name: 'Diode I-V curve (XY)', group: 'Passive',
     blurb: 'Switch the scope to XY mode to see the curve. CH1 (X) = voltage across the diode, CH2 (Y) = current (I·Rsense). W1 is preset to a triangle sweep.',
@@ -619,15 +554,17 @@ export const EXAMPLES: Example[] = [
         { id: 'D1', kind: 'diode', gx: 4, gy: 4 },               // anode (4,4) → cathode (6,4)
         { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 470 }, // sense R to ground
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
-        { id: 'S1', kind: 'scope1', gx: 4, gy: 2 },              // 1+ on the anode
-        { id: 'A1', kind: 'adc1n', gx: 8, gy: 4 },               // 1- on the cathode → CH1 = V across diode
-        { id: 'S2', kind: 'scope2', gx: 6, gy: 2 },              // 2+ on the cathode → CH2 = I·Rsense
+        // Two-terminal scopes, rotated horizontal (rotation 3: − lead 2 cells RIGHT of +):
+        // CH1 reads ACROSS the diode (1+ anode, 1− cathode); CH2 single-ended on the cathode.
+        { id: 'S1', kind: 'scope1', gx: 4, gy: 2, rotation: 3 }, // 1+ (4,2) anode; 1− (6,2) cathode
+        { id: 'S2', kind: 'scope2', gx: 8, gy: 2, rotation: 3 }, // 2+ (8,2) cathode; 2− (10,2) unwired
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },  // W1 -> anode
         { x1: 4, y1: 4, x2: 4, y2: 2 },  // anode -> 1+
-        { x1: 6, y1: 4, x2: 8, y2: 4 },  // cathode -> 1-
-        { x1: 6, y1: 4, x2: 6, y2: 2 },  // cathode -> 2+
+        { x1: 6, y1: 4, x2: 6, y2: 2 },  // cathode -> 1-  (differential across the diode)
+        { x1: 6, y1: 4, x2: 8, y2: 4 },  // cathode -> right
+        { x1: 8, y1: 4, x2: 8, y2: 2 },  // -> 2+
         { x1: 6, y1: 6, x2: 6, y2: 8 },  // sense R -> ground (explicit, so moves follow)
       ],
     },
@@ -643,15 +580,16 @@ export const EXAMPLES: Example[] = [
         { id: 'Z1', kind: 'zener', gx: 4, gy: 4, value: 3.3 },
         { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 470 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
-        { id: 'S1', kind: 'scope1', gx: 4, gy: 2 },   // 1+ anode
-        { id: 'A1', kind: 'adc1n', gx: 8, gy: 4 },    // 1- cathode → CH1 = V across Zener
-        { id: 'S2', kind: 'scope2', gx: 6, gy: 2 },   // 2+ cathode → CH2 = I·Rsense
+        // Two-terminal scopes, rotated horizontal (rotation 3: − lead right of +):
+        { id: 'S1', kind: 'scope1', gx: 4, gy: 2, rotation: 3 }, // 1+ anode; 1− (6,2) cathode = across the Zener
+        { id: 'S2', kind: 'scope2', gx: 8, gy: 2, rotation: 3 }, // 2+ cathode; 2− (10,2) unwired
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },
-        { x1: 4, y1: 4, x2: 4, y2: 2 },
-        { x1: 6, y1: 4, x2: 8, y2: 4 },
-        { x1: 6, y1: 4, x2: 6, y2: 2 },
+        { x1: 4, y1: 4, x2: 4, y2: 2 },  // anode -> 1+
+        { x1: 6, y1: 4, x2: 6, y2: 2 },  // cathode -> 1-  (differential across the Zener)
+        { x1: 6, y1: 4, x2: 8, y2: 4 },  // cathode -> right
+        { x1: 8, y1: 4, x2: 8, y2: 2 },  // -> 2+
         { x1: 6, y1: 6, x2: 6, y2: 8 },  // sense R -> ground (explicit, so moves follow)
       ],
     },
@@ -675,14 +613,13 @@ export const EXAMPLES: Example[] = [
         { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 470 },  // a=(4,4) b=(6,4) — current limit
         { id: 'D1', kind: 'led', gx: 6, gy: 4, value: 1.8 },       // anode=(6,4)=R1.b  cathode=(8,4); Vf 1.8 → red
         { id: 'G1', kind: 'ground', gx: 8, gy: 6 },
-        { id: 'P1', kind: 'scope1', gx: 2, gy: 2 },                // 1+ on the W1 node (see the PWM square)
-        { id: 'A1', kind: 'adc1n', gx: 10, gy: 6 },                // 1- to ground (single-ended CH1)
+        { id: 'P1', kind: 'scope1', gx: 0, gy: 2 },                // 1+ on the W1 node; 1− (0,4) unwired = single-ended
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },   // W1 -> R1.a (R1.b at (6,4) coincides with the LED anode)
         { x1: 8, y1: 4, x2: 8, y2: 6 },   // LED cathode -> ground
-        { x1: 2, y1: 4, x2: 2, y2: 2 },   // W1 input -> 1+
-        { x1: 8, y1: 6, x2: 10, y2: 6 },  // ground -> 1-
+        { x1: 2, y1: 4, x2: 2, y2: 2 },   // W1 input -> up
+        { x1: 2, y1: 2, x2: 0, y2: 2 },   // -> 1+
       ],
     },
   },
@@ -693,24 +630,21 @@ export const EXAMPLES: Example[] = [
     xy: true, ch1Vdiv: 1, ch2Vdiv: 0.5,
     schematic: {
       components: [
-        { id: 'W1', kind: 'awg1', gx: 10, gy: 4 },
+        { id: 'W1', kind: 'awg1', gx: 12, gy: 4 },   // return (12,6) — its own drawn ground
         { id: 'M1', kind: 'mosfet', gx: 6, gy: 4, part: 'ZVN2110A' }, // drain (8,4), gate (6,5), source (8,6)
         { id: 'Vp', kind: 'vplus', gx: 4, gy: 5 },
         { id: 'R1', kind: 'resistor', gx: 8, gy: 6, rotation: 1, value: 100 }, // source -> sense R (a (8,6) b (8,8))
         { id: 'G1', kind: 'ground', gx: 8, gy: 10 },
-        { id: 'S1', kind: 'scope1', gx: 8, gy: 2 },  // 1+ on the drain (≈ Vds)
-        { id: 'S2', kind: 'scope2', gx: 10, gy: 6 }, // 2+ on the source node (I·Rsense)
-        { id: 'A1', kind: 'adc1n', gx: 10, gy: 10 }, // 1- to ground (single-ended CH1)
-        { id: 'A2', kind: 'adc2n', gx: 12, gy: 10 }, // 2- to ground (single-ended CH2)
+        { id: 'S1', kind: 'scope1', gx: 8, gy: 2, rotation: 3 }, // 1+ on the drain (≈ Vds); 1− (10,2) unwired
+        { id: 'S2', kind: 'scope2', gx: 10, gy: 6 }, // 2+ on the source node (I·Rsense); 2− (10,8) unwired
       ],
       wires: [
-        { x1: 8, y1: 4, x2: 10, y2: 4 },  // drain -> W1
+        { x1: 8, y1: 4, x2: 10, y2: 4 },  // drain -> right
+        { x1: 10, y1: 4, x2: 12, y2: 4 }, // -> W1
         { x1: 4, y1: 5, x2: 6, y2: 5 },   // V+ -> gate (Vgs = +5, on)
         { x1: 8, y1: 4, x2: 8, y2: 2 },   // drain -> 1+
         { x1: 8, y1: 8, x2: 8, y2: 10 },  // sense R -> ground
         { x1: 8, y1: 6, x2: 10, y2: 6 },  // source node -> 2+
-        { x1: 8, y1: 10, x2: 10, y2: 10 },  // ground -> 1-
-        { x1: 10, y1: 10, x2: 12, y2: 10 }, // ground -> 2-
       ],
     },
   },
@@ -724,24 +658,21 @@ export const EXAMPLES: Example[] = [
     tracer: true, xy: true, ch1Vdiv: 1, ch2Vdiv: 0.2,
     schematic: {
       components: [
-        { id: 'W1', kind: 'awg1', gx: 10, gy: 4 },
+        { id: 'W1', kind: 'awg1', gx: 12, gy: 4 },   // return (12,6) — its own drawn ground
         { id: 'M1', kind: 'mosfet', gx: 6, gy: 4, part: 'ZVN2110A' }, // drain (8,4) gate (6,5) source (8,6)
-        { id: 'W2', kind: 'awg2', gx: 4, gy: 5 },                      // -> gate (steps Vgs)
+        { id: 'W2', kind: 'awg2', gx: 4, gy: 5 },                      // -> gate (steps Vgs); return (4,7)
         { id: 'R1', kind: 'resistor', gx: 8, gy: 6, rotation: 1, value: 10 }, // sense R, source -> gnd
         { id: 'G1', kind: 'ground', gx: 8, gy: 10 },
-        { id: 'S1', kind: 'scope1', gx: 8, gy: 2 },  // 1+ on the drain (X ≈ Vds)
-        { id: 'S2', kind: 'scope2', gx: 10, gy: 6 }, // 2+ on the source node (Id·Rsense)
-        { id: 'A1', kind: 'adc1n', gx: 10, gy: 10 }, // 1- to ground (single-ended CH1)
-        { id: 'A2', kind: 'adc2n', gx: 12, gy: 10 }, // 2- to ground (single-ended CH2)
+        { id: 'S1', kind: 'scope1', gx: 8, gy: 2, rotation: 3 }, // 1+ on the drain (X ≈ Vds); 1− (10,2) unwired
+        { id: 'S2', kind: 'scope2', gx: 10, gy: 6 }, // 2+ on the source node (Id·Rsense); 2− (10,8) unwired
       ],
       wires: [
-        { x1: 8, y1: 4, x2: 10, y2: 4 },  // drain -> W1 (Vds sweep)
+        { x1: 8, y1: 4, x2: 10, y2: 4 },  // drain -> right
+        { x1: 10, y1: 4, x2: 12, y2: 4 }, // -> W1 (Vds sweep)
         { x1: 4, y1: 5, x2: 6, y2: 5 },   // W2 -> gate (Vgs step)
         { x1: 8, y1: 4, x2: 8, y2: 2 },   // drain -> 1+
         { x1: 8, y1: 8, x2: 8, y2: 10 },  // sense R -> ground
         { x1: 8, y1: 6, x2: 10, y2: 6 },  // source node -> 2+
-        { x1: 8, y1: 10, x2: 10, y2: 10 },  // ground -> 1-
-        { x1: 10, y1: 10, x2: 12, y2: 10 }, // ground -> 2-
       ],
     },
   },
@@ -753,25 +684,22 @@ export const EXAMPLES: Example[] = [
     tracer: true, xy: true, ch1Vdiv: 1, ch2Vdiv: 0.2,
     schematic: {
       components: [
-        { id: 'W1', kind: 'awg1', gx: 10, gy: 4 },
+        { id: 'W1', kind: 'awg1', gx: 12, gy: 4 },   // return (12,6) — its own drawn ground
         { id: 'Q1', kind: 'bjt', gx: 6, gy: 4, part: '2N3904' }, // collector (8,4) base (6,5) emitter (8,6)
-        { id: 'W2', kind: 'awg2', gx: 2, gy: 5 },                 // -> Rb -> base (steps Ib)
+        { id: 'W2', kind: 'awg2', gx: 2, gy: 5 },                 // -> Rb -> base (steps Ib); return (2,7)
         { id: 'Rb', kind: 'resistor', gx: 4, gy: 5, value: 100000 }, // base resistor, a (4,5) b (6,5)
         { id: 'R1', kind: 'resistor', gx: 8, gy: 6, rotation: 1, value: 100 }, // emitter sense R -> gnd
         { id: 'G1', kind: 'ground', gx: 8, gy: 10 },
-        { id: 'S1', kind: 'scope1', gx: 8, gy: 2 },  // 1+ on the collector (X ≈ Vce)
-        { id: 'S2', kind: 'scope2', gx: 10, gy: 6 }, // 2+ on the emitter node (Ic·Rsense)
-        { id: 'A1', kind: 'adc1n', gx: 10, gy: 10 }, // 1- to ground (single-ended CH1)
-        { id: 'A2', kind: 'adc2n', gx: 12, gy: 10 }, // 2- to ground (single-ended CH2)
+        { id: 'S1', kind: 'scope1', gx: 8, gy: 2, rotation: 3 }, // 1+ on the collector (X ≈ Vce); 1− (10,2) unwired
+        { id: 'S2', kind: 'scope2', gx: 10, gy: 6 }, // 2+ on the emitter node (Ic·Rsense); 2− (10,8) unwired
       ],
       wires: [
-        { x1: 8, y1: 4, x2: 10, y2: 4 },  // collector -> W1 (Vce sweep)
+        { x1: 8, y1: 4, x2: 10, y2: 4 },  // collector -> right
+        { x1: 10, y1: 4, x2: 12, y2: 4 }, // -> W1 (Vce sweep)
         { x1: 2, y1: 5, x2: 4, y2: 5 },   // W2 -> Rb.a (Rb.b at (6,5) coincides with the base)
         { x1: 8, y1: 4, x2: 8, y2: 2 },   // collector -> 1+
         { x1: 8, y1: 8, x2: 8, y2: 10 },  // emitter sense R -> ground
         { x1: 8, y1: 6, x2: 10, y2: 6 },  // emitter node -> 2+
-        { x1: 8, y1: 10, x2: 10, y2: 10 },  // ground -> 1-
-        { x1: 10, y1: 10, x2: 12, y2: 10 }, // ground -> 2-
       ],
     },
   },

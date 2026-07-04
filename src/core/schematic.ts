@@ -23,13 +23,13 @@ export type SchKind =
   | 'ground'
   | 'probe' // (legacy) marks the output node ('out') — same as 'scope1'
   | 'dcrail' // DC supply rail (power for active parts); value = volts
-  // Breadboard ports (WIRE-1): instrument I/O placed and wired, named exactly like the M2K.
-  | 'awg1' // W1 — DAC Analog Output 1 → net 'in'
-  | 'awg2' // W2 — DAC Analog Output 2 → net 'in2'
-  | 'scope1' // 1+ — ADC Analog Input 1 Positive → net 'out'
-  | 'adc1n' // 1- — ADC Analog Input 1 Negative (Ch1 reference) → net 'out_n'
-  | 'scope2' // 2+ — ADC Analog Input 2 Positive → net 'scope2'
-  | 'adc2n' // 2- — ADC Analog Input 2 Negative (Ch2 reference) → net 'scope2_n'
+  // M2K instrument I/O (WIRE-1, reworked as TWO-TERMINAL devices — SCH-11): each is one symbol
+  // with two leads, the honest textbook form. Legacy 'adc1n'/'adc2n' standalone reference ports
+  // were absorbed into scope1/scope2 (see migrateSchematic for the load-time shim).
+  | 'awg1' // W1 — 2-terminal source: t0 output → net 'in'; t1 ground return (bonded to node 0)
+  | 'awg2' // W2 — 2-terminal source: t0 output → net 'in2'; t1 ground return (bonded to node 0)
+  | 'scope1' // CH1 measurement input: t0 = 1+ → net 'out'; t1 = 1- → 'out_n' when wired, else single-ended
+  | 'scope2' // CH2 measurement input: t0 = 2+ → net 'scope2'; t1 = 2- → 'scope2_n' when wired
   | 'vplus' // V+ — positive supply (0..+5 V)
   | 'vminus' // V- — negative supply (0..-5 V)
 
@@ -39,6 +39,11 @@ export interface SchComponent {
   gx: number // grid position (grid units)
   gy: number
   rotation?: number // 0..3 → 0/90/180/270 degrees clockwise (default 0)
+  mirror?: boolean // flipped across the part's own vertical centerline (applied before rotation)
+  // For kind 'scope1'/'scope2' (the shared measurement input): how the placed input is DISPLAYED —
+  // oscilloscope (default) or voltmeter badge. Purely presentational: same port, same nets, same sim
+  // (the M2K scope and voltmeter are the same 1±/2± input on one ADC).
+  view?: 'scope' | 'voltmeter'
   value?: number // ohms / farads / henries (vsource uses AC 1)
   opModel?: 'ideal' | 'lmc662' // for kind 'opamp': ideal VCVS or the LMC662 behavioural model
   part?: string // for kind 'bjt' / 'mosfet': the ADALP2000 part name (key into TRANSISTOR_PARTS)
@@ -130,15 +135,25 @@ export function baseTerminals(kind: SchKind, opModel?: 'ideal' | 'lmc662'): SchT
         { name: 'rg2', gx: 4, gy: 4 },   // RG (pin 9)
         { name: 'iaref', gx: 6, gy: 4 }, // IAREF — separated from the RG pair; tie to GND
       ]
+    case 'awg1':
+    case 'awg2':
+      // Two-terminal source (vertical, like the catalog bipole): output on top, the M2K's
+      // internally-bonded ground return below (drawn with a built-in ground, forced to node 0).
+      return [
+        { name: 'out', gx: 0, gy: 0 },
+        { name: 'ret', gx: 0, gy: 2 },
+      ]
+    case 'scope1':
+    case 'scope2':
+      // Two-terminal measurement input (one scope/voltmeter per channel): + on top, − below.
+      // The − lead unwired = single-ended (ground reference); wired = differential.
+      return [
+        { name: 'p', gx: 0, gy: 0 },
+        { name: 'n', gx: 0, gy: 2 },
+      ]
     case 'ground':
     case 'probe':
     case 'dcrail':
-    case 'awg1':
-    case 'awg2':
-    case 'scope1':
-    case 'scope2':
-    case 'adc1n':
-    case 'adc2n':
     case 'vplus':
     case 'vminus':
       return [{ name: 'p', gx: 0, gy: 0 }]
@@ -155,10 +170,23 @@ export function rotateOffset(dx: number, dy: number, r: number): [number, number
   }
 }
 
-// Absolute (rotated) terminal grid positions for net computation and rendering.
+// Base terminal offsets with the component's mirror applied (still unrotated). The mirror
+// axis is the vertical centerline of the part's base footprint (gx → minX+maxX − gx), so a
+// flip swaps terminals in place — the part does not translate — and every kind's mirrored
+// offsets stay on-grid (min+max is an integer for all kinds). Mirror composes BEFORE
+// rotation: the flip happens in the part's own frame, then the whole part rotates.
+export function localTerminals(c: Pick<SchComponent, 'kind' | 'opModel' | 'mirror'>): SchTerminal[] {
+  const base = baseTerminals(c.kind, c.opModel)
+  if (!c.mirror) return base
+  let min = base[0].gx, max = base[0].gx
+  for (const t of base) { min = Math.min(min, t.gx); max = Math.max(max, t.gx) }
+  return base.map((t) => ({ ...t, gx: min + max - t.gx }))
+}
+
+// Absolute (mirrored + rotated) terminal grid positions for net computation and rendering.
 export function terminalsOf(c: SchComponent): SchTerminal[] {
   const r = c.rotation ?? 0
-  return baseTerminals(c.kind, c.opModel).map((t) => {
+  return localTerminals(c).map((t) => {
     const [dx, dy] = rotateOffset(t.gx, t.gy, r)
     return { name: t.name, gx: c.gx + dx, gy: c.gy + dy }
   })
@@ -360,6 +388,48 @@ export function rotateComponentWithWires(s: Schematic, id: string): Schematic {
   }
 }
 
+// Orthogonal two-segment route between grid points (pin-magnetic modeless wiring, Stage 3).
+// Horizontal leg first, bending at (b.x, a.y); collinear points give one segment, identical
+// points none. The preview draws exactly these segments, so what you see is what commits.
+export function orthoRoute(a: { x: number; y: number }, b: { x: number; y: number }): Wire[] {
+  const segs: Wire[] = []
+  if (b.x !== a.x) segs.push({ x1: a.x, y1: a.y, x2: b.x, y2: a.y })
+  if (b.y !== a.y) segs.push({ x1: b.x, y1: a.y, x2: b.x, y2: b.y })
+  return segs
+}
+
+// Whether F (flip) does anything for a kind. Single-pin parts (ports, ground, rails) mirror to
+// themselves, and the INA125 keeps its inline (non-catalog) render, which does not honour
+// mirror — flipping its model but not its artwork would lie about where the pins are.
+export function canMirror(kind: SchKind): boolean {
+  if (kind === 'ina125') return false
+  return baseTerminals(kind).length > 1
+}
+
+// Toggle component `id`'s mirror, carrying terminal-attached wire endpoints to the mirrored
+// terminal positions (matched by terminal index) — the same rubber-band contract as rotate.
+// The flip is a model-space mirror of the terminal offsets (localTerminals); the renderer
+// re-derives the artwork from the mirrored terminals via the SCH-11 alignment transform, so
+// symbols with a baked-in reflection (the op-amp) cannot double-flip.
+export function mirrorComponentWithWires(s: Schematic, id: string): Schematic {
+  const c = s.components.find((x) => x.id === id)
+  if (!c || !canMirror(c.kind)) return s
+  const oldT = terminalsOf(c)
+  const nc = { ...c, mirror: !c.mirror || undefined }
+  const newT = terminalsOf(nc)
+  const map = new Map<string, { gx: number; gy: number }>()
+  oldT.forEach((t, i) => map.set(key(t.gx, t.gy), { gx: newT[i].gx, gy: newT[i].gy }))
+  return {
+    components: s.components.map((x) => (x.id === id ? nc : x)),
+    wires: s.wires.map((w) => {
+      let nw = w
+      const a = map.get(key(w.x1, w.y1)); if (a) nw = { ...nw, x1: a.gx, y1: a.gy }
+      const b = map.get(key(w.x2, w.y2)); if (b) nw = { ...nw, x2: b.gx, y2: b.gy }
+      return nw
+    }),
+  }
+}
+
 // Deleting a part must take its hookup wires with it: connectivity is coordinate coincidence, so a
 // wire left behind still LOOKS attached but drives nothing — a dangling stub students misread as a
 // live connection. Removes the components in `ids` (plus any explicitly selected wires in
@@ -406,6 +476,28 @@ export function deleteComponentsWithWires(
   }
 }
 
+// Load-time shim for schematics saved before the two-terminal instrument rework: the standalone
+// 1-/2- reference ports ('adc1n'/'adc2n') were absorbed into scope1/scope2 as the − terminal.
+// Each legacy reference port becomes a wire from its channel's new − pin to wherever the old
+// port sat, preserving the differential hookup; with no matching scope placed it referenced
+// nothing and is dropped. Also drops any other unknown kind so stale saves cannot crash the app.
+export function migrateSchematic(s: Schematic): Schematic {
+  const isLegacyRef = (k: string) => k === 'adc1n' || k === 'adc2n'
+  const known = (c: SchComponent) => { try { return baseTerminals(c.kind, c.opModel).length > 0 } catch { return false } }
+  const legacy = s.components.filter((c) => isLegacyRef(c.kind as string))
+  if (!legacy.length && s.components.every(known)) return s
+  const comps = s.components.filter((c) => !isLegacyRef(c.kind as string) && known(c))
+  const wires = [...s.wires]
+  for (const a of legacy) {
+    const plusKind = (a.kind as string) === 'adc1n' ? 'scope1' : 'scope2'
+    const scope = comps.find((c) => c.kind === plusKind)
+    if (!scope) continue
+    const neg = terminalsOf(scope).find((t) => t.name === 'n')!
+    if (neg.gx !== a.gx || neg.gy !== a.gy) wires.push({ x1: neg.gx, y1: neg.gy, x2: a.gx, y2: a.gy })
+  }
+  return { components: comps, wires }
+}
+
 export interface ToCircuitResult {
   circuit: Circuit
   warnings: string[]
@@ -421,6 +513,15 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
   const netOf = (gx: number, gy: number) => nets.get(key(gx, gy)) ?? `net_${gx}_${gy}`
   const warnings: string[] = []
 
+  // A terminal is "connected" iff something else shares its grid point (a wire endpoint or
+  // another part's pin) — nets only ever grow through point coincidence, so a lone point is a
+  // singleton net. Drives the scope's single-ended rule: an unwired − pin means ground reference.
+  const occ = new Map<string, number>()
+  const bump = (k: string) => occ.set(k, (occ.get(k) ?? 0) + 1)
+  for (const c of s.components) for (const t of terminalsOf(c)) bump(key(t.gx, t.gy))
+  for (const w of s.wires) { bump(key(w.x1, w.y1)); bump(key(w.x2, w.y2)) }
+  const connected = (t: SchTerminal) => (occ.get(key(t.gx, t.gy)) ?? 0) > 1
+
   const groundNets = new Set<string>() // every ground symbol's net normalises to '0'
   let inNet: string | undefined
   let in2Net: string | undefined
@@ -430,22 +531,32 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
   let scope2Net: string | undefined
   let scope2RefNet: string | undefined
   for (const c of s.components) {
-    const net = netOf(terminalsOf(c)[0].gx, terminalsOf(c)[0].gy)
+    const ts = terminalsOf(c)
+    const net = netOf(ts[0].gx, ts[0].gy)
     if (c.kind === 'ground') groundNets.add(net)
-    else if (c.kind === 'probe' || c.kind === 'scope1') outNet = net
-    else if (c.kind === 'adc1n') outRefNet = net
-    else if (c.kind === 'scope2') scope2Net = net
-    else if (c.kind === 'adc2n') scope2RefNet = net
-    else if (c.kind === 'vsource' || c.kind === 'awg1') inNet = net
-    else if (c.kind === 'awg2') in2Net = net
-    else if (c.kind === 'vplus' || c.kind === 'vminus' || c.kind === 'dcrail') railNet = net
+    else if (c.kind === 'probe') outNet = net
+    else if (c.kind === 'scope1') {
+      // + → probe net; − → reference net ONLY when wired (unwired − = single-ended, matching
+      // the pre-two-terminal behaviour when no 1- port was placed)
+      outNet = net
+      if (connected(ts[1])) outRefNet = netOf(ts[1].gx, ts[1].gy)
+    } else if (c.kind === 'scope2') {
+      scope2Net = net
+      if (connected(ts[1])) scope2RefNet = netOf(ts[1].gx, ts[1].gy)
+    } else if (c.kind === 'vsource') inNet = net
+    else if (c.kind === 'awg1' || c.kind === 'awg2') {
+      // t0 = output; t1 = the drawn ground return — bonded to the M2K's one internal ground,
+      // so its whole net is forced to node 0. W1 and W2 SHARE that ground (no per-generator 0).
+      if (c.kind === 'awg1') inNet = net; else in2Net = net
+      groundNets.add(netOf(ts[1].gx, ts[1].gy))
+    } else if (c.kind === 'vplus' || c.kind === 'vminus' || c.kind === 'dcrail') railNet = net
   }
   if (groundNets.size === 0) warnings.push('No ground — add a ground symbol.')
   if (!inNet && !railNet) warnings.push('No source — add a W1 generator output or a V+ supply rail.')
   if (!outNet) warnings.push('No output — add a Scope CH1 input probe.')
 
   // Connectivity checks: count real (non-marker) component terminals per net.
-  const MARKERS = new Set<SchKind>(['ground', 'probe', 'scope1', 'scope2', 'adc1n', 'adc2n'])
+  const MARKERS = new Set<SchKind>(['ground', 'probe', 'scope1', 'scope2'])
   const termCount = new Map<string, number>()
   for (const c of s.components) {
     if (MARKERS.has(c.kind)) continue
@@ -579,7 +690,7 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
       const def = c.kind === 'vminus' ? -5 : 5
       comps.push({ kind: 'dcrail', id: `S${sc++}`, node: rename(netOf(ts[0].gx, ts[0].gy)), volts: c.value ?? def })
     }
-    // ground / probe / scope1 (1+) / scope2 (2+) / adc1n (1-) / adc2n (2-) are markers.
+    // ground / probe / scope1 (1±) / scope2 (2±) are markers — no SPICE device emitted.
   }
   if (groundNets.size > 0) comps.push({ kind: 'ground', id: '0', node: '0' })
 

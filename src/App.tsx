@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
 import { SignalParams, WaveType, generateSignal, safeFrequency } from './core/signal'
 import { DEFAULT_CHANNELS, resolveChannelSamples, ChannelInputs, type Samples } from './core/scope'
-import { toCircuit, type Schematic } from './core/schematic'
+import { toCircuit, migrateSchematic, type Schematic } from './core/schematic'
 import { type SupplySettings, buildNetlist, applyGeneratorParams } from './core/netlist'
 import { createSpiceEngine, type SpiceEngine, sampleNodeTransient } from './core/spice'
 import { settledNodeVoltages, ledSpecs, ledAverageCurrents } from './core/boardsim'
@@ -69,7 +69,9 @@ function loadStoredSchematic(): Schematic {
     const raw = localStorage.getItem(CIRCUIT_KEY)
     if (raw) {
       const d = JSON.parse(raw)
-      if (Array.isArray(d.components) && Array.isArray(d.wires)) return { components: d.components, wires: d.wires }
+      // migrateSchematic: pre-two-terminal saves carry standalone 1-/2- ports → shim onto
+      // the scope's − pin (SCH-11 two-terminal instruments)
+      if (Array.isArray(d.components) && Array.isArray(d.wires)) return migrateSchematic({ components: d.components, wires: d.wires })
     }
   } catch { /* ignore corrupt storage */ }
   return { components: [], wires: [] }
