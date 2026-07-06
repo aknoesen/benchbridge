@@ -8,6 +8,21 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
+## INST-2 DONE (2026-07-06 — scope ⇄ voltmeter mutually exclusive per channel, Rule 4)
+
+INST-1 Part C, shipped separately. Each placed CH1/CH2 is EITHER a scope OR a voltmeter (its `view`,
+undefined = scope), driven from the schematic — no second toggle. App computes `ch1View`/`ch2View`;
+the Oscilloscope shows no trace for a voltmeter-view channel (null signal + "in use by the Voltmeter"
+banner); the Voltmeter reads only voltmeter-view channels (a scope-view channel reads "in use by the
+scope"). andre's call (strict + fix examples): the **divider** — a voltmeter demo — has both channels set
+`view: 'voltmeter'` so its blurb works; every other example stays scope-view. `view` doesn't touch
+`toCircuit`/`computeNets`, so the invariance snapshot + sim baseline are unchanged. Gate: **324/324**,
+`tsc && vite build` clean, canary untouched. Live: divider → Voltmeter 1.66 V / 3.34 V, Scope banner;
+signal-sine → Voltmeter "in use by the scope", Scope trace live. Files: `App.tsx`, `Oscilloscope.tsx`,
+`Voltmeter.tsx`, `examples.ts` (divider), `examples.test.ts`. Known polish item (flagged): the mixed case
+(CH1 voltmeter + CH2 scope) blanks the whole scope because CH1 is the plot's primary source — no example
+hits it; the scope affordance is a UX detail andre will confirm.
+
 ## INST-1 A+B DONE (2026-07-06 — M2K instrument model enforced; scope − no longer auto-grounded)
 
 Implements `docs/reference/m2k-instrument-model.md` Rules 2 + 3. Reverses the `a752c72` scope-neg

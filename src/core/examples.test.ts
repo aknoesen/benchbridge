@@ -199,3 +199,22 @@ describe('TIA-AC example (tia-ac — time-domain current → voltage)', () => {
     expect(dot).toBeLessThan(0)
   }, 30000)
 })
+
+describe('INST-2: scope/voltmeter view per channel (Rule 4)', () => {
+  it('the divider is a voltmeter demo — both channels are in voltmeter view', () => {
+    const ex = EXAMPLES.find((e) => e.id === 'divider')!
+    const scopes = ex.schematic.components.filter((c) => c.kind === 'scope1' || c.kind === 'scope2')
+    expect(scopes).toHaveLength(2)
+    expect(scopes.every((c) => c.view === 'voltmeter')).toBe(true)
+  })
+
+  it('every other example leaves its channels in the default scope view', () => {
+    for (const ex of EXAMPLES) {
+      if (ex.id === 'divider') continue
+      const metered = ex.schematic.components.some(
+        (c) => (c.kind === 'scope1' || c.kind === 'scope2') && c.view === 'voltmeter',
+      )
+      expect(metered, ex.id).toBe(false)
+    }
+  })
+})

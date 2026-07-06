@@ -21,6 +21,11 @@ interface Props {
   // circuit is active the scope mirrors the sim: CH2 auto-shows iff this is true, and hides otherwise
   // (no manual enable needed). In standalone/no-circuit use this is undefined and CH2 stays manual.
   ch2InSim?: boolean
+  // INST-2 / Rule 4: the channel is assigned to the Voltmeter (its `view`), so the scope shows no
+  // live trace for it — one ADC per channel. App passes a null signal for a metered channel; these
+  // flags drive the "in use by the Voltmeter" banner.
+  ch1Metered?: boolean
+  ch2Metered?: boolean
   // True when the simulated circuit output is riding the supply rails (clipping) — shows a hint.
   outputClipping?: boolean
   // One-shot request from App (set when an example loads): scope mode + Volts/div framing. Consumed
@@ -72,7 +77,7 @@ const fmtF = (f: number | null) => (f == null ? '—' : f >= 1000 ? `${(f / 1000
 const fmtT = (s: number | null) => (s == null ? '—' : s < 1e-3 ? `${(s * 1e6).toFixed(1)} µs` : s < 1 ? `${(s * 1e3).toFixed(3)} ms` : `${s.toFixed(4)} s`)
 const fmtD = (d: number | null) => (d == null ? '—' : `${(d * 100).toFixed(1)} %`)
 
-export default function Oscilloscope({ params, signal, signal2, params2, running, circuitActive, ch2InSim, outputClipping, circuitFs, onWindowSecChange, compact, onRunToggle, onParams2Change, scopeReq, onScopeApplied }: Props) {
+export default function Oscilloscope({ params, signal, signal2, params2, running, circuitActive, ch2InSim, ch1Metered, ch2Metered, outputClipping, circuitFs, onWindowSecChange, compact, onRunToggle, onParams2Change, scopeReq, onScopeApplied }: Props) {
   const plotRef = useRef<HTMLDivElement>(null)
   const initialised = useRef(false)
   const frameRef = useRef(0) // free-running capture-phase counter
@@ -363,6 +368,11 @@ export default function Oscilloscope({ params, signal, signal2, params2, running
             </button>
           </div>
         </div>
+        {(ch1Metered || ch2Metered) && (
+          <div style={{ padding: '6px 12px', fontSize: 12, color: '#40c0e0', background: 'var(--bg-panel)', borderBottom: '1px solid var(--border)' }}>
+            {[ch1Metered ? 'CH1' : null, ch2Metered ? 'CH2' : null].filter(Boolean).join(' & ')} in use by the Voltmeter — one ADC per channel (change the channel's view in the Circuit editor).
+          </div>
+        )}
         <div ref={plotRef} className="plotly-display" />
         {showMeas && meas1 && (
           <div className="marker-table">

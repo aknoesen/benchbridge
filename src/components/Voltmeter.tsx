@@ -18,6 +18,11 @@ interface Props {
   w2?: SignalParams
   psu?: SupplySettings
   compact?: boolean
+  // INST-2 / Rule 4: one ADC per channel. The voltmeter reads a channel only when its measurement
+  // device is in voltmeter view; a scope-view channel is "in use by the scope" (undefined = scope
+  // default). null = no CH device placed → behave as before (reads whatever probe is present).
+  ch1View?: 'scope' | 'voltmeter' | null
+  ch2View?: 'scope' | 'voltmeter' | null
 }
 
 // M2K voltmeter ranges + practical resolution from EEC1 Lab 1 (±25 V → 20 mV, ±2.5 V → 2 mV).
@@ -43,7 +48,11 @@ function getEngine(): SpiceEngine {
 let lastCh1: number | null = null
 let lastCh2: number | null = null
 
-export default function Voltmeter({ circuit, probes, w1, w2, psu, compact }: Props) {
+export default function Voltmeter({ circuit, probes, w1, w2, psu, compact, ch1View, ch2View }: Props) {
+  // Rule 4: a channel whose device is in scope view is unavailable to the voltmeter (in use by the
+  // scope). null (no device) keeps the legacy behaviour so a bare probe still reads.
+  const ch1Scoped = ch1View === 'scope'
+  const ch2Scoped = ch2View === 'scope'
   const [range, setRange] = useState(0)
   // Seed from the module-level cache: a revisit shows the previous numbers instantly.
   const [ch1, setCh1] = useState<number | null>(lastCh1)
@@ -97,8 +106,8 @@ export default function Voltmeter({ circuit, probes, w1, w2, psu, compact }: Pro
   // save it through the same dialog the plots/diagrams use.
   function exportPng() {
     const rows = [
-      { label: 'Channel 1  (1+ − 1−)', value: fmt(ch1), color: CH1_COLOR },
-      { label: 'Channel 2  (2+ − 2−)', value: fmt(ch2), color: CH2_COLOR },
+      { label: 'Channel 1  (1+ − 1−)', value: ch1Scoped ? 'in use by the scope' : fmt(ch1), color: CH1_COLOR },
+      { label: 'Channel 2  (2+ − 2−)', value: ch2Scoped ? 'in use by the scope' : fmt(ch2), color: CH2_COLOR },
     ]
     const s = 2, W = 460, rowH = 92, pad = 24, H = pad * 2 + 24 + rows.length * rowH + 18
     const canvas = document.createElement('canvas')
@@ -124,10 +133,12 @@ export default function Voltmeter({ circuit, probes, w1, w2, psu, compact }: Pro
     canvas.toBlob((b) => { if (b) void savePngBlob(b, 'voltmeter.png') }, 'image/png')
   }
 
-  const reading = (label: string, v: number | null, color: string) => (
+  const reading = (label: string, v: number | null, color: string, scoped = false) => (
     <div style={{ background: 'var(--bg-display)', border: '1px solid var(--border)', borderRadius: 4, padding: '14px 18px', marginBottom: 12 }}>
       <div style={{ fontSize: 12, color, fontWeight: 600, marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 30, fontFamily: 'monospace', color: v === null ? 'var(--text-secondary)' : 'var(--text-primary)' }}>{fmt(v)}</div>
+      {scoped
+        ? <div style={{ fontSize: 14, fontFamily: 'monospace', color: 'var(--text-secondary)', fontStyle: 'italic' }}>in use by the scope</div>
+        : <div style={{ fontSize: 30, fontFamily: 'monospace', color: v === null ? 'var(--text-secondary)' : 'var(--text-primary)' }}>{fmt(v)}</div>}
     </div>
   )
 
@@ -144,8 +155,8 @@ export default function Voltmeter({ circuit, probes, w1, w2, psu, compact }: Pro
           </div>
         </div>
         <div style={{ padding: 20, overflow: 'auto' }}>
-          {reading('Channel 1  (1+ − 1−)', ch1, CH1_COLOR)}
-          {reading('Channel 2  (2+ − 2−)', ch2, CH2_COLOR)}
+          {reading('Channel 1  (1+ − 1−)', ch1, CH1_COLOR, ch1Scoped)}
+          {reading('Channel 2  (2+ − 2−)', ch2, CH2_COLOR, ch2Scoped)}
           <div style={{ fontSize: 11, color: 'var(--accent-blue)', fontFamily: 'monospace', marginTop: 4 }}>{status}</div>
         </div>
       </div>

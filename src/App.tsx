@@ -305,6 +305,15 @@ export default function App() {
   // only the panels that feed the drawing. With nothing placed (standalone) genInSim is all-false and
   // the Signal Generator falls back to showing both (see SignalGenerator).
   const ch2InSim = drawnValid && drawn.probes.ch2 != null
+  // INST-2 / Rule 4: one ADC per channel — a placed CH1/CH2 is EITHER a scope OR a voltmeter at any
+  // moment (its `view`; undefined = scope). null = no measurement device placed for that channel.
+  // The scope hides a voltmeter-view channel; the voltmeter reads only voltmeter-view channels.
+  const ch1View = useMemo<'scope' | 'voltmeter' | null>(() => {
+    const s = schematic.components.find((c) => c.kind === 'scope1'); return s ? (s.view ?? 'scope') : null
+  }, [schematic])
+  const ch2View = useMemo<'scope' | 'voltmeter' | null>(() => {
+    const s = schematic.components.find((c) => c.kind === 'scope2'); return s ? (s.view ?? 'scope') : null
+  }, [schematic])
   const genInSim = useMemo(() => ({
     w1: schematic.components.some((c) => c.kind === 'awg1'),
     w2: schematic.components.some((c) => c.kind === 'awg2'),
@@ -510,12 +519,16 @@ export default function App() {
   // instruments that support it. Pure function of props + each instrument's local state.
   function renderPanel(id: ActiveInstrument): React.ReactNode {
     switch (id) {
-      case 'scope':
-        return <Oscilloscope params={params} signal={scopeSig1} signal2={scopeSig2} params2={params2}
-          running={running} circuitActive={circuitActive} ch2InSim={ch2InSim} outputClipping={outputClipping}
+      case 'scope': {
+        // Rule 4: a voltmeter-view channel shows no scope trace (null source) + an "in use" banner.
+        const ch1Metered = ch1View === 'voltmeter', ch2Metered = ch2View === 'voltmeter'
+        return <Oscilloscope params={params} signal={ch1Metered ? null : scopeSig1} signal2={ch2Metered ? null : scopeSig2} params2={params2}
+          running={running} circuitActive={circuitActive} ch2InSim={ch2InSim && !ch2Metered} outputClipping={outputClipping}
           circuitFs={scopeCircuitFs} onWindowSecChange={setScopeWinSec} compact={multi}
+          ch1Metered={ch1Metered} ch2Metered={ch2Metered}
           scopeReq={scopeReq} onScopeApplied={() => setScopeReq(null)}
           onRunToggle={() => setRunning(r => !r)} onParams2Change={(k, v) => setParams2(prev => ({ ...prev, [k]: v }))} />
+      }
       case 'schematic':
         return <SchematicEditor schematic={schematic} setSchematic={setSchematic}
           snapshot={snapshotSchematic} undo={undoSchematic} redo={redoSchematic}
@@ -567,7 +580,8 @@ export default function App() {
         return <CurveTracer circuit={drawnValid ? drawn.circuit : undefined}
           dutName={drawnValid ? 'your drawn circuit' : undefined} compact={multi} />
       case 'voltmeter':
-        return <Voltmeter circuit={drawn.circuit} probes={drawn.probes} w1={params} w2={params2} psu={psu} />
+        return <Voltmeter circuit={drawn.circuit} probes={drawn.probes} w1={params} w2={params2} psu={psu}
+          ch1View={ch1View} ch2View={ch2View} />
       case 'psu':
         return <PowerSupply psu={psu} onChange={setPsu} circuit={drawn.circuit} w1={params} w2={params2} />
       case 'about':

@@ -168,10 +168,11 @@ export const EXAMPLES: Example[] = [
         { id: 'R2', kind: 'resistor', gx: 8, gy: 4, rotation: 1, value: 20000 }, // a=(8,4) b=(8,6)
         { id: 'G1', kind: 'ground', gx: 8, gy: 8 },
         { id: 'G2', kind: 'ground', gx: 10, gy: 6 }, // scope − → GND (single-ended reference)
-        // Two-terminal scopes: CH1's two leads read ACROSS R1 (1+ on V+, 1− wired to the
-        // midpoint = differential); CH2's − lead stays unwired = single-ended across R2.
-        { id: 'P1', kind: 'scope1', gx: 4, gy: 0 },   // 1+ (4,0) → V+; 1− (4,2) → midpoint
-        { id: 'P2', kind: 'scope2', gx: 10, gy: 4 },  // 2+ on the midpoint; 2− (10,6) unwired
+        // Two-terminal scopes: CH1's two leads read ACROSS R1 (1+ on V+, 1− wired to the midpoint
+        // = differential); CH2 is single-ended across R2 (2− wired to GND). INST-2: this is a
+        // Voltmeter demo (read two DIFFERENT numbers), so both channels are in voltmeter view.
+        { id: 'P1', kind: 'scope1', gx: 4, gy: 0, view: 'voltmeter' },   // 1+ (4,0) → V+; 1− (4,2) → midpoint
+        { id: 'P2', kind: 'scope2', gx: 10, gy: 4, view: 'voltmeter' },  // 2+ on the midpoint; 2− (10,6) → GND
       ],
       wires: [
         { x1: 2, y1: 4, x2: 4, y2: 4 },   // V+ -> R1.a (applied)
