@@ -623,6 +623,19 @@ export function schematicExpectation(s: Schematic): SchematicExpectation {
   return { parts, dips, transistors, ports: [...ports].map(([name, net]) => ({ name, net })) }
 }
 
+// ARB-6: is every expected placeable part / DIP / transistor from the schematic on the board (by
+// id)? Gates the Auto routing option — auto-wiring a half-placed board occupies holes/columns that
+// box in the parts placed next, so connecting is only offered once the whole board is placed.
+export function boardComplete(s: Schematic, b: BoardLayout): boolean {
+  const exp = schematicExpectation(s)
+  const partIds = new Set(b.parts.map((p) => p.id))
+  const dipIds = new Set((b.dips ?? []).map((d) => d.id))
+  const trIds = new Set((b.transistors ?? []).map((t) => t.id))
+  return exp.parts.every((p) => partIds.has(p.id))
+    && exp.dips.every((d) => dipIds.has(d.id))
+    && exp.transistors.every((t) => trIds.has(t.id))
+}
+
 export interface CheckResult { ok: boolean; message: string }
 
 function pinLabel(pin: string): string {

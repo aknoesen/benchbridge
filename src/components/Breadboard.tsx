@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction, type CSSProperties, type ReactNode } from 'react'
 import {
   buildHoles, boardNets, boardWidth, boardHeight, PAD, PITCH, CHANNEL_SLOT,
-  schematicExpectation, checkEquivalence, boardNodeMap, autoRouteJumpers, type AutoJumper,
+  schematicExpectation, checkEquivalence, boardNodeMap, autoRouteJumpers, boardComplete, type AutoJumper,
   type BoardLayout, type CheckResult, type PlacedPart, type PlacedDip, type PlacedTransistor,
   normalizeBoardOrder, nextBoardSeq,
   MIN_RESISTOR_HOLES, parseHoleKey, shiftHole, canDropPart, canDropDip, canDropTransistor,
@@ -322,18 +322,32 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
   const holes = useMemo(() => buildHoles(), [])
   const holeByKey = useMemo(() => new Map(holes.map((h) => [h.key, h])), [holes])
   const exp = useMemo(() => schematicExpectation(schematic), [schematic])
-  // F-7/ARB-3: the generated wiring. `hint` overlays it on demand; `auto` applies it read-only.
+  // ARB-6: Auto (one-shot "connect the whole board") is only offered once every expected part is
+  // placed — routing a half-placed board boxes in the parts placed next. `complete` gates the Auto
+  // button and, as a safety net, the auto application below (a part removed after connecting must
+  // not leave stale auto-wiring on an incomplete board).
+  const complete = useMemo(() => boardComplete(schematic, board), [schematic, board])
+  // F-7/ARB-3: the generated wiring. `hint` overlays it on demand (allowed to preview a partial
+  // board); `auto` applies it read-only, but only when the board is complete.
   const autoJumpers = useMemo<AutoJumper[]>(
     () => (routing === 'manual' ? [] : autoRouteJumpers(schematic, board, holes)),
     [routing, schematic, board, holes],
   )
-  // The wiring in effect: the student's own jumpers, or the generated set under `auto`. Everything
-  // downstream (nets, colouring, the probe map, Check) reads this, so `auto` behaves like a fully
-  // wired board while board.jumpers itself is never touched (switching back restores manual work).
-  const effJumpers = routing === 'auto' ? autoJumpers : board.jumpers
+  const autoActive = routing === 'auto' && complete
+  // ARB-6 safety fallback: if the board drops below complete while in Auto (e.g. a part removed
+  // after connecting), snap back to Manual so the UI is consistent (the auto seed is a read-only
+  // overlay that was never written to board.jumpers, so the student's own wiring simply returns).
+  useEffect(() => {
+    if (routing === 'auto' && !complete) onRoutingChange?.('manual')
+  }, [routing, complete, onRoutingChange])
+  // The wiring in effect: the student's own jumpers, or the generated set under `auto` (complete
+  // board only). Everything downstream (nets, colouring, the probe map, Check) reads this, so `auto`
+  // behaves like a fully wired board while board.jumpers itself is never touched (switching back
+  // restores manual work).
+  const effJumpers = autoActive ? autoJumpers : board.jumpers
   const effBoard = useMemo<BoardLayout>(
-    () => (routing === 'auto' ? { ...board, jumpers: autoJumpers } : board),
-    [routing, board, autoJumpers],
+    () => (autoActive ? { ...board, jumpers: autoJumpers } : board),
+    [autoActive, board, autoJumpers],
   )
   const nets = useMemo(() => boardNets(holes, effJumpers), [holes, effJumpers])
   // ARB-2: board-net → circuit-node bridge, so a hovered pin can look up its live sim voltage.
@@ -1137,7 +1151,7 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
           {routing !== 'auto' && (
             <button className={tool.kind === 'jumper' ? 'active' : ''} onClick={() => { setTool({ kind: 'jumper' }); setPending(null) }}>Jumper</button>
           )}
-          <button onClick={() => { setBoard({ parts: [], jumpers: [], ports: [], dips: [], transistors: [] }); setCheck(null); setPending(null) }}>Clear</button>
+          <button onClick={() => { setBoard({ parts: [], jumpers: [], ports: [], dips: [], transistors: [] }); setCheck(null); setPending(null); onRoutingChange?.('manual') }}>Clear</button>
         </div>
         {/* F-7/ARB-3: the three-state routing control. One valid wiring comes from the pure
             autoRouteJumpers engine; `hint` reveals it as a ghost, `auto` applies it (ARB-3b: as an
@@ -1148,9 +1162,16 @@ export default function Breadboard({ schematic, setSchematic, board, setBoard, g
             onClick={() => onRoutingChange?.('manual')}>Manual</button>
           <button className={routing === 'hint' ? 'active' : ''} title="Wire it yourself, with a reveal-a-valid-wiring hint"
             onClick={() => onRoutingChange?.('hint')}>Hint</button>
-          <button className={routing === 'auto' ? 'active' : ''} title="Place parts only — jumpers are generated; click one to take over"
+          <button className={routing === 'auto' ? 'active' : ''} disabled={!complete}
+            style={!complete ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+            title={complete ? 'Place parts only — jumpers are generated; click one to take over' : 'Place all parts on the board first'}
             onClick={() => onRoutingChange?.('auto')}>Auto</button>
         </div>
+        {!complete && (
+          <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.5 }}>
+            Place every part on the board to enable Auto — then it wires the whole board in one step.
+          </div>
+        )}
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: 4 }}>
           {routing === 'manual'
             ? 'You place the parts and run every inter-column jumper yourself; Check verifies your wiring.'

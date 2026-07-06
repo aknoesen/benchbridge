@@ -496,6 +496,9 @@ export default function App() {
     // (the flashlight lands lit), else empty. The id-sync effect alone is not enough — a new
     // example reusing ids (R1, U1, …) would keep the previous example's stale placements.
     setBoard(ex.board ? normalizeBoardOrder(JSON.parse(JSON.stringify(ex.board))) : emptyBoard())
+    // ARB-6: a fresh build starts in Manual — connecting is a deliberate step once the board is
+    // fully placed (a pre-built example board carries its own jumpers, so it still shows wired).
+    setUiSettings((s) => ({ ...s, boardRouting: 'manual' }))
     setParams({ ...DEFAULT_PARAMS, ...ex.w1 })
     setParams2({ ...DEFAULT_PARAMS2, ...ex.w2 })
     setScopeReq({ xy: !!ex.xy, ch1Vdiv: ex.ch1Vdiv, ch2Vdiv: ex.ch2Vdiv })
@@ -516,7 +519,7 @@ export default function App() {
         return <SchematicEditor schematic={schematic} setSchematic={setSchematic}
           snapshot={snapshotSchematic} undo={undoSchematic} redo={redoSchematic}
           onLoadGenerators={(w1, w2) => { if (w1) setParams({ ...DEFAULT_PARAMS, ...w1 }); setParams2(w2 ? { ...DEFAULT_PARAMS2, ...w2 } : DEFAULT_PARAMS2) }}
-          onLoadBoard={(b) => setBoard(b ? normalizeBoardOrder(JSON.parse(JSON.stringify(b))) : emptyBoard())}
+          onLoadBoard={(b) => { setBoard(b ? normalizeBoardOrder(JSON.parse(JSON.stringify(b))) : emptyBoard()); setUiSettings((s) => ({ ...s, boardRouting: 'manual' })) }}
           onLoadScope={(req) => setScopeReq(req)} onOpenTracer={() => { setActive('curvetracer'); setPresetId(null) }} />
       case 'breadboard': {
         const vertical = boardOrient === 'stacked'
@@ -538,7 +541,7 @@ export default function App() {
                 <SchematicEditor schematic={schematic} setSchematic={setSchematic}
                   snapshot={snapshotSchematic} undo={undoSchematic} redo={redoSchematic}
                   onLoadGenerators={(w1, w2) => { if (w1) setParams({ ...DEFAULT_PARAMS, ...w1 }); setParams2(w2 ? { ...DEFAULT_PARAMS2, ...w2 } : DEFAULT_PARAMS2) }}
-                  onLoadBoard={(b) => setBoard(b ? normalizeBoardOrder(JSON.parse(JSON.stringify(b))) : emptyBoard())}
+                  onLoadBoard={(b) => { setBoard(b ? normalizeBoardOrder(JSON.parse(JSON.stringify(b))) : emptyBoard()); setUiSettings((s) => ({ ...s, boardRouting: 'manual' })) }}
                   onLoadScope={(req) => setScopeReq(req)} onOpenTracer={() => { setActive('curvetracer'); setPresetId(null) }} />
               </div>
               <div className={`board-splitter ${vertical ? 'horizontal' : 'vertical'}`} onPointerDown={onSplitterDown}

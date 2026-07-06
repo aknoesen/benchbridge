@@ -551,3 +551,36 @@ describe('autoRouteJumpers (F-7/ARB-3 — manual/hint/auto routing engine)', () 
     expect(checkEquivalence(rcSch, { ...b, jumpers: baked }, holes).ok).toBe(true)
   })
 })
+
+import { boardComplete, emptyBoard } from './breadboard'
+
+describe('boardComplete (ARB-6 Auto gate)', () => {
+  const sch: Schematic = { components: [
+    { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 1000 },
+    { id: 'C1', kind: 'capacitor', gx: 8, gy: 4, value: 1e-7 },
+  ], wires: [] }
+
+  it('false when nothing is placed', () => {
+    expect(boardComplete(sch, emptyBoard())).toBe(false)
+  })
+
+  it('false when only some expected parts are placed', () => {
+    const b: BoardLayout = { parts: [{ id: 'R1', kind: 'resistor', aHole: 'b10', bHole: 'b15' }], jumpers: [], ports: [] }
+    expect(boardComplete(sch, b)).toBe(false)
+  })
+
+  it('true when every expected part is on the board', () => {
+    const b: BoardLayout = { parts: [
+      { id: 'R1', kind: 'resistor', aHole: 'b10', bHole: 'b15' },
+      { id: 'C1', kind: 'capacitor', aHole: 'c10', bHole: 'c15' },
+    ], jumpers: [], ports: [] }
+    expect(boardComplete(sch, b)).toBe(true)
+  })
+
+  it('requires expected DIPs to be placed too', () => {
+    const dipSch: Schematic = { components: [{ id: 'U1', kind: 'lmc662', gx: 10, gy: 4 }], wires: [] }
+    expect(boardComplete(dipSch, emptyBoard())).toBe(false)
+    const placed: BoardLayout = { parts: [], jumpers: [], ports: [], dips: [{ id: 'U1', kind: 'lmc662', col: 5 }] }
+    expect(boardComplete(dipSch, placed)).toBe(true)
+  })
+})
