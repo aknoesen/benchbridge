@@ -132,6 +132,49 @@ export const PORT_NAME: Partial<Record<SchKind, string>> = {
 // 2-pin parts a student places on the board (F-2): passives plus the 2-terminal semiconductors.
 export const PLACEABLE_KINDS = new Set<SchKind>(['resistor', 'capacitor', 'inductor', 'diode', 'led', 'zener', 'photodiode'])
 
+// ARB-7: leg↔terminal identity. A polarized 2-leg part (diode family, and an electrolytic cap) has a
+// fixed A/B — a reversed placement must fail Check. A symmetric part (R, L, ceramic C) has arbitrary
+// A/B, so either orientation that reproduces the topology passes. Kit rule (coordinate with SCH-13):
+// a capacitor ≥ 1 µF is an electrolytic ⇒ polarized; smaller (or a set `polarized:false`) is ceramic.
+export const isPolarizedCap = (c: { kind: SchKind; value?: number }): boolean =>
+  c.kind === 'capacitor' && (c.value ?? 0) >= 1e-6
+export const isSymmetricPart = (c: { kind: SchKind; value?: number }): boolean =>
+  c.kind === 'resistor' || c.kind === 'inductor' || (c.kind === 'capacitor' && !isPolarizedCap(c))
+
+// ARB-7: resolve each symmetric part's aHole/bHole to the schematic net it carries, propagating from
+// the fixed anchors (ports, DIP/TO-92 pins, polarized part legs) already in `anchored` (board-net →
+// schem-net). `symParts` are the placed symmetric parts. Returns each part's {aNet,bNet} (the schem
+// net for its a/b holes) plus the ids still unresolved (a floating R/C/L with no anchored path — the
+// caller backtracks those). Pure; the caller's consistency test is the final arbiter.
+function propagateSymmetric(
+  anchored: Map<string, string>,
+  symParts: { id: string; a: string; b: string; aHole: string; bHole: string }[],
+  bn: (k: string) => string,
+): { legNet: Map<string, { aNet: string; bNet: string }>; unresolved: string[] } {
+  const phi = new Map(anchored) // board-net → schem-net
+  const legNet = new Map<string, { aNet: string; bNet: string }>()
+  const oriented = new Set<string>()
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const p of symParts) {
+      if (oriented.has(p.id)) continue
+      const X = bn(p.aHole), Y = bn(p.bHole)
+      const fx = phi.get(X), fy = phi.get(Y)
+      let aNet: string, bNet: string
+      if (fx !== undefined) { aNet = fx; bNet = fx === p.a ? p.b : p.a }
+      else if (fy !== undefined) { bNet = fy; aNet = fy === p.b ? p.a : p.b }
+      else continue
+      legNet.set(p.id, { aNet, bNet }); oriented.add(p.id); changed = true
+      if (!phi.has(X)) phi.set(X, aNet)
+      if (!phi.has(Y)) phi.set(Y, bNet)
+    }
+  }
+  const unresolved = symParts.filter((p) => !oriented.has(p.id)).map((p) => p.id)
+  for (const id of unresolved) { const p = symParts.find((q) => q.id === id)!; legNet.set(id, { aNet: p.a, bNet: p.b }) }
+  return { legNet, unresolved }
+}
+
 // Kinds the board cannot lay out. Every part now has a package (op-amp → LMC662 DIP, in-amp →
 // INA125 DIP, 2-pin parts placeable), so this is empty; the machinery stays for any future part.
 export const UNBOARDABLE_KINDS = new Set<SchKind>()
@@ -667,10 +710,19 @@ export function checkEquivalence(s: Schematic, board: BoardLayout, holes: Hole[]
 
   const schem = new Map<string, string>()
   const brd = new Map<string, string>()
+  // ARB-7: polarized 2-leg parts keep a FIXED leg identity (a reversed one must fail); symmetric
+  // parts (R/L/ceramic C) are collected and their orientation is resolved from the anchors below.
+  const compById = new Map(s.components.map((c) => [c.id, c]))
+  const symParts: { id: string; a: string; b: string; aHole: string; bHole: string }[] = []
   for (const p of exp.parts) {
     const pl = placedPart.get(p.id)!
-    schem.set(`${p.id}.A`, p.a); brd.set(`${p.id}.A`, bn(pl.aHole))
-    schem.set(`${p.id}.B`, p.b); brd.set(`${p.id}.B`, bn(pl.bHole))
+    const comp = compById.get(p.id)
+    if (comp && isSymmetricPart(comp)) {
+      symParts.push({ id: p.id, a: p.a, b: p.b, aHole: pl.aHole, bHole: pl.bHole })
+    } else {
+      schem.set(`${p.id}.A`, p.a); brd.set(`${p.id}.A`, bn(pl.aHole))
+      schem.set(`${p.id}.B`, p.b); brd.set(`${p.id}.B`, bn(pl.bHole))
+    }
   }
   for (const d of exp.dips) {
     const pl = placedDip.get(d.id)!
@@ -716,16 +768,48 @@ export function checkEquivalence(s: Schematic, board: BoardLayout, holes: Hole[]
     schem.set(p.name, p.net); brd.set(p.name, bn(PORT_TERMINAL[p.name] ?? `?${p.name}`))
   }
 
-  const pins = [...schem.keys()]
-  for (let i = 0; i < pins.length; i++) {
-    for (let j = i + 1; j < pins.length; j++) {
-      const sameS = schem.get(pins[i]) === schem.get(pins[j])
-      const sameB = brd.get(pins[i]) === brd.get(pins[j])
-      if (sameS && !sameB) return { ok: false, message: `${pinLabel(pins[i])} and ${pinLabel(pins[j])} should be the same node — run a jumper.` }
-      if (!sameS && sameB) return { ok: false, message: `${pinLabel(pins[i])} and ${pinLabel(pins[j])} are different nodes, but your board connects them.` }
+  // ARB-7: the fixed-identity pins above seed board-net → schem-net; resolve each symmetric part's
+  // leg orientation by propagating from that seed, then label its pins accordingly.
+  const anchored = new Map<string, string>()
+  for (const key of schem.keys()) { const b = brd.get(key)!; if (!anchored.has(b)) anchored.set(b, schem.get(key)!) }
+  const { legNet, unresolved } = propagateSymmetric(anchored, symParts, bn)
+  const applySym = (orient: Map<string, { aNet: string; bNet: string }>) => {
+    for (const sp of symParts) {
+      const o = orient.get(sp.id)!
+      schem.set(`${sp.id}.A`, o.aNet); brd.set(`${sp.id}.A`, bn(sp.aHole))
+      schem.set(`${sp.id}.B`, o.bNet); brd.set(`${sp.id}.B`, bn(sp.bHole))
     }
   }
-  return { ok: true, message: '✓ Match — your board is electrically the schematic.' }
+
+  const partitionVerdict = (): CheckResult => {
+    const pins = [...schem.keys()]
+    for (let i = 0; i < pins.length; i++) {
+      for (let j = i + 1; j < pins.length; j++) {
+        const sameS = schem.get(pins[i]) === schem.get(pins[j])
+        const sameB = brd.get(pins[i]) === brd.get(pins[j])
+        if (sameS && !sameB) return { ok: false, message: `${pinLabel(pins[i])} and ${pinLabel(pins[j])} should be the same node — run a jumper.` }
+        if (!sameS && sameB) return { ok: false, message: `${pinLabel(pins[i])} and ${pinLabel(pins[j])} are different nodes, but your board connects them.` }
+      }
+    }
+    return { ok: true, message: '✓ Match — your board is electrically the schematic.' }
+  }
+
+  applySym(legNet)
+  let verdict = partitionVerdict()
+  // A floating symmetric part (no anchored path) is ambiguous — try the remaining orientations.
+  if (!verdict.ok && unresolved.length && unresolved.length <= 12) {
+    for (let mask = 1; mask < (1 << unresolved.length); mask++) {
+      const orient = new Map(legNet)
+      unresolved.forEach((id, k) => {
+        const base = legNet.get(id)!
+        if ((mask >> k) & 1) orient.set(id, { aNet: base.bNet, bNet: base.aNet })
+      })
+      applySym(orient)
+      const v = partitionVerdict()
+      if (v.ok) { verdict = v; break }
+    }
+  }
+  return verdict
 }
 
 // ── F-7 / ARB-3: auto-routing — one valid inter-column jumper set from the placement ─────────────
@@ -805,11 +889,17 @@ export function autoRouteJumpers(s: Schematic, board: BoardLayout, holes: Hole[]
     else netPins.set(net, [{ key, label }])
   }
   const placedPart = new Map(board.parts.map((p) => [p.id, p]))
+  const compById = new Map(s.components.map((c) => [c.id, c]))
+  // ARB-7: polarized parts bind a→aHole/b→bHole (fixed); symmetric parts (R/L/ceramic C) defer until
+  // their leg orientation is resolved against the fixed pins below, so a flipped part wires to a
+  // passing board instead of shorting two nets into one column.
+  const symList: { id: string; a: string; b: string; aHole: string; bHole: string }[] = []
   for (const p of exp.parts) {
     const pl = placedPart.get(p.id)
     if (!pl) continue
-    addPin(p.a, pl.aHole, `${p.id}.A`)
-    addPin(p.b, pl.bHole, `${p.id}.B`)
+    const comp = compById.get(p.id)
+    if (comp && isSymmetricPart(comp)) symList.push({ id: p.id, a: p.a, b: p.b, aHole: pl.aHole, bHole: pl.bHole })
+    else { addPin(p.a, pl.aHole, `${p.id}.A`); addPin(p.b, pl.bHole, `${p.id}.B`) }
   }
   // Board-level requirements beyond the schematic nets: supply-rail pins + datasheet straps.
   const fixed: { a: string; b: string; note: string }[] = []
@@ -837,6 +927,33 @@ export function autoRouteJumpers(s: Schematic, board: BoardLayout, holes: Hole[]
     tr.pinNets.forEach((net, k) => addPin(net, hs[k], `${tr.id} ${to92Legend(tr.kind)[k]}`))
   }
   for (const p of exp.ports) addPin(p.net, PORT_TERMINAL[p.name], p.name)
+
+  // ARB-7: now the fixed pins are placed, resolve each symmetric part's leg → schematic net so no
+  // pre-wired group (column / terminal / rail) is asked to host two different nets — an unfixable
+  // column short. Brute force over the tiny symmetric set; take the first group-consistent orientation
+  // (defaults to a→aHole if none — the orientation-agnostic Check then still accepts a valid board).
+  const groupOf = (key: string) => base.get(key) ?? key
+  const fixedGroupNet = new Map<string, string>()
+  for (const [net, arr] of netPins) for (const { key } of arr) { const g = groupOf(key); if (!fixedGroupNet.has(g)) fixedGroupNet.set(g, net) }
+  const K = symList.length
+  let flips: boolean[] = symList.map(() => false)
+  if (K > 0 && K <= 16) {
+    for (let mask = 0; mask < (1 << K); mask++) {
+      const gn = new Map(fixedGroupNet)
+      let ok = true
+      const put = (g: string, n: string) => { const e = gn.get(g); if (e !== undefined && e !== n) ok = false; else gn.set(g, n) }
+      for (let k = 0; k < K && ok; k++) {
+        const sp = symList[k]; const fl = !!((mask >> k) & 1)
+        put(groupOf(sp.aHole), fl ? sp.b : sp.a); put(groupOf(sp.bHole), fl ? sp.a : sp.b)
+      }
+      if (ok) { flips = Array.from({ length: K }, (_, k) => !!((mask >> k) & 1)); break }
+    }
+  }
+  symList.forEach((sp, k) => {
+    const fl = flips[k]
+    addPin(fl ? sp.b : sp.a, sp.aHole, `${sp.id}.A`)
+    addPin(fl ? sp.a : sp.b, sp.bHole, `${sp.id}.B`)
+  })
 
   // The pre-wired supply hubs: the group holding each supply terminal (which includes its rail).
   const hubs = new Map<string, string>() // group id → supply name

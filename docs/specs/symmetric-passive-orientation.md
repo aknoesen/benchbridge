@@ -40,24 +40,40 @@ part the other way is rejected.
   a reversed part still fails Check. (`rotatePartOnBoard` already treats the leg→net remap as "the
   point" for these — keep that.)
 
-### Open decisions (flag to andre if you disagree)
-1. **Electrolytic capacitors.** SCH-10 added a polarized electrolytic variant, but there is no
-   separate `SchKind` for it and the netlist's `C` element is electrically symmetric (polarity is a
-   physical/safety property the sim does not model). **Recommendation: treat all `capacitor` as
-   symmetric for now.** If andre wants the board Check to enforce electrolytic polarity, that is a
-   separate flag (a `polarized?: boolean` on the component) and its own spec — do not fold it in here.
-2. **Non-goal:** this does not change the *schematic*-side net computation or the netlist. Only the
-   board↔schematic equivalence mapping and the router change.
+### Electrolytic capacitors ARE polarized — respect it (andre, 2026-07-06)
+A capacitor is symmetric **only when ceramic (non-polarized)**. The kit's **electrolytics (≥ 1 µF:
+1/4.7/10/22/47/220 µF) are polarized** — orientation must be respected, exactly like a diode. So
+`capacitor` is **not** uniformly symmetric:
+- A **polarized** capacitor is treated like the diode family: fixed A/B, orientation matters, a
+  reversed placement fails Check.
+- A **ceramic** (non-polarized) capacitor is symmetric.
+
+Implement a predicate `isPolarizedCap(c)` (kit rule: value ≥ 1 µF ⇒ electrolytic ⇒ polarized; or an
+explicit polarized flag if SCH-13 adds one — coordinate with SCH-13, which needs the same distinction
+for the `polarized_cap` glyph). Then **symmetric membership is per-component, not per-kind**:
+
+```ts
+const isSymmetric = (c: SchComponent) =>
+  c.kind === 'resistor' || c.kind === 'inductor' ||
+  (c.kind === 'capacitor' && !isPolarizedCap(c))
+```
+
+Use `isSymmetric(c)` everywhere the algorithm below says "symmetric part." A polarized cap uses the
+fixed-leg path. **Non-goal:** no netlist/sim change (the ngspice `C` element stays symmetric; polarity
+is a board/schematic *placement* constraint, like the diode, not a sim model change).
 
 ---
 
 ## Design
 
-Add one predicate near `PLACEABLE_KINDS`:
+Add the per-component symmetry predicate near `PLACEABLE_KINDS` (NOT a flat kind set — a capacitor's
+symmetry depends on whether it's a polarized electrolytic, see above):
 
 ```ts
-export const SYMMETRIC_KINDS = new Set<SchKind>(['resistor', 'capacitor', 'inductor'])
-// polarized 2-leg parts = PLACEABLE_KINDS \ SYMMETRIC_KINDS (diode, led, zener, photodiode)
+export const isSymmetric = (c: SchComponent) =>
+  c.kind === 'resistor' || c.kind === 'inductor' ||
+  (c.kind === 'capacitor' && !isPolarizedCap(c))
+// polarized 2-leg parts (fixed A/B): diode, led, zener, photodiode, AND polarized electrolytic caps
 ```
 
 The correct equivalence is: **there exists a bijection φ between board-nets and schematic-nets such

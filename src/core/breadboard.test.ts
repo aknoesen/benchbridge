@@ -584,3 +584,63 @@ describe('boardComplete (ARB-6 Auto gate)', () => {
     expect(boardComplete(dipSch, placed)).toBe(true)
   })
 })
+
+import { isPolarizedCap, isSymmetricPart } from './breadboard'
+import { EXAMPLES } from './examples'
+
+describe('ARB-7: symmetric passives are orientation-agnostic; polarized parts are not', () => {
+  const holes = buildHoles()
+  const flip = (b: BoardLayout, id: string) => {
+    const p = b.parts.find((q) => q.id === id)!
+    ;[p.aHole, p.bHole] = [p.bHole, p.aHole]
+  }
+
+  it('predicates: R/L/ceramic-C symmetric; diode family + electrolytic cap polarized', () => {
+    expect(isSymmetricPart({ kind: 'resistor' })).toBe(true)
+    expect(isSymmetricPart({ kind: 'inductor' })).toBe(true)
+    expect(isSymmetricPart({ kind: 'capacitor', value: 100e-9 })).toBe(true)  // ceramic
+    expect(isSymmetricPart({ kind: 'capacitor', value: 10e-6 })).toBe(false)  // electrolytic
+    expect(isSymmetricPart({ kind: 'diode' })).toBe(false)
+    expect(isSymmetricPart({ kind: 'led' })).toBe(false)
+    expect(isPolarizedCap({ kind: 'capacitor', value: 1e-6 })).toBe(true)
+    expect(isPolarizedCap({ kind: 'capacitor', value: 470e-9 })).toBe(false)
+  })
+
+  it('1: a flipped resistor still passes Check (the reported divider failure)', () => {
+    const b = correctBoard()
+    flip(b, 'R1') // same topology, arbitrary leg labels
+    expect(checkEquivalence(rcSch, b, holes).ok).toBe(true)
+  })
+
+  it('2: all four R1×C1 orientations pass with correct wiring', () => {
+    for (const fr of [false, true]) for (const fc of [false, true]) {
+      const b = correctBoard()
+      if (fr) flip(b, 'R1')
+      if (fc) flip(b, 'C1')
+      expect(checkEquivalence(rcSch, b, holes).ok, `flipR=${fr} flipC=${fc}`).toBe(true)
+    }
+  })
+
+  it('3: a reversed LED still FAILS (polarity preserved)', () => {
+    const fl = EXAMPLES.find((e) => e.id === 'flashlight')!
+    const board: BoardLayout = JSON.parse(JSON.stringify(fl.board))
+    expect(checkEquivalence(fl.schematic, board, holes).ok).toBe(true) // sanity: correct board passes
+    flip(board, 'D1')
+    expect(checkEquivalence(fl.schematic, board, holes).ok).toBe(false)
+  })
+
+  it('4: Auto round-trips a flipped resistor placement', () => {
+    const b = correctBoard(); b.jumpers = []
+    flip(b, 'R1')
+    const auto = materializeAutoJumpers(autoRouteJumpers(rcSch, b, holes))
+    expect(checkEquivalence(rcSch, { ...b, jumpers: auto }, holes).ok).toBe(true)
+  })
+
+  it('5: an electrolytic cap (≥1 µF) respects orientation; a ceramic does not', () => {
+    const bCeramic = correctBoard(); flip(bCeramic, 'C1')
+    expect(checkEquivalence(rcSch, bCeramic, holes).ok).toBe(true) // 100 nF ceramic → symmetric
+    const rcElyo: Schematic = { ...rcSch, components: rcSch.components.map((c) => c.id === 'C1' ? { ...c, value: 10e-6 } : c) }
+    const bElyo = correctBoard(); flip(bElyo, 'C1')
+    expect(checkEquivalence(rcElyo, bElyo, holes).ok).toBe(false) // 10 µF electrolytic → polarized
+  })
+})

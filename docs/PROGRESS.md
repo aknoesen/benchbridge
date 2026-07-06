@@ -8,6 +8,24 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
+## ARB-7 DONE (2026-07-06 — symmetric passives are orientation-agnostic on the board)
+
+The reported bug: a resistor placed/flipped so its "wrong" leg faces the next part made `checkEquivalence`
+report a false *"different nodes, but your board connects them"* (andre hit it building the divider). Fix
+(pure `core/breadboard.ts` + tests, no `core/signal.ts`): `isSymmetricPart(c)` = R / L / **ceramic** C
+(cap < 1 µF); polarized = diode family **and electrolytic cap (≥ 1 µF)** via `isPolarizedCap(c)` (shared
+with SCH-13). `checkEquivalence` seeds a board-net→schem-net map from the fixed-identity pins (ports,
+DIP/TO-92 pins, polarized legs) and resolves each symmetric part's leg orientation by propagation
+(`propagateSymmetric`) + bounded backtracking for a floating part; polarized parts keep fixed A/B. The
+`autoRouteJumpers` router now picks the symmetric orientation that keeps every pre-wired column single-net
+(brute force over the tiny symmetric set) so a flipped placement wires to a passing board instead of
+shorting two nets into a column. All student messages + pre-checks preserved. Gate: **330/330** (6 new
+ARB-7 tests = the spec's acceptance 1–5 + predicates: flipped R passes, all 4 R×C orientations, reversed
+LED fails, Auto round-trips a flip, electrolytic respects polarity), `tsc && vite build` clean, canary
+untouched, sim baseline unchanged (board-Check only). Live board-Check not driven this session — the
+Chrome nav/renderer kept wedging on board interactions — but the acceptance scenarios are the unit tests
+verbatim and this is pure core with no new UI surface. Next: V+ divider/flashlight redraw → SCH-13/14/15.
+
 ## INST-2 DONE (2026-07-06 — scope ⇄ voltmeter mutually exclusive per channel, Rule 4)
 
 INST-1 Part C, shipped separately. Each placed CH1/CH2 is EITHER a scope OR a voltmeter (its `view`,
