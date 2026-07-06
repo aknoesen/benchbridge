@@ -4,6 +4,7 @@
 import { useMemo, useRef, useState, useEffect, type ReactElement, type Dispatch, type SetStateAction, type CSSProperties } from 'react'
 import {
   Schematic, SchComponent, SchKind, terminalsOf, localTerminals, toCircuit, ampCategory, computeNets,
+  isPointConnected,
   attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentWithWires,
   mirrorComponentWithWires, canMirror, orthoRoute, deleteComponentsWithWires, migrateSchematic,
   type WireEndRef,
@@ -971,7 +972,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
           {sch.components.map((c) => (
             <g key={c.id} onMouseDown={(e) => onComponentDown(e, c.id)} onClick={(e) => e.stopPropagation()}
               style={{ cursor: tool === 'select' ? 'move' : 'pointer', pointerEvents: tool === 'wire' ? 'none' : 'auto' }}>
-              {renderSymbol(c, px, c.id === selected || selSet.has(c.id))}
+              {renderSymbol(c, px, c.id === selected || selSet.has(c.id), scopeNegUnwired(c, sch))}
               {terminalsOf(c).map((t, i) => (
                 <circle key={i} cx={px(t.gx)} cy={px(t.gy)} r={3} fill="var(--node-color)" />
               ))}
@@ -1372,7 +1373,16 @@ function badgeArt(uid: string, symId: string, cx: number, cy: number, bodyFrac =
   )
 }
 
-function renderSymbol(c: SchComponent, px: (g: number) => number, selected: boolean) {
+// A scope channel is single-ended when its − lead is left unwired; the sim references that lead
+// to ground, so the renderer draws a built-in ground stub on it (like the W1/W2 return). Returns
+// true for a scope1/scope2 whose − terminal is unconnected — the leads that need the stub.
+function scopeNegUnwired(c: SchComponent, s: Schematic): boolean {
+  if (c.kind !== 'scope1' && c.kind !== 'scope2') return false
+  const neg = terminalsOf(c)[1]
+  return !isPointConnected(s, neg.gx, neg.gy)
+}
+
+function renderSymbol(c: SchComponent, px: (g: number) => number, selected: boolean, showNegGround = true) {
   const stroke = selected ? 'var(--accent-blue)' : 'var(--sch-ink)'
   const sw = selected ? 2.5 : 1.8
   const ax = px(c.gx), ay = px(c.gy)
@@ -1464,9 +1474,13 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
       }
     }
     // W1/W2's return lead carries a DRAWN ground: the M2K bonds both returns to its one
-    // internal ground (node 0), so the schematic shows that honestly at the return pin.
+    // internal ground (node 0), so the schematic shows that honestly at the return pin. A scope's
+    // − lead gets the SAME drawn ground when it is single-ended (left unwired), so students never
+    // read the negative as floating — the sim already references it to ground (isPointConnected).
     let extraArt: ReactElement | null = null
-    if (c.kind === 'awg1' || c.kind === 'awg2') {
+    const drawReturnGround = c.kind === 'awg1' || c.kind === 'awg2' ||
+      ((c.kind === 'scope1' || c.kind === 'scope2') && showNegGround)
+    if (drawReturnGround) {
       const gsym = SYMBOL_CATALOG['ground']
       if (gsym) {
         const gm = alignTransform([{ x: gsym.pins[0].x, y: gsym.pins[0].y }], [dst[1]])

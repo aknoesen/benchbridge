@@ -192,6 +192,21 @@ export function terminalsOf(c: SchComponent): SchTerminal[] {
   })
 }
 
+// Whether the grid point (gx,gy) is shared by more than one terminal or wire endpoint — i.e.
+// something is actually wired to it. Mirrors toCircuit's local `connected` rule (occupancy > 1),
+// and is the single-ended test for a scope − lead: an unshared − point is referenced to ground.
+// Exported so the renderer draws the ground stub on exactly the leads toCircuit grounds — keep
+// this definition in sync with the `connected` closure in toCircuit.
+export function isPointConnected(s: Schematic, gx: number, gy: number): boolean {
+  let n = 0
+  for (const c of s.components) for (const t of terminalsOf(c)) if (t.gx === gx && t.gy === gy && ++n > 1) return true
+  for (const w of s.wires) {
+    if (w.x1 === gx && w.y1 === gy && ++n > 1) return true
+    if (w.x2 === gx && w.y2 === gy && ++n > 1) return true
+  }
+  return false
+}
+
 // Whether a part is a simulation-only model (ideal, no supplies needed) or a
 // simulation+build part (a real device that needs explicit V+/V- rails, like the LMC662).
 // Returns null for parts that are not amplifiers. Single source of truth for the editor badge.
