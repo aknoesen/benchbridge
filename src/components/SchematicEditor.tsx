@@ -1523,16 +1523,34 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
       </g>
     )
   } else if (c.kind === 'dcrail' || c.kind === 'vplus' || c.kind === 'vminus') {
-    // supply port: label + battery (supply) badge; single clean connection point at the pin
+    // supply port: label + battery (supply) badge; single clean connection point at the pin.
+    // The M2K's V+/V− are FIXED rails referenced to the shared board ground (not floating), so
+    // draw that reference explicitly on the badge's reference pole (opposite the output pin):
+    // the SAME catalog ground glyph W1/W2 use on their return, flipped 180° so its bars point up,
+    // away from the badge. Render-only — the rail keeps its single output pin and its sim path.
     const x = ax, y = ay
     const v = c.value ?? (c.kind === 'vminus' ? -5 : 5)
     const neg = c.kind === 'vminus' || v < 0
     const col = selected ? 'var(--accent-blue)' : neg ? '#2a6ad0' : '#c22a2a' // V- blue, V+ red
     const lbl = c.kind === 'vplus' ? 'V+' : c.kind === 'vminus' ? 'V-' : (v >= 0 ? '+' : '') + v + 'V'
+    const gsym = SYMBOL_CATALOG['ground']
+    const conn = y - 35 // reference-pole connection point, just above the badge top (~y-32)
+    let refGround: ReactElement | null = null
+    if (gsym) {
+      const gm = alignTransform([{ x: gsym.pins[0].x, y: gsym.pins[0].y }], [{ x, y: conn }])
+      // flip 180° about the connection point so the ground bars face up, clear of the badge
+      const fm = [-gm[0], -gm[1], -gm[2], -gm[3], 2 * x - gm[4], 2 * conn - gm[5]]
+      refGround = (
+        <g transform={`matrix(${fm.map((n) => +n.toFixed(5)).join(' ')})`}
+          dangerouslySetInnerHTML={{ __html: inkedInner('ground', gsym, matScale(gm)) }} />
+      )
+    }
     inner = (
       <g style={{ color: col }}>
+        {refGround}
+        <line x1={x} y1={y - 31} x2={x} y2={conn} stroke="currentColor" strokeWidth={sw} />
         {badgeArt(c.id, 'battery', x, y - 22)}
-        {upright(x, y - 38, <text x={x} y={y - 38} fill={col} fontSize={10} textAnchor="middle">{lbl}</text>)}
+        {upright(x - 13, y - 19, <text x={x - 13} y={y - 19} fill={col} fontSize={10} textAnchor="end">{lbl}</text>)}
       </g>
     )
   } else {
