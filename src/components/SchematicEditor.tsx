@@ -4,7 +4,7 @@
 import { useMemo, useRef, useState, useEffect, type ReactElement, type Dispatch, type SetStateAction, type CSSProperties } from 'react'
 import {
   Schematic, SchComponent, SchKind, terminalsOf, localTerminals, toCircuit, ampCategory, computeNets,
-  isPointConnected,
+  SINGLETON_KINDS, hasKind,
   attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentWithWires,
   mirrorComponentWithWires, canMirror, orthoRoute, deleteComponentsWithWires, migrateSchematic,
   type WireEndRef,
@@ -155,6 +155,10 @@ const TOOLS: { tool: Tool; label: string }[] = [
   { tool: 'ground', label: 'GND' },
 ]
 
+// Human label for a singleton kind, for the "only one …" block message (Rule 3).
+const singletonLabel = (k: SchKind): string =>
+  ({ scope1: 'CH1', scope2: 'CH2', awg1: 'W1', awg2: 'W2', vplus: 'V+', vminus: 'V−' } as Partial<Record<SchKind, string>>)[k] ?? k
+
 // UNIT, TUNE_RANGE, fmtEng, parseEng, tunePos, tuneValue now live in core/units.ts (shared
 // with the Network Analyzer tune knobs). DEFAULT_VALUE stays here — it is editor-only.
 // SCH-10: passive kinds whose value is picked from the ADALP2000 kit catalog (PassiveKind names
@@ -256,6 +260,8 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   const [hoverGrid, setHoverGrid] = useState<{ gx: number; gy: number } | null>(null)
   // Part under the cursor — R/F act on it in preference to the selection (Stage 2 hover-targeting).
   const [hoverPartId, setHoverPartId] = useState<string | null>(null)
+  // INST-1: a brief message when a singleton placement/paste is blocked (Rule 3).
+  const [placeMsg, setPlaceMsg] = useState<string | null>(null)
   // Stage 3 pin-magnetic modeless wiring (Select tool): the pin under the cursor (magnetic
   // highlight + snap target) and the start pin of a wiring gesture in progress.
   const [hoverPin, setHoverPin] = useState<{ x: number; y: number } | null>(null)
@@ -282,11 +288,21 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     snapshot()
     const dx = 2, dy = 2 // offset the copy so it doesn't sit on the original
     const existing = [...sch.components]
-    const newComps = clip.current.components.map((c) => {
-      const nc = { ...c, id: newId(c.kind, existing), gx: c.gx + dx, gy: c.gy + dy }
-      existing.push(nc)
-      return nc
-    })
+    // Rule 3: a paste must not clone a singleton that already exists (nor two of one from the clip).
+    const dropped: SchKind[] = []
+    const pasteSeen = new Set<SchKind>()
+    const newComps = clip.current.components
+      .filter((c) => {
+        if (!SINGLETON_KINDS.has(c.kind)) return true
+        if (existing.some((e) => e.kind === c.kind) || pasteSeen.has(c.kind)) { dropped.push(c.kind); return false }
+        pasteSeen.add(c.kind); return true
+      })
+      .map((c) => {
+        const nc = { ...c, id: newId(c.kind, existing), gx: c.gx + dx, gy: c.gy + dy }
+        existing.push(nc)
+        return nc
+      })
+    setPlaceMsg(dropped.length ? `Skipped ${[...new Set(dropped.map(singletonLabel))].join(', ')} on paste — one of each on the M2K.` : null)
     const newWires = clip.current.wires.map((w) => ({ x1: w.x1 + dx, y1: w.y1 + dy, x2: w.x2 + dx, y2: w.y2 + dy }))
     setSch((s) => ({ components: [...s.components, ...newComps], wires: [...s.wires, ...newWires] }))
     setSelSet(new Set(newComps.map((c) => c.id)))
@@ -494,6 +510,12 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     // place a component. The Op-amp / In-amp tools resolve to a specific kind+model via the
     // place-time sub-selector; everything else places its own kind directly.
     const kind = tool as SchKind
+    // Rule 3: the M2K I/O are singletons — block a second CH1/CH2/W1/W2/V+/V− (GND is repeatable).
+    if (SINGLETON_KINDS.has(kind) && hasKind(sch, kind)) {
+      setPlaceMsg(`Only one ${singletonLabel(kind)} — the M2K has one of each.`)
+      return
+    }
+    setPlaceMsg(null)
     // Op-amp places kind 'opamp' (LMC662); INA125 places kind 'ina125'. Power implied in sim, DIP on board.
     const c: SchComponent = { id: newId(kind, sch.components), kind, gx, gy, rotation: placeRotation, mirror: (placeMirror && canMirror(kind)) || undefined, value: DEFAULT_VALUE[kind], part: DEFAULT_PART[kind] }
     snapshot()
@@ -659,6 +681,8 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   function duplicatePart(id: string) {
     const c = sch.components.find((x) => x.id === id)
     if (!c) return
+    // Rule 3: a singleton can't be duplicated (there is only one on the M2K).
+    if (SINGLETON_KINDS.has(c.kind)) { setPlaceMsg(`Only one ${singletonLabel(c.kind)} — the M2K has one of each.`); return }
     const copy: SchComponent = { ...c, id: newId(c.kind, sch.components), gx: c.gx + 1, gy: c.gy + 1 }
     snapshot()
     setSch((s) => ({ ...s, components: [...s.components, copy] }))
@@ -972,7 +996,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
           {sch.components.map((c) => (
             <g key={c.id} onMouseDown={(e) => onComponentDown(e, c.id)} onClick={(e) => e.stopPropagation()}
               style={{ cursor: tool === 'select' ? 'move' : 'pointer', pointerEvents: tool === 'wire' ? 'none' : 'auto' }}>
-              {renderSymbol(c, px, c.id === selected || selSet.has(c.id), scopeNegUnwired(c, sch))}
+              {renderSymbol(c, px, c.id === selected || selSet.has(c.id))}
               {terminalsOf(c).map((t, i) => (
                 <circle key={i} cx={px(t.gx)} cy={px(t.gy)} r={3} fill="var(--node-color)" />
               ))}
@@ -1049,11 +1073,20 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
       <div className="settings-panel">
         <div className="section-title">Tools</div>
         <div className="wave-selector">
-          {TOOLS.map((t) => (
-            <button key={t.tool} className={tool === t.tool ? 'active' : ''}
-              onClick={() => { setTool(t.tool); setWireStart(null) }}>{t.label}</button>
-          ))}
+          {TOOLS.map((t) => {
+            // Rule 3: grey an already-placed singleton so the user sees why a second is blocked.
+            const blocked = SINGLETON_KINDS.has(t.tool as SchKind) && hasKind(sch, t.tool as SchKind)
+            return (
+              <button key={t.tool} className={tool === t.tool ? 'active' : ''} disabled={blocked}
+                style={blocked ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+                title={blocked ? `Already placed — the M2K has one ${singletonLabel(t.tool as SchKind)}` : undefined}
+                onClick={() => { setTool(t.tool); setWireStart(null); setPlaceMsg(null) }}>{t.label}</button>
+            )
+          })}
         </div>
+        {placeMsg && (
+          <div style={{ fontSize: 10, marginTop: 6, color: 'var(--awg-color, #e0c020)' }}>{placeMsg}</div>
+        )}
         {tool === 'opamp' && (
           <div style={{ fontSize: 10, marginTop: 6, color: 'var(--text-secondary)' }}>
             Op-amp — defaults to a kit part (OP484); pick the exact ADALP2000 op-amp in the Selected panel. Power implied in simulation; a DIP on the breadboard.
@@ -1373,16 +1406,7 @@ function badgeArt(uid: string, symId: string, cx: number, cy: number, bodyFrac =
   )
 }
 
-// A scope channel is single-ended when its − lead is left unwired; the sim references that lead
-// to ground, so the renderer draws a built-in ground stub on it (like the W1/W2 return). Returns
-// true for a scope1/scope2 whose − terminal is unconnected — the leads that need the stub.
-function scopeNegUnwired(c: SchComponent, s: Schematic): boolean {
-  if (c.kind !== 'scope1' && c.kind !== 'scope2') return false
-  const neg = terminalsOf(c)[1]
-  return !isPointConnected(s, neg.gx, neg.gy)
-}
-
-function renderSymbol(c: SchComponent, px: (g: number) => number, selected: boolean, showNegGround = true) {
+function renderSymbol(c: SchComponent, px: (g: number) => number, selected: boolean) {
   const stroke = selected ? 'var(--accent-blue)' : 'var(--sch-ink)'
   const sw = selected ? 2.5 : 1.8
   const ax = px(c.gx), ay = px(c.gy)
@@ -1473,13 +1497,12 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
         break
       }
     }
-    // W1/W2's return lead carries a DRAWN ground: the M2K bonds both returns to its one
-    // internal ground (node 0), so the schematic shows that honestly at the return pin. A scope's
-    // − lead gets the SAME drawn ground when it is single-ended (left unwired), so students never
-    // read the negative as floating — the sim already references it to ground (isPointConnected).
+    // W1/W2's return lead carries a DRAWN ground: the M2K bonds both returns to its one internal
+    // ground (node 0), so the schematic shows that fixed bond honestly at the return pin. The scope
+    // − is NOT a fixed bond — it is a designer choice (Rule 2), so it is NEVER auto-grounded here;
+    // a single-ended channel shows a ground only because the designer placed one on the − lead.
     let extraArt: ReactElement | null = null
-    const drawReturnGround = c.kind === 'awg1' || c.kind === 'awg2' ||
-      ((c.kind === 'scope1' || c.kind === 'scope2') && showNegGround)
+    const drawReturnGround = c.kind === 'awg1' || c.kind === 'awg2'
     if (drawReturnGround) {
       const gsym = SYMBOL_CATALOG['ground']
       if (gsym) {

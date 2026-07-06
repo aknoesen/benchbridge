@@ -54,6 +54,8 @@ function invertingAmp(): Schematic {
       { id: 'U1', kind: 'opamp', gx: 10, gy: 4, part: 'op484' },
       { id: 'Rf', kind: 'resistor', gx: 10, gy: 8, value: 20000 },
       { id: 'G1', kind: 'ground', gx: 8, gy: 4 },
+      { id: 'G2', kind: 'ground', gx: 16, gy: 7 }, // scope − → GND (single-ended reference)
+      { id: 'G3', kind: 'ground', gx: 0, gy: 8 },  // scope − → GND (single-ended reference)
       { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },  // 1+ on out; 1− (16,7) unwired = single-ended
       { id: 'P2', kind: 'scope2', gx: 0, gy: 6 },   // 2+ on the input (CH2 = drive), single-ended
     ],
@@ -78,6 +80,8 @@ function nonInvertingAmp(): Schematic {
       { id: 'Rf', kind: 'resistor', gx: 12, gy: 6, value: 10000 },
       { id: 'Rg', kind: 'resistor', gx: 10, gy: 6, rotation: 1, value: 10000 },
       { id: 'G1', kind: 'ground', gx: 10, gy: 10 },
+      { id: 'G2', kind: 'ground', gx: 16, gy: 7 }, // scope − → GND (single-ended reference)
+      { id: 'G3', kind: 'ground', gx: 4, gy: 4 },  // scope − → GND (single-ended reference)
       { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },  // 1+ on out; 1− unwired = single-ended
       { id: 'P2', kind: 'scope2', gx: 4, gy: 2 },   // 2+ on the input; 2− (4,4) unwired = single-ended
     ],
@@ -163,6 +167,7 @@ export const EXAMPLES: Example[] = [
         { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 10000 },              // a=(4,4) b=(6,4)
         { id: 'R2', kind: 'resistor', gx: 8, gy: 4, rotation: 1, value: 20000 }, // a=(8,4) b=(8,6)
         { id: 'G1', kind: 'ground', gx: 8, gy: 8 },
+        { id: 'G2', kind: 'ground', gx: 10, gy: 6 }, // scope − → GND (single-ended reference)
         // Two-terminal scopes: CH1's two leads read ACROSS R1 (1+ on V+, 1− wired to the
         // midpoint = differential); CH2's − lead stays unwired = single-ended across R2.
         { id: 'P1', kind: 'scope1', gx: 4, gy: 0 },   // 1+ (4,0) → V+; 1− (4,2) → midpoint
@@ -193,6 +198,7 @@ export const EXAMPLES: Example[] = [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
         { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 1e6 }, // the scope's 1 MΩ input; a=(6,4) b=(6,6)
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
+        { id: 'G2', kind: 'ground', gx: 8, gy: 6 },   // scope − → GND (single-ended reference)
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },   // 1+ straight on W1; 1− (8,6) unwired = single-ended
       ],
       wires: [
@@ -216,6 +222,8 @@ export const EXAMPLES: Example[] = [
         { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 1500 },
         { id: 'C1', kind: 'capacitor', gx: 6, gy: 4, rotation: 1, value: 1e-7 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
+        { id: 'G2', kind: 'ground', gx: 8, gy: 6 },   // scope − → GND (single-ended reference)
+        { id: 'G3', kind: 'ground', gx: 0, gy: 4 },   // scope − → GND (single-ended reference)
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
         { id: 'P2', kind: 'scope2', gx: 0, gy: 2 },   // 2+ on the W1 input; 2− (0,4) unwired = single-ended
       ],
@@ -238,6 +246,8 @@ export const EXAMPLES: Example[] = [
         { id: 'C1', kind: 'capacitor', gx: 4, gy: 4, value: 1e-7 },
         { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 1500 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
+        { id: 'G2', kind: 'ground', gx: 8, gy: 6 },   // scope − → GND (single-ended reference)
+        { id: 'G3', kind: 'ground', gx: 0, gy: 4 },   // scope − → GND (single-ended reference)
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
         { id: 'P2', kind: 'scope2', gx: 0, gy: 2 },   // 2+ on the W1 input; 2− (0,4) unwired = single-ended
       ],
@@ -260,6 +270,8 @@ export const EXAMPLES: Example[] = [
         { id: 'L1', kind: 'inductor', gx: 4, gy: 4, value: 1e-2 },
         { id: 'C1', kind: 'capacitor', gx: 6, gy: 4, rotation: 1, value: 1e-6 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
+        { id: 'G2', kind: 'ground', gx: 8, gy: 6 },   // scope − → GND (single-ended reference)
+        { id: 'G3', kind: 'ground', gx: 0, gy: 4 },   // scope − → GND (single-ended reference)
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
         { id: 'P2', kind: 'scope2', gx: 0, gy: 2 },   // 2+ on the W1 input; 2− (0,4) unwired = single-ended
       ],
@@ -282,6 +294,8 @@ export const EXAMPLES: Example[] = [
         { id: 'C1', kind: 'capacitor', gx: 4, gy: 4, value: 1e-6 },
         { id: 'L1', kind: 'inductor', gx: 6, gy: 4, rotation: 1, value: 1e-2 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
+        { id: 'G2', kind: 'ground', gx: 8, gy: 6 },   // scope − → GND (single-ended reference)
+        { id: 'G3', kind: 'ground', gx: 0, gy: 4 },   // scope − → GND (single-ended reference)
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
         { id: 'P2', kind: 'scope2', gx: 0, gy: 2 },   // 2+ on the W1 input; 2− (0,4) unwired = single-ended
       ],
@@ -304,6 +318,8 @@ export const EXAMPLES: Example[] = [
         { id: 'L1', kind: 'inductor', gx: 4, gy: 4, value: 1e-2 },
         { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 1000 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
+        { id: 'G2', kind: 'ground', gx: 8, gy: 6 },   // scope − → GND (single-ended reference)
+        { id: 'G3', kind: 'ground', gx: 0, gy: 4 },   // scope − → GND (single-ended reference)
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
         { id: 'P2', kind: 'scope2', gx: 0, gy: 2 },   // 2+ on the W1 input; 2− (0,4) unwired = single-ended
       ],
@@ -326,6 +342,8 @@ export const EXAMPLES: Example[] = [
         { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 1000 },
         { id: 'L1', kind: 'inductor', gx: 6, gy: 4, rotation: 1, value: 1e-2 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
+        { id: 'G2', kind: 'ground', gx: 8, gy: 6 },   // scope − → GND (single-ended reference)
+        { id: 'G3', kind: 'ground', gx: 0, gy: 4 },   // scope − → GND (single-ended reference)
         { id: 'P1', kind: 'scope1', gx: 8, gy: 4 },
         { id: 'P2', kind: 'scope2', gx: 0, gy: 2 },   // 2+ on the W1 input; 2− (0,4) unwired = single-ended
       ],
@@ -367,6 +385,7 @@ export const EXAMPLES: Example[] = [
         { id: 'Rf', kind: 'resistor', gx: 10, gy: 10, value: 33000 },           // feedback R (a(10,10) b(12,10))
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },                              // divider bottom → GND
         { id: 'G2', kind: 'ground', gx: 8, gy: 8 },                              // photodiode anode → GND
+        { id: 'G3', kind: 'ground', gx: 16, gy: 7 },                             // scope − → GND (single-ended reference)
         { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },                             // 1+ on the output; 1− (16,7) unwired = single-ended
       ],
       wires: [
@@ -404,6 +423,8 @@ export const EXAMPLES: Example[] = [
         { id: 'Cf', kind: 'capacitor', gx: 10, gy: 8, value: 100e-12 },   // feedback cap: sets ~16 kHz bandwidth
         { id: 'Rf', kind: 'resistor', gx: 10, gy: 10, value: 100000 },    // feedback R = transimpedance (100 kΩ)
         { id: 'G1', kind: 'ground', gx: 8, gy: 4 },                       // inP -> ground (virtual ground = 0 V)
+        { id: 'G2', kind: 'ground', gx: 16, gy: 7 },                      // scope − → GND (single-ended reference)
+        { id: 'G3', kind: 'ground', gx: 0, gy: 8 },                       // scope − → GND (single-ended reference)
         { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },                      // 1+ on out; 1− unwired = single-ended
         { id: 'P2', kind: 'scope2', gx: 0, gy: 6 },                       // 2+ on the W1 drive; 2− unwired
       ],
@@ -432,6 +453,8 @@ export const EXAMPLES: Example[] = [
         { id: 'C1', kind: 'capacitor', gx: 8, gy: 4, value: 1e-7 },         // a=(8,4) b=(10,4)
         { id: 'R1', kind: 'resistor', gx: 10, gy: 4, rotation: 1, value: 100 }, // a=(10,4) b=(10,6)
         { id: 'G1', kind: 'ground', gx: 10, gy: 8 },
+        { id: 'G2', kind: 'ground', gx: 12, gy: 6 },  // scope − → GND (single-ended reference)
+        { id: 'G3', kind: 'ground', gx: 0, gy: 4 },   // scope − → GND (single-ended reference)
         { id: 'P1', kind: 'scope1', gx: 12, gy: 4 },  // 1+ across R; 1− (12,6) unwired = single-ended
         { id: 'P2', kind: 'scope2', gx: 0, gy: 2 },   // 2+ on the W1 input; 2− (0,4) unwired
       ],
@@ -461,6 +484,8 @@ export const EXAMPLES: Example[] = [
         { id: 'Cf', kind: 'capacitor', gx: 10, gy: 8, value: 1e-7 },
         { id: 'Rf', kind: 'resistor', gx: 10, gy: 10, value: 20000 },
         { id: 'G1', kind: 'ground', gx: 8, gy: 4 },
+        { id: 'G2', kind: 'ground', gx: 16, gy: 7 }, // scope − → GND (single-ended reference)
+        { id: 'G3', kind: 'ground', gx: 0, gy: 8 },  // scope − → GND (single-ended reference)
         { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },  // 1+ on out; 1− unwired = single-ended
         { id: 'P2', kind: 'scope2', gx: 0, gy: 6 },   // 2+ on the W1 drive; 2− unwired
       ],
@@ -493,6 +518,8 @@ export const EXAMPLES: Example[] = [
         { id: 'U1', kind: 'opamp', gx: 10, gy: 4, part: 'op484' },
         { id: 'Rf', kind: 'resistor', gx: 10, gy: 8, value: 10000 },
         { id: 'G1', kind: 'ground', gx: 8, gy: 4 },
+        { id: 'G2', kind: 'ground', gx: 16, gy: 7 }, // scope − → GND (single-ended reference)
+        { id: 'G3', kind: 'ground', gx: 0, gy: 8 },  // scope − → GND (single-ended reference)
         { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },  // 1+ on out; 1− unwired = single-ended
         { id: 'P2', kind: 'scope2', gx: 0, gy: 6 },   // 2+ on the W1 drive; 2− unwired
       ],
@@ -521,6 +548,8 @@ export const EXAMPLES: Example[] = [
         { id: 'U1', kind: 'opamp', gx: 10, gy: 4, part: 'op484' },
         { id: 'Rf', kind: 'resistor', gx: 10, gy: 10, value: 10000 },
         { id: 'G1', kind: 'ground', gx: 8, gy: 4 },
+        { id: 'G2', kind: 'ground', gx: 16, gy: 7 }, // scope − → GND (single-ended reference)
+        { id: 'G3', kind: 'ground', gx: 0, gy: 6 },  // scope − → GND (single-ended reference)
         { id: 'P1', kind: 'scope1', gx: 16, gy: 5 },  // 1+ on out; 1− unwired = single-ended
         { id: 'P2', kind: 'scope2', gx: 0, gy: 4 },   // 2+ on the W1 input; 2− (0,6) unwired
       ],
@@ -554,6 +583,7 @@ export const EXAMPLES: Example[] = [
         { id: 'D1', kind: 'diode', gx: 4, gy: 4 },               // anode (4,4) → cathode (6,4)
         { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 470 }, // sense R to ground
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
+        { id: 'G2', kind: 'ground', gx: 10, gy: 2 }, // scope − → GND (single-ended reference)
         // Two-terminal scopes, rotated horizontal (rotation 3: − lead 2 cells RIGHT of +):
         // CH1 reads ACROSS the diode (1+ anode, 1− cathode); CH2 single-ended on the cathode.
         { id: 'S1', kind: 'scope1', gx: 4, gy: 2, rotation: 3 }, // 1+ (4,2) anode; 1− (6,2) cathode
@@ -580,6 +610,7 @@ export const EXAMPLES: Example[] = [
         { id: 'Z1', kind: 'zener', gx: 4, gy: 4, value: 3.3 },
         { id: 'R1', kind: 'resistor', gx: 6, gy: 4, rotation: 1, value: 470 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
+        { id: 'G2', kind: 'ground', gx: 10, gy: 2 }, // scope − → GND (single-ended reference)
         // Two-terminal scopes, rotated horizontal (rotation 3: − lead right of +):
         { id: 'S1', kind: 'scope1', gx: 4, gy: 2, rotation: 3 }, // 1+ anode; 1− (6,2) cathode = across the Zener
         { id: 'S2', kind: 'scope2', gx: 8, gy: 2, rotation: 3 }, // 2+ cathode; 2− (10,2) unwired
@@ -613,6 +644,7 @@ export const EXAMPLES: Example[] = [
         { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 470 },  // a=(4,4) b=(6,4) — current limit
         { id: 'D1', kind: 'led', gx: 6, gy: 4, value: 1.8 },       // anode=(6,4)=R1.b  cathode=(8,4); Vf 1.8 → red
         { id: 'G1', kind: 'ground', gx: 8, gy: 6 },
+        { id: 'G2', kind: 'ground', gx: 0, gy: 4 },                // scope − → GND (single-ended reference)
         { id: 'P1', kind: 'scope1', gx: 0, gy: 2 },                // 1+ on the W1 node; 1− (0,4) unwired = single-ended
       ],
       wires: [
@@ -635,6 +667,8 @@ export const EXAMPLES: Example[] = [
         { id: 'Vp', kind: 'vplus', gx: 4, gy: 5 },
         { id: 'R1', kind: 'resistor', gx: 8, gy: 6, rotation: 1, value: 100 }, // source -> sense R (a (8,6) b (8,8))
         { id: 'G1', kind: 'ground', gx: 8, gy: 10 },
+        { id: 'G2', kind: 'ground', gx: 10, gy: 2 }, // scope − → GND (single-ended reference)
+        { id: 'G3', kind: 'ground', gx: 10, gy: 8 }, // scope − → GND (single-ended reference)
         { id: 'S1', kind: 'scope1', gx: 8, gy: 2, rotation: 3 }, // 1+ on the drain (≈ Vds); 1− (10,2) unwired
         { id: 'S2', kind: 'scope2', gx: 10, gy: 6 }, // 2+ on the source node (I·Rsense); 2− (10,8) unwired
       ],
@@ -663,6 +697,8 @@ export const EXAMPLES: Example[] = [
         { id: 'W2', kind: 'awg2', gx: 4, gy: 5 },                      // -> gate (steps Vgs); return (4,7)
         { id: 'R1', kind: 'resistor', gx: 8, gy: 6, rotation: 1, value: 10 }, // sense R, source -> gnd
         { id: 'G1', kind: 'ground', gx: 8, gy: 10 },
+        { id: 'G2', kind: 'ground', gx: 10, gy: 2 }, // scope − → GND (single-ended reference)
+        { id: 'G3', kind: 'ground', gx: 10, gy: 8 }, // scope − → GND (single-ended reference)
         { id: 'S1', kind: 'scope1', gx: 8, gy: 2, rotation: 3 }, // 1+ on the drain (X ≈ Vds); 1− (10,2) unwired
         { id: 'S2', kind: 'scope2', gx: 10, gy: 6 }, // 2+ on the source node (Id·Rsense); 2− (10,8) unwired
       ],
@@ -690,6 +726,8 @@ export const EXAMPLES: Example[] = [
         { id: 'Rb', kind: 'resistor', gx: 4, gy: 5, value: 100000 }, // base resistor, a (4,5) b (6,5)
         { id: 'R1', kind: 'resistor', gx: 8, gy: 6, rotation: 1, value: 100 }, // emitter sense R -> gnd
         { id: 'G1', kind: 'ground', gx: 8, gy: 10 },
+        { id: 'G2', kind: 'ground', gx: 10, gy: 2 }, // scope − → GND (single-ended reference)
+        { id: 'G3', kind: 'ground', gx: 10, gy: 8 }, // scope − → GND (single-ended reference)
         { id: 'S1', kind: 'scope1', gx: 8, gy: 2, rotation: 3 }, // 1+ on the collector (X ≈ Vce); 1− (10,2) unwired
         { id: 'S2', kind: 'scope2', gx: 10, gy: 6 }, // 2+ on the emitter node (Ic·Rsense); 2− (10,8) unwired
       ],

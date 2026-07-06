@@ -496,12 +496,31 @@ export function deleteComponentsWithWires(
 // Each legacy reference port becomes a wire from its channel's new − pin to wherever the old
 // port sat, preserving the differential hookup; with no matching scope placed it referenced
 // nothing and is dropped. Also drops any other unknown kind so stale saves cannot crash the app.
+// INST-1 / Rule 3: the M2K I/O are singletons — one ADC pair per channel, one AWG pair, one supply
+// rail each. At most one of these kinds may exist in a schematic. GND is repeatable (shared node 0).
+export const SINGLETON_KINDS = new Set<SchKind>(['scope1', 'scope2', 'awg1', 'awg2', 'vplus', 'vminus'])
+export const hasKind = (s: Schematic, k: SchKind): boolean => s.components.some((c) => c.kind === k)
+
 export function migrateSchematic(s: Schematic): Schematic {
   const isLegacyRef = (k: string) => k === 'adc1n' || k === 'adc2n'
   const known = (c: SchComponent) => { try { return baseTerminals(c.kind, c.opModel).length > 0 } catch { return false } }
   const legacy = s.components.filter((c) => isLegacyRef(c.kind as string))
-  if (!legacy.length && s.components.every(known)) return s
-  const comps = s.components.filter((c) => !isLegacyRef(c.kind as string) && known(c))
+  // Rule 3: a legacy/hand-edited file could carry two of a singleton — keep the first, drop extras.
+  const seen = new Set<SchKind>()
+  const dupeSingleton = (c: SchComponent) => {
+    if (!SINGLETON_KINDS.has(c.kind)) return false
+    if (seen.has(c.kind)) return true
+    seen.add(c.kind); return false
+  }
+  const extras = s.components.filter((c) => SINGLETON_KINDS.has(c.kind)).length
+    > new Set(s.components.filter((c) => SINGLETON_KINDS.has(c.kind)).map((c) => c.kind)).size
+  if (!legacy.length && !extras && s.components.every(known)) return s
+  seen.clear()
+  const comps = s.components.filter((c) => {
+    if (isLegacyRef(c.kind as string) || !known(c)) return false
+    if (dupeSingleton(c)) { console.warn(`migrateSchematic: dropped extra ${c.kind} (M2K singleton — one per schematic)`); return false }
+    return true
+  })
   const wires = [...s.wires]
   for (const a of legacy) {
     const plusKind = (a.kind as string) === 'adc1n' ? 'scope1' : 'scope2'
@@ -518,7 +537,9 @@ export interface ToCircuitResult {
   warnings: string[]
   // SPICE node each scope input is wired to (WIRE-3 readback). undefined if the port is not
   // placed. ch1 = 1+ node, ch2 = 2+ node. Lets the scope show whatever node a probe sits on.
-  probes: { ch1?: string; ch1n?: string; ch2?: string; ch2n?: string }
+  // chNIncomplete: the channel is placed but its − is unwired (incomplete/floating) — the sampler
+  // renders no trace for it rather than inferring a ground reference (Rule 2).
+  probes: { ch1?: string; ch1n?: string; ch2?: string; ch2n?: string; ch1Incomplete?: boolean; ch2Incomplete?: boolean }
 }
 
 // Convert the schematic to a SPICE-2 Circuit. Net labelling: ground→'0', W1→'in', 1+→'out',
@@ -545,19 +566,24 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
   let outRefNet: string | undefined
   let scope2Net: string | undefined
   let scope2RefNet: string | undefined
+  // INST-1 / Rule 2: the scope − is a DESIGNER choice, never auto-grounded. Track whether each
+  // placed channel's − is wired so an unwired − is flagged incomplete — NOT silently referenced
+  // to ground (that inferred connection is forbidden by the completeness corollary).
+  let scope1Placed = false, scope1NegWired = false
+  let scope2Placed = false, scope2NegWired = false
   for (const c of s.components) {
     const ts = terminalsOf(c)
     const net = netOf(ts[0].gx, ts[0].gy)
     if (c.kind === 'ground') groundNets.add(net)
     else if (c.kind === 'probe') outNet = net
     else if (c.kind === 'scope1') {
-      // + → probe net; − → reference net ONLY when wired (unwired − = single-ended, matching
-      // the pre-two-terminal behaviour when no 1- port was placed)
-      outNet = net
-      if (connected(ts[1])) outRefNet = netOf(ts[1].gx, ts[1].gy)
+      // + → probe net; − → reference net when wired: to GND = single-ended (renames to '0'),
+      // to a node = differential. Left open = incomplete (flagged below, no inferred ground).
+      outNet = net; scope1Placed = true
+      if (connected(ts[1])) { outRefNet = netOf(ts[1].gx, ts[1].gy); scope1NegWired = true }
     } else if (c.kind === 'scope2') {
-      scope2Net = net
-      if (connected(ts[1])) scope2RefNet = netOf(ts[1].gx, ts[1].gy)
+      scope2Net = net; scope2Placed = true
+      if (connected(ts[1])) { scope2RefNet = netOf(ts[1].gx, ts[1].gy); scope2NegWired = true }
     } else if (c.kind === 'vsource') inNet = net
     else if (c.kind === 'awg1' || c.kind === 'awg2') {
       // t0 = output; t1 = the drawn ground return — bonded to the M2K's one internal ground,
@@ -586,6 +612,10 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
   if (outNet && (termCount.get(outNet) ?? 0) < 1) {
     warnings.push('Scope CH1 (out) is not connected to any component.')
   }
+  // Rule 2: an unwired scope − is an incomplete schematic (a floating differential input), not a
+  // silently-grounded single-ended read. Surface it; the sim leaves the channel untraced.
+  if (scope1Placed && !scope1NegWired) warnings.push('CH1 − is unconnected — wire it to GND (single-ended) or to a node (differential).')
+  if (scope2Placed && !scope2NegWired) warnings.push('CH2 − is unconnected — wire it to GND (single-ended) or to a node (differential).')
 
   const rename = (net: string) =>
     groundNets.has(net) ? '0'
@@ -711,9 +741,13 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
 
   const probes = {
     ch1: outNet ? rename(outNet) : undefined,
-    ch1n: outRefNet ? rename(outRefNet) : undefined,   // 1- reference (differential CH1)
+    ch1n: outRefNet ? rename(outRefNet) : undefined,   // 1- reference ('0' single-ended, or a node)
     ch2: scope2Net ? rename(scope2Net) : undefined,
-    ch2n: scope2RefNet ? rename(scope2RefNet) : undefined, // 2- reference (differential CH2)
+    ch2n: scope2RefNet ? rename(scope2RefNet) : undefined, // 2- reference
+    // Rule 2: a placed channel whose − is unwired is incomplete — the sampler skips it (no trace)
+    // rather than inferring a ground reference.
+    ch1Incomplete: scope1Placed && !scope1NegWired,
+    ch2Incomplete: scope2Placed && !scope2NegWired,
   }
   return { circuit: { title, components: comps }, warnings, probes }
 }

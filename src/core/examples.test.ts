@@ -7,24 +7,27 @@ import { normalizeResult, nodeVoltage, sampleNodeTransient } from './spice'
 import { schematicExpectation, checkEquivalence, buildHoles } from './breadboard'
 import { ledAverageCurrents } from './boardsim'
 
-// FB-2 (updated for the two-terminal scope): single-ended examples leave the scope's − lead
-// UNWIRED (ground reference by convention); the diode/Zener I-V examples are deliberately
-// DIFFERENTIAL (CH1 = anode−cathode via the wired − lead). QS-4 copy: the flashlight (CH1
-// across the resistor) and the divider (CH1 across the top R) are deliberately differential too.
+// FB-2 (INST-1 / Rule 2): the scope − is NEVER auto-grounded — single-ended is the designer
+// EXPLICITLY wiring − to GND (so ch1n renames to node '0'), differential is − on a circuit node,
+// and an unwired − would be incomplete. The diode/Zener I-V examples plus the flashlight and
+// divider are deliberately DIFFERENTIAL on CH1 (1− on a node, not ground).
 const DIFFERENTIAL = new Set(['diode-iv', 'zener-iv', 'flashlight', 'divider'])
 
-describe('FB-2: examples read single-ended (scope − lead unwired) and probe the input', () => {
+describe('FB-2: examples wire the scope − explicitly (single-ended → GND) and probe the input', () => {
   for (const ex of EXAMPLES) {
-    it(`${ex.id}: nets resolve — CH1 output probe, every port connected`, () => {
+    it(`${ex.id}: nets resolve — CH1 output probe, every port connected, no incomplete channel`, () => {
       const { warnings, probes } = toCircuit(ex.schematic)
       expect(probes.ch1).toBeDefined()
       // Any added 1−/2−/2+ port that failed to land on its net shows up as a "not connected" warning.
       expect(warnings.filter((w) => /not connected/i.test(w))).toEqual([])
+      // Rule 2: no example may ship an unwired (incomplete) scope − any more.
+      expect(probes.ch1Incomplete).toBeFalsy()
+      expect(probes.ch2Incomplete).toBeFalsy()
     })
 
     if (!DIFFERENTIAL.has(ex.id)) {
-      it(`${ex.id}: CH1 is single-ended (the scope − lead left unwired)`, () => {
-        expect(toCircuit(ex.schematic).probes.ch1n).toBeUndefined()
+      it(`${ex.id}: CH1 is single-ended (the scope − is explicitly wired to GND → node '0')`, () => {
+        expect(toCircuit(ex.schematic).probes.ch1n).toBe('0')
       })
     }
 
@@ -83,7 +86,7 @@ describe('Quickstart examples (QS-4 finished copy: flashlight / divider probes /
     expect(passives.map((p) => p.value)).toEqual([1e6])
     const { probes } = toCircuit(ex.schematic)
     expect(probes.ch1).toBe('in')  // the W1 node itself
-    expect(probes.ch1n).toBeUndefined() // − lead unwired = single-ended
+    expect(probes.ch1n).toBe('0') // − explicitly wired to GND = single-ended (Rule 2)
     expect(probes.ch2).toBeUndefined()
   })
 })
@@ -171,8 +174,8 @@ describe('TIA-AC example (tia-ac — time-domain current → voltage)', () => {
     const { circuit, warnings, probes } = toCircuit(ex.schematic)
     expect(warnings).toEqual([])
     expect(probes).toMatchObject({ ch1: 'out', ch2: 'in' })
-    expect(probes.ch1n).toBeUndefined() // − leads unwired = single-ended
-    expect(probes.ch2n).toBeUndefined()
+    expect(probes.ch1n).toBe('0') // − explicitly wired to GND = single-ended (Rule 2)
+    expect(probes.ch2n).toBe('0') // CH2 − also explicitly grounded (single-ended)
     const ckt = applyGeneratorParams(circuit, ex.w1) // stamp the 0.2 V 1 kHz sine, as App does
     const sim = new Simulation()
     await sim.start()

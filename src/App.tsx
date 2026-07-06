@@ -365,9 +365,10 @@ export default function App() {
         const nl = buildNetlist(ckt, { kind: 'tran', step: span / (N * 2), stop: 2 * span })
         const res = await spiceRef.current!.run(nl)
         if (cancelled) return
-        const x1 = sampleDiff(res, drawn.probes.ch1 ?? 'out', drawn.probes.ch1n, sampleTimes)
+        // Rule 2: a channel with an unwired − is incomplete — no trace (never inferred single-ended).
+        const x1 = drawn.probes.ch1Incomplete ? null : sampleDiff(res, drawn.probes.ch1 ?? 'out', drawn.probes.ch1n, sampleTimes)
         setCircuitOut(x1 ? { t: grid, x: x1 } : null)
-        const x2 = drawn.probes.ch2 ? sampleDiff(res, drawn.probes.ch2, drawn.probes.ch2n, sampleTimes) : null
+        const x2 = (drawn.probes.ch2 && !drawn.probes.ch2Incomplete) ? sampleDiff(res, drawn.probes.ch2, drawn.probes.ch2n, sampleTimes) : null
         setCircuitOut2(x2 ? { t: grid, x: x2 } : null)
         // ARB-2: harvest the board's live values from this result (settled span = the 2nd span)
         setBoardSim({
@@ -434,9 +435,9 @@ export default function App() {
         const tGrid = new Float64Array(Nn)
         const sampGrid = new Float64Array(Nn)
         for (let k = 0; k < Nn; k++) { tGrid[k] = k / fs; sampGrid[k] = settle + k / fs }
-        const x1 = sampleDiff(res, drawn.probes.ch1 ?? 'out', drawn.probes.ch1n, sampGrid)
+        const x1 = drawn.probes.ch1Incomplete ? null : sampleDiff(res, drawn.probes.ch1 ?? 'out', drawn.probes.ch1n, sampGrid)
         setScopeOut1(x1 ? { t: tGrid, x: x1 } : null)
-        const x2 = drawn.probes.ch2 ? sampleDiff(res, drawn.probes.ch2, drawn.probes.ch2n, sampGrid) : null
+        const x2 = (drawn.probes.ch2 && !drawn.probes.ch2Incomplete) ? sampleDiff(res, drawn.probes.ch2, drawn.probes.ch2n, sampGrid) : null
         setScopeOut2(x2 ? { t: tGrid, x: x2 } : null)
         setScopeFs(fs)
       } catch {

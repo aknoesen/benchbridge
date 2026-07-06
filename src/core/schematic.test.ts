@@ -85,6 +85,7 @@ describe('breadboard ports (WIRE-1)', () => {
         { id: 'C1', kind: 'capacitor', gx: 6, gy: 0, value: 159.155e-9 },
         { id: 'G1', kind: 'ground', gx: 8, gy: 0 },
         { id: 'P1', kind: 'scope1', gx: 6, gy: 0 },
+        { id: 'G2', kind: 'ground', gx: 6, gy: 2 }, // 1− → GND (single-ended, Rule 2)
       ],
       wires: [{ x1: 0, y1: 0, x2: 4, y2: 0 }], // W1 → R.a → 'in'
     }
@@ -117,6 +118,9 @@ describe('scope probe mapping (WIRE-3)', () => {
         { id: 'G1', kind: 'ground', gx: 8, gy: 0 },
         { id: 'S1', kind: 'scope1', gx: 6, gy: 0 }, // 1+ on the R-C junction → 'out'
         { id: 'S2', kind: 'scope2', gx: 0, gy: 0 }, // 2+ on the W1 input node → 'in'
+        // Rule 2: single-ended reads wire the − explicitly to GND (no auto-ground any more).
+        { id: 'G2', kind: 'ground', gx: 6, gy: 2 }, // 1− → GND
+        { id: 'G3', kind: 'ground', gx: 0, gy: 2 }, // 2− → GND
       ],
       wires: [{ x1: 0, y1: 0, x2: 4, y2: 0 }], // W1 → R.a → 'in'
     }
@@ -124,6 +128,8 @@ describe('scope probe mapping (WIRE-3)', () => {
     expect(warnings).toEqual([])
     expect(probes.ch1).toBe('out')
     expect(probes.ch2).toBe('in')
+    expect(probes.ch1n).toBe('0') // single-ended: − on GND
+    expect(probes.ch2n).toBe('0')
   })
 })
 
@@ -500,5 +506,90 @@ describe('model-space mirror (SCH-11 P3 Stage 2)', () => {
     expect(twice.wires).toEqual(s.wires)
     // mirror clears back to undefined so a round-tripped part serializes like the original
     expect(twice.components[0].mirror).toBeUndefined()
+  })
+})
+
+import { SINGLETON_KINDS, hasKind, migrateSchematic, type SchComponent } from './schematic'
+
+describe('INST-1: scope − is a designer choice, never auto-grounded (Rule 2)', () => {
+  // W1 → R1 → GND; scope1 + sits on the W1/R input node. `extra` lets a test wire the − lead.
+  const base = (extra: SchComponent[] = [], moreWires: { x1: number; y1: number; x2: number; y2: number }[] = []): Schematic => ({
+    components: [
+      { id: 'W1', kind: 'awg1', gx: 0, gy: 0 },
+      { id: 'R1', kind: 'resistor', gx: 4, gy: 0, value: 1000 }, // a(4,0) b(6,0)
+      { id: 'G1', kind: 'ground', gx: 8, gy: 0 },
+      { id: 'S1', kind: 'scope1', gx: 4, gy: 0 }, // + at (4,0), − at (4,2)
+      ...extra,
+    ],
+    wires: [{ x1: 0, y1: 0, x2: 4, y2: 0 }, { x1: 6, y1: 0, x2: 8, y2: 0 }, ...moreWires],
+  })
+
+  it('unwired − → channel incomplete: no inferred ground, no ref, warned', () => {
+    const { probes, warnings } = toCircuit(base())
+    expect(probes.ch1).toBeDefined()
+    expect(probes.ch1n).toBeUndefined()      // NOT silently referenced to ground
+    expect(probes.ch1Incomplete).toBe(true)
+    expect(warnings.some((w) => /CH1 . is unconnected/.test(w))).toBe(true)
+  })
+
+  it('− wired to GND → single-ended: ch1n = node 0, complete, no warning', () => {
+    const { probes, warnings } = toCircuit(base([{ id: 'G2', kind: 'ground', gx: 4, gy: 2 }]))
+    expect(probes.ch1n).toBe('0')
+    expect(probes.ch1Incomplete).toBe(false)
+    expect(warnings.some((w) => /CH1 . is unconnected/.test(w))).toBe(false)
+  })
+
+  it('− wired to a node → differential: ch1n is that node, not 0, complete', () => {
+    // Two series resistors; the − lands on the midpoint node (not ground) → differential.
+    const sch: Schematic = {
+      components: [
+        { id: 'W1', kind: 'awg1', gx: 0, gy: 0 },
+        { id: 'R1', kind: 'resistor', gx: 2, gy: 0, value: 1000 }, // a(2,0) b(4,0)
+        { id: 'R2', kind: 'resistor', gx: 4, gy: 0, value: 1000 }, // a(4,0) b(6,0)
+        { id: 'G1', kind: 'ground', gx: 8, gy: 0 },
+        { id: 'S1', kind: 'scope1', gx: 2, gy: 0 }, // + at (2,0)=R1.a, − at (2,2)
+      ],
+      wires: [
+        { x1: 0, y1: 0, x2: 2, y2: 0 }, // W1 → R1.a
+        { x1: 6, y1: 0, x2: 8, y2: 0 }, // R2.b → ground
+        { x1: 2, y1: 2, x2: 4, y2: 0 }, // S1− → the R1/R2 midpoint (a node, NOT ground)
+      ],
+    }
+    const { probes } = toCircuit(sch)
+    expect(probes.ch1n).toBeDefined()
+    expect(probes.ch1n).not.toBe('0')
+    expect(probes.ch1Incomplete).toBe(false)
+  })
+})
+
+describe('INST-1: M2K I/O are singletons (Rule 3)', () => {
+  it('SINGLETON_KINDS is the six I/O; GND is repeatable', () => {
+    for (const k of ['scope1', 'scope2', 'awg1', 'awg2', 'vplus', 'vminus'] as SchComponent['kind'][]) {
+      expect(SINGLETON_KINDS.has(k)).toBe(true)
+    }
+    expect(SINGLETON_KINDS.has('ground')).toBe(false)
+  })
+
+  it('hasKind detects a placed kind', () => {
+    const s: Schematic = { components: [{ id: 'W1', kind: 'awg1', gx: 0, gy: 0 }], wires: [] }
+    expect(hasKind(s, 'awg1')).toBe(true)
+    expect(hasKind(s, 'awg2')).toBe(false)
+  })
+
+  it('migrateSchematic keeps the first of a duplicated singleton, drops extras, GND repeatable', () => {
+    const s: Schematic = {
+      components: [
+        { id: 'W1a', kind: 'awg1', gx: 0, gy: 0 },
+        { id: 'W1b', kind: 'awg1', gx: 4, gy: 0 }, // duplicate CH — dropped
+        { id: 'Ga', kind: 'ground', gx: 2, gy: 2 },
+        { id: 'Gb', kind: 'ground', gx: 6, gy: 2 }, // second ground — kept (repeatable)
+      ],
+      wires: [],
+    }
+    const m = migrateSchematic(s)
+    const w = m.components.filter((c) => c.kind === 'awg1')
+    expect(w).toHaveLength(1)
+    expect(w[0].id).toBe('W1a') // the first one is kept
+    expect(m.components.filter((c) => c.kind === 'ground')).toHaveLength(2)
   })
 })

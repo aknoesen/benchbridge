@@ -24,6 +24,12 @@ The instruments above are built. Planning, phase status, and per-phase specs liv
 4. `docs/PROGRESS.md` — handoff log from prior sessions
 5. `docs/private/AGENT-HANDOFF.md` — the Cowork ⇄ Claude Code handoff log (see below)
 
+**Also binding — settled invariants that keep regressing.** Before touching the schematic editor,
+the port/instrument rendering, `toCircuit`/netlist port mapping, or the board Check, read
+`docs/reference/m2k-instrument-model.md` (the M2K instrument model: fixed internal grounds on
+W1/W2/V±, the scope − is a designer choice and is NEVER auto-grounded, M2K I/O are singletons). It is
+authoritative and every rule in it has regressed before — do not "improve" past it; flag instead.
+
 Do one phase per session, verify against the Definition of Done, update `PROGRESS.md` and
 `ROADMAP.md`, and commit. This CLAUDE.md remains the signal-math constitution below.
 

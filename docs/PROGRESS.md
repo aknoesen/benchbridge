@@ -8,6 +8,27 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
+## INST-1 A+B DONE (2026-07-06 — M2K instrument model enforced; scope − no longer auto-grounded)
+
+Implements `docs/reference/m2k-instrument-model.md` Rules 2 + 3. Reverses the `a752c72` scope-neg
+stub (that visual came back as a *real designer-placed* ground). Gate: **322/322**, `tsc && vite build`
+clean, 12-bit canary −104 dBFS, sim-equivalence baseline **byte-identical**, invariance snapshot
+regenerated (probe fields only). Verified live in Chrome (place CH2 → no ground on 2−; signal-sine 1−
+shows a real GND; second CH1/CH2/W1 palette buttons grey; W1 return + V+ reference grounds still draw).
+
+- **Part A (Rule 2):** `toCircuit` no longer infers a ground on an unwired scope − — it flags the channel
+  `ch1Incomplete`/`ch2Incomplete` + warns; App's two `sampleDiff` sites render no trace for an incomplete
+  channel. `renderSymbol`'s `drawReturnGround` is `awg1`/`awg2` only (scope branch + `scopeNegUnwired`
+  removed). **Example migration:** all 22 single-ended examples now wire the − explicitly to GND (38 real
+  `ground` components at the − points — same net as the old inference, so sim is identical). `flashlight`,
+  `divider` CH1, `diode-iv`/`zener-iv` CH1 stay differential.
+- **Part B (Rule 3):** `SINGLETON_KINDS` + `hasKind` in `core/schematic.ts`; placement guard + greyed
+  palette + paste/duplicate drop + `migrateSchematic` load-dedup. GND stays repeatable.
+- **NOT done — Part C (Rule 4, scope⇄voltmeter panel exclusivity) → INST-2.** Then ARB-7 (symmetric-passive
+  board Check) and the divider/flashlight V+ redraw, per the handoff.
+
+---
+
 ## Next session: start here (updated 2026-07-03 — SCH-11 merged: circuitikz schematic + two-terminal instruments)
 
 **The whole `sch11-ansi-symbols` branch landed on `main` (andre's acceptance, before the next survey
