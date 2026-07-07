@@ -91,6 +91,41 @@ describe('symbolFor / alignTransform put catalog pins on grid terminals', () => 
   })
 })
 
+// SCH-13: the glyph reflects part state — a source's waveform, a cap's polarity. Pin ids/order are
+// unchanged (p0/p1), so nets, the drawn ground return, and the sim are untouched.
+describe('SCH-13: symbols reflect part state', () => {
+  it('W1/W2/vsource pick the catalog glyph from the waveform (sine fallback)', () => {
+    const cases = [['sine', 'vsource_sin'], ['square', 'vsource_square'], ['triangle', 'vsource_tri'], ['sawtooth', 'vsource_saw']] as const
+    for (const [wave, glyph] of cases) {
+      for (const kind of ['awg1', 'awg2', 'vsource'] as SchKind[]) {
+        expect(symbolFor({ kind }, wave)!.id, `${kind}/${wave}`).toBe(glyph)
+      }
+    }
+    expect(symbolFor({ kind: 'awg1' })!.id).toBe('vsource_sin')          // no waveType → sine
+    expect(symbolFor({ kind: 'awg1' }, undefined)!.id).toBe('vsource_sin')
+  })
+
+  it('a polarized electrolytic (≥ 1 µF) uses polarized_cap; a ceramic stays capacitor', () => {
+    expect(symbolFor({ kind: 'capacitor', value: 10e-6 })!.id).toBe('polarized_cap')
+    expect(symbolFor({ kind: 'capacitor', value: 1e-6 })!.id).toBe('polarized_cap') // boundary
+    expect(symbolFor({ kind: 'capacitor', value: 470e-9 })!.id).toBe('capacitor')
+    expect(symbolFor({ kind: 'capacitor' })!.id).toBe('capacitor')                  // no value → ceramic
+    // explicit `polarized` flag overrides the value rule (a ≥1µF signal-path film/ceramic cap)
+    expect(symbolFor({ kind: 'capacitor', value: 1e-6, polarized: false })!.id).toBe('capacitor')
+    expect(symbolFor({ kind: 'capacitor', value: 100e-9, polarized: true })!.id).toBe('polarized_cap')
+  })
+
+  it('every state glyph is in the catalog with p0/p1 (so it aligns and keeps the nets)', () => {
+    for (const glyph of ['vsource_square', 'vsource_tri', 'vsource_saw', 'polarized_cap']) {
+      const sym = SYMBOL_CATALOG[glyph]
+      expect(sym, glyph).toBeDefined()
+      expect(sym.pins.some((p) => p.id === 'p0') && sym.pins.some((p) => p.id === 'p1'), `${glyph} p0/p1`).toBe(true)
+    }
+    expect(symbolFor({ kind: 'awg1' }, 'square')!.pinIds).toEqual(['p0', 'p1'])
+    expect(symbolFor({ kind: 'capacitor', value: 10e-6 })!.pinIds).toEqual(['p0', 'p1'])
+  })
+})
+
 // Stage 2: flip is a model-space mirror of the terminals; the SAME alignTransform then
 // re-derives the flipped artwork. Nothing stacks a scaleX on top, so a symbol whose
 // alignment already reflects (the op-amp's baked-in vertical flip) cannot double-flip.

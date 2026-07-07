@@ -215,9 +215,12 @@ interface EditorProps {
   // Reset the breadboard on an example load: to the example's pre-built board when it ships one
   // (QS-4: the flashlight lands placed + wired + lit), else to empty (no stale placements).
   onLoadBoard?: (b?: import('../core/breadboard').BoardLayout) => void
+  // SCH-13: current W1/W2 waveforms, so the awg1/awg2 symbol draws the actual wave shape.
+  w1Wave?: import('../core/signal').WaveType
+  w2Wave?: import('../core/signal').WaveType
 }
 
-export default function SchematicEditor({ schematic, setSchematic, snapshot, undo, redo, onLoadGenerators, onLoadScope, onOpenTracer, onLoadBoard }: EditorProps) {
+export default function SchematicEditor({ schematic, setSchematic, snapshot, undo, redo, onLoadGenerators, onLoadScope, onOpenTracer, onLoadBoard, w1Wave, w2Wave }: EditorProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   // Whether the pointer is over this panel — gates the global R handler (see the keydown effect).
@@ -996,7 +999,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
           {sch.components.map((c) => (
             <g key={c.id} onMouseDown={(e) => onComponentDown(e, c.id)} onClick={(e) => e.stopPropagation()}
               style={{ cursor: tool === 'select' ? 'move' : 'pointer', pointerEvents: tool === 'wire' ? 'none' : 'auto' }}>
-              {renderSymbol(c, px, c.id === selected || selSet.has(c.id))}
+              {renderSymbol(c, px, c.id === selected || selSet.has(c.id), c.kind === 'awg1' ? w1Wave : c.kind === 'awg2' ? w2Wave : undefined)}
               {terminalsOf(c).map((t, i) => (
                 <circle key={i} cx={px(t.gx)} cy={px(t.gy)} r={3} fill="var(--node-color)" />
               ))}
@@ -1406,7 +1409,7 @@ function badgeArt(uid: string, symId: string, cx: number, cy: number, bodyFrac =
   )
 }
 
-function renderSymbol(c: SchComponent, px: (g: number) => number, selected: boolean) {
+function renderSymbol(c: SchComponent, px: (g: number) => number, selected: boolean, waveType?: import('../core/signal').WaveType) {
   const stroke = selected ? 'var(--accent-blue)' : 'var(--sch-ink)'
   const sw = selected ? 2.5 : 1.8
   const ax = px(c.gx), ay = px(c.gy)
@@ -1421,7 +1424,7 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
   // SCH-11: kinds with a circuitikz catalog symbol render from it, the artwork
   // transformed so every catalog pin sits exactly on the app's grid terminals
   // (baseTerminals stays authoritative — the symbol conforms to the model).
-  const art = symbolFor(c)
+  const art = symbolFor(c, waveType)
   if (art) {
     const pinById = new Map(art.sym.pins.map((p) => [p.id, p]))
     const src = art.pinIds.map((id) => pinById.get(id)!).filter(Boolean)

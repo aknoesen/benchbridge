@@ -6,6 +6,15 @@
 import { SYMBOL_CATALOG, type CatalogSymbol } from './symbolCatalog'
 import type { SchComponent, SchKind } from './schematic'
 import { TRANSISTOR_PARTS } from './netlist'
+import { isPolarizedCap } from './breadboard'
+import type { WaveType } from './signal'
+
+// SCH-13: a source's waveform picks its catalog glyph (all four are in the catalog); an unknown or
+// absent shape falls back to the sine source. Pin ids/order are identical, so nets/ground/sim are untouched.
+const SOURCE_GLYPH: Record<WaveType, string> = {
+  sine: 'vsource_sin', square: 'vsource_square', triangle: 'vsource_tri', sawtooth: 'vsource_saw',
+}
+const sourceGlyph = (w?: WaveType): string => (w && SOURCE_GLYPH[w]) || 'vsource_sin'
 
 export interface Pt { x: number; y: number }
 
@@ -24,7 +33,7 @@ export const DEFAULT_SYMBOL_SCALE = 48 / 56.7
  * Returns null for kinds that keep their existing inline rendering (ports,
  * INA125, probe, rails) — those are markers/parts with no catalog counterpart yet.
  */
-export function symbolFor(c: Pick<SchComponent, 'kind' | 'part' | 'view'>): { id: string; sym: CatalogSymbol; pinIds: string[] } | null {
+export function symbolFor(c: Pick<SchComponent, 'kind' | 'part' | 'view' | 'value' | 'polarized'>, waveType?: WaveType): { id: string; sym: CatalogSymbol; pinIds: string[] } | null {
   const pick = (id: string, pinIds: string[]) => {
     const sym = SYMBOL_CATALOG[id]
     return sym ? { id, sym, pinIds } : null
@@ -32,7 +41,9 @@ export function symbolFor(c: Pick<SchComponent, 'kind' | 'part' | 'view'>): { id
   const kind: SchKind = c.kind
   switch (kind) {
     case 'resistor': return pick('resistor', ['p0', 'p1'])
-    case 'capacitor': return pick('capacitor', ['p0', 'p1'])
+    // SCH-13: a polarized electrolytic (kit rule: ≥ 1 µF) draws the polarity-marked glyph, its + on
+    // terminal A (p0) — ARB-7 keeps that leg identity fixed on the board; a ceramic stays symmetric.
+    case 'capacitor': return pick(isPolarizedCap(c) ? 'polarized_cap' : 'capacitor', ['p0', 'p1'])
     case 'inductor': return pick('inductor', ['p0', 'p1'])
     // diode family: circuitikz `to[D]` points the triangle toward the second
     // coordinate, so p0 = anode, p1 = cathode — matching baseTerminals [a, c].
@@ -40,13 +51,13 @@ export function symbolFor(c: Pick<SchComponent, 'kind' | 'part' | 'view'>): { id
     case 'led': return pick('led', ['p0', 'p1'])
     case 'zener': return pick('zener', ['p0', 'p1'])
     case 'photodiode': return pick('photodiode', ['p0', 'p1'])
-    case 'vsource': return pick('vsource_sin', ['p0', 'p1'])
+    case 'vsource': return pick(sourceGlyph(waveType), ['p0', 'p1'])
     case 'ground': return pick('ground', ['p0'])
     // Two-terminal M2K instruments (SCH-11): catalog bipoles, p0 = top pin. W1/W2 = the sine
     // source (its drawn ground return is added by the renderer); the scope/voltmeter view of
     // the shared measurement input swaps glyphs presentationally (same pins, same nets).
     case 'awg1':
-    case 'awg2': return pick('vsource_sin', ['p0', 'p1'])
+    case 'awg2': return pick(sourceGlyph(waveType), ['p0', 'p1'])
     case 'scope1':
     case 'scope2': return pick(c.view === 'voltmeter' ? 'voltmeter' : 'oscilloscope', ['p0', 'p1'])
     // opamp: catalog pins are [A.+, A.−, out] = [p0, p1, p2]; app terminals are

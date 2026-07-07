@@ -266,7 +266,7 @@ export const EXAMPLES: Example[] = [
       components: [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
         { id: 'L1', kind: 'inductor', gx: 4, gy: 4, value: 1e-2 },
-        { id: 'C1', kind: 'capacitor', gx: 6, gy: 4, rotation: 1, value: 1e-6 },
+        { id: 'C1', kind: 'capacitor', gx: 6, gy: 4, rotation: 1, value: 1e-6, polarized: false }, // LC-filter cap: signal-path, symmetric (not an electrolytic)
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'G2', kind: 'ground', gx: 8, gy: 6 },   // scope − → GND (single-ended reference)
         { id: 'G3', kind: 'ground', gx: 0, gy: 4 },   // scope − → GND (single-ended reference)
@@ -289,7 +289,7 @@ export const EXAMPLES: Example[] = [
     schematic: {
       components: [
         { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
-        { id: 'C1', kind: 'capacitor', gx: 4, gy: 4, value: 1e-6 },
+        { id: 'C1', kind: 'capacitor', gx: 4, gy: 4, value: 1e-6, polarized: false }, // LC-filter cap: signal-path, symmetric (not an electrolytic)
         { id: 'L1', kind: 'inductor', gx: 6, gy: 4, rotation: 1, value: 1e-2 },
         { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
         { id: 'G2', kind: 'ground', gx: 8, gy: 6 },   // scope − → GND (single-ended reference)

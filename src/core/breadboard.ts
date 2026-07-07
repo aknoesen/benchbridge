@@ -136,8 +136,8 @@ export const PLACEABLE_KINDS = new Set<SchKind>(['resistor', 'capacitor', 'induc
 // fixed A/B — a reversed placement must fail Check. A symmetric part (R, L, ceramic C) has arbitrary
 // A/B, so either orientation that reproduces the topology passes. Kit rule (coordinate with SCH-13):
 // a capacitor ≥ 1 µF is an electrolytic ⇒ polarized; smaller (or a set `polarized:false`) is ceramic.
-export const isPolarizedCap = (c: { kind: SchKind; value?: number }): boolean =>
-  c.kind === 'capacitor' && (c.value ?? 0) >= 1e-6
+export const isPolarizedCap = (c: { kind: SchKind; value?: number; polarized?: boolean }): boolean =>
+  c.kind === 'capacitor' && (c.polarized ?? (c.value ?? 0) >= 1e-6)
 export const isSymmetricPart = (c: { kind: SchKind; value?: number }): boolean =>
   c.kind === 'resistor' || c.kind === 'inductor' || (c.kind === 'capacitor' && !isPolarizedCap(c))
 

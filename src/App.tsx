@@ -534,7 +534,8 @@ export default function App() {
           snapshot={snapshotSchematic} undo={undoSchematic} redo={redoSchematic}
           onLoadGenerators={(w1, w2) => { if (w1) setParams({ ...DEFAULT_PARAMS, ...w1 }); setParams2(w2 ? { ...DEFAULT_PARAMS2, ...w2 } : DEFAULT_PARAMS2) }}
           onLoadBoard={(b) => { setBoard(b ? normalizeBoardOrder(JSON.parse(JSON.stringify(b))) : emptyBoard()); setUiSettings((s) => ({ ...s, boardRouting: 'manual' })) }}
-          onLoadScope={(req) => setScopeReq(req)} onOpenTracer={() => { setActive('curvetracer'); setPresetId(null) }} />
+          onLoadScope={(req) => setScopeReq(req)} onOpenTracer={() => { setActive('curvetracer'); setPresetId(null) }}
+          w1Wave={params.waveType} w2Wave={params2.waveType} />
       case 'breadboard': {
         const vertical = boardOrient === 'stacked'
         return (
@@ -556,7 +557,8 @@ export default function App() {
                   snapshot={snapshotSchematic} undo={undoSchematic} redo={redoSchematic}
                   onLoadGenerators={(w1, w2) => { if (w1) setParams({ ...DEFAULT_PARAMS, ...w1 }); setParams2(w2 ? { ...DEFAULT_PARAMS2, ...w2 } : DEFAULT_PARAMS2) }}
                   onLoadBoard={(b) => { setBoard(b ? normalizeBoardOrder(JSON.parse(JSON.stringify(b))) : emptyBoard()); setUiSettings((s) => ({ ...s, boardRouting: 'manual' })) }}
-                  onLoadScope={(req) => setScopeReq(req)} onOpenTracer={() => { setActive('curvetracer'); setPresetId(null) }} />
+                  onLoadScope={(req) => setScopeReq(req)} onOpenTracer={() => { setActive('curvetracer'); setPresetId(null) }}
+          w1Wave={params.waveType} w2Wave={params2.waveType} />
               </div>
               <div className={`board-splitter ${vertical ? 'horizontal' : 'vertical'}`} onPointerDown={onSplitterDown}
                 role="separator" aria-orientation={vertical ? 'horizontal' : 'vertical'} title="Drag to resize" />

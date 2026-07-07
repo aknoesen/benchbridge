@@ -604,6 +604,10 @@ describe('ARB-7: symmetric passives are orientation-agnostic; polarized parts ar
     expect(isSymmetricPart({ kind: 'led' })).toBe(false)
     expect(isPolarizedCap({ kind: 'capacitor', value: 1e-6 })).toBe(true)
     expect(isPolarizedCap({ kind: 'capacitor', value: 470e-9 })).toBe(false)
+    // SCH-13: an explicit `polarized` flag overrides the value rule (e.g. a ≥1µF LC-filter cap)
+    expect(isPolarizedCap({ kind: 'capacitor', value: 1e-6, polarized: false })).toBe(false)
+    expect(isPolarizedCap({ kind: 'capacitor', value: 100e-9, polarized: true })).toBe(true)
+    expect(isSymmetricPart({ kind: 'capacitor', value: 1e-6, polarized: false })).toBe(true)
   })
 
   it('1: a flipped resistor still passes Check (the reported divider failure)', () => {

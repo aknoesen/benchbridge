@@ -45,6 +45,10 @@ export interface SchComponent {
   // (the M2K scope and voltmeter are the same 1±/2± input on one ADC).
   view?: 'scope' | 'voltmeter'
   value?: number // ohms / farads / henries (vsource uses AC 1)
+  // SCH-13/ARB-7: for kind 'capacitor', whether it is a polarized electrolytic (drawn with a +, and
+  // orientation-fixed on the board). Unset ⇒ derived from the kit rule (value ≥ 1 µF ⇒ electrolytic);
+  // set explicitly to keep a ≥ 1 µF film/ceramic signal cap symmetric (e.g. the LC-filter caps).
+  polarized?: boolean
   opModel?: 'ideal' | 'lmc662' // for kind 'opamp': ideal VCVS or the LMC662 behavioural model
   part?: string // for kind 'bjt' / 'mosfet': the ADALP2000 part name (key into TRANSISTOR_PARTS)
 }

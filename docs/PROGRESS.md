@@ -8,6 +8,25 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
+## SCH-13 DONE (2026-07-07 — symbols reflect part state: waveform + cap polarity)
+
+Wires up SCH-11's already-rendered glyphs in `symbolFor` (`core/symbolArt.ts`). **W1/W2/`vsource` draw the
+actual wave shape** — glyph picked from `waveType` (sine→`vsource_sin`, square→`vsource_square`,
+triangle→`vsource_tri`, sawtooth→`vsource_saw`; sine fallback). The waveform is App state, so it's threaded
+`params.waveType`/`params2.waveType` → SchematicEditor (`w1Wave`/`w2Wave` props) → `renderSymbol` →
+`symbolFor(c, waveType)`. Pin ids/order unchanged (p0/p1) ⇒ nets, drawn ground return, sim untouched.
+**Polarized electrolytic uses `polarized_cap`** (+ on terminal A = p0, matching ARB-7's fixed A; ceramic
+stays `capacitor`). **Polarity model (andre's call):** added an explicit optional `polarized?: boolean` on
+`SchComponent`; the shared `isPolarizedCap` (breadboard.ts, used by BOTH SCH-13 and ARB-7) is now
+`c.polarized ?? (value ≥ 1µF)`. The **lc-lp / lc-hp 1 µF LC-filter caps are marked `polarized: false`** —
+they're AC signal caps, not electrolytics — which also **corrects ARB-7's earlier over-classification** of
+them (they're symmetric on the board again). `current_source`/`dc_source`/`njfet`/`pjfet` left unused (no
+part). Gate: **333/333** (glyph-per-waveform, polarized-cap + flag-override tests), `tsc && vite build`
+clean, no `core/signal.ts`, invariance snapshot + sim baseline unchanged (glyph/flag are render-only).
+Verified live: led-pwm's square W1 shows the square-source glyph (proves the waveform threading). Polarized-
+cap glyph verified in the catalog (p0 top = +); live placement blocked by the recurring board-op renderer
+wedge — covered by the unit tests + pin geometry. Next: SCH-14/15 (rearranging).
+
 ## V+ divider/flashlight redraw DONE (2026-07-06 — CH1 straddles R1; V+ feeds the circuit, not the probe)
 
 Pure representation fix in `core/examples.ts`. Both examples wired CH1's 1+ onto the V+ pin and routed it

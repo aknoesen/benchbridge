@@ -21,10 +21,19 @@ Change:
    `vsource_saw`. (All four are already in the catalog.) The pin ids/order are unchanged (`p0`,`p1`),
    so nets, the drawn ground return, and the sim are untouched. If a source has no waveType (or an
    unmapped shape), fall back to `vsource_sin`.
-2. **Polarized electrolytic uses `polarized_cap`.** When a `capacitor` is the SCH-10 polarized
-   variant, map to `polarized_cap`; plain ceramic stays `capacitor`. (Use whatever flag SCH-10 set to
-   mark polarized — confirm the field; if SCH-10 did not add a distinct marker, flag to andre and
-   leave caps on the plain glyph rather than inventing a flag.)
+2. **Polarized electrolytic uses `polarized_cap`, drawn WITH its polarity (andre, 2026-07-06 — there
+   is a polarity to respect).** A polarized electrolytic maps to `polarized_cap`; plain ceramic stays
+   `capacitor`. The `polarized_cap` glyph must render with the **+ terminal marked** and a fixed
+   orientation, and its two leads are **NOT interchangeable** — the + lead is a specific terminal.
+   - **Distinction mechanism (shared with ARB-7):** the model currently has no polarized marker. SCH-10
+     documented the kit rule — electrolytics are the caps **≥ 1 µF** (1/4.7/10/22/47/220 µF), ceramics
+     are **< 1 µF**. Implement one shared `isPolarizedCap(c)` (kit rule: `value ≥ 1e-6`), used by BOTH
+     this glyph mapping and ARB-7's `isSymmetric`. If andre prefers an **explicit `polarized` flag** on
+     the component over the value threshold, add it and derive the default from the value — confirm
+     with andre. Do not leave polarity unmodeled; it must be respected.
+   - **Terminal semantics:** ensure the polarized cap's terminal A = **+** consistently (like the diode
+     anode), so ARB-7's board Check enforces correct orientation and the glyph's + matches the netlist
+     node the designer thinks is +. Coordinate with ARB-7 (same `isPolarizedCap`).
 
 Leave `current_source`, `dc_source`, `njfet`, `pjfet` unused — no matching part kind exists (no
 discrete JFET or current-source part). Note them as available-if-a-part-is-ever-added.
