@@ -8,6 +8,21 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
+## SCH-14 DONE (2026-07-07 — parts can't rotate/drag off the scroll-free canvas and get lost)
+
+Data-loss bug fix. New pure helpers in `core/schematic.ts`: `componentTerminalBox`, `clampComponentDelta`,
+`clampMoveTarget` (clamp a move so the whole part stays on-canvas), `rotateComponentInBounds` (rotate then
+shift inward to fit — never swings a terminal off), `clampAllInBounds` (pull off-canvas parts + their wires
+back in). Editor: `canvasBounds()` derives `maxGx`/`maxGy` from the rendered SVG size (minus a PAD margin);
+single-drag uses `clampMoveTarget`, group-drag clamps both bounds from the selection's terminal box, both
+rotate paths use `rotateComponentInBounds`, and a mount effect + the Open handler run `clampAllInBounds` to
+recover saves made before the clamp. Editor-only — no netlist/sim change, invariance snapshot + sim baseline
+untouched, canary intact. Gate: **337/337** (4 new SCH-14 tests: clamp at each edge, 4× rotate at a corner
+stays in bounds, load-recovery pulls an off-canvas part+wire in, no-op when on-canvas), `tsc && vite build`
+clean. Live interactive check (drag/rotate to the edge) not driven — the recurring board-op renderer wedge —
+but the clamp invariants are unit-tested and the editor just wires them. **SCH-15 (reliable rearranging /
+move-connections) is the bigger investigate-then-fix, still TODO.**
+
 ## SCH-13 DONE (2026-07-07 — symbols reflect part state: waveform + cap polarity)
 
 Wires up SCH-11's already-rendered glyphs in `symbolFor` (`core/symbolArt.ts`). **W1/W2/`vsource` draw the

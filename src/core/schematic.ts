@@ -407,6 +407,61 @@ export function rotateComponentWithWires(s: Schematic, id: string): Schematic {
   }
 }
 
+// SCH-14: the schematic canvas is scroll-free, so a part swung/dragged past the edge becomes
+// invisible and unreachable (effectively lost, though still in the model). These helpers keep every
+// terminal inside [0..maxGx] × [0..maxGy] on move and rotate, and recover already-off-canvas saves.
+
+// Terminal bounding box of a component in absolute grid coords (includes the origin).
+export function componentTerminalBox(c: SchComponent): { minx: number; miny: number; maxx: number; maxy: number } {
+  let minx = c.gx, miny = c.gy, maxx = c.gx, maxy = c.gy
+  for (const t of terminalsOf(c)) {
+    if (t.gx < minx) minx = t.gx; if (t.gy < miny) miny = t.gy
+    if (t.gx > maxx) maxx = t.gx; if (t.gy > maxy) maxy = t.gy
+  }
+  return { minx, miny, maxx, maxy }
+}
+
+// Minimal (dgx,dgy) that brings c's terminals inside [0..maxGx] × [0..maxGy] — (0,0) if already
+// inside; aligns to the top/left edge if the part is larger than the region.
+export function clampComponentDelta(c: SchComponent, maxGx: number, maxGy: number): { dgx: number; dgy: number } {
+  const b = componentTerminalBox(c)
+  let dgx = 0, dgy = 0
+  if (b.minx < 0) dgx = -b.minx; else if (b.maxx > maxGx) dgx = maxGx - b.maxx
+  if (b.miny < 0) dgy = -b.miny; else if (b.maxy > maxGy) dgy = maxGy - b.maxy
+  return { dgx, dgy }
+}
+
+// Clamp a move target so the moved component's terminals stay fully on-canvas (rotation/mirror kept).
+export function clampMoveTarget(c: SchComponent, gx: number, gy: number, maxGx: number, maxGy: number): { gx: number; gy: number } {
+  const b = componentTerminalBox(c)
+  const offMinX = b.minx - c.gx, offMaxX = b.maxx - c.gx, offMinY = b.miny - c.gy, offMaxY = b.maxy - c.gy
+  const clamp = (v: number, lo: number, hi: number) => { const r = Math.min(Math.max(v, lo), Math.max(lo, hi)); return r === 0 ? 0 : r }
+  return { gx: clamp(gx, -offMinX, maxGx - offMaxX), gy: clamp(gy, -offMinY, maxGy - offMaxY) }
+}
+
+// Rotate a component one quarter-turn, then clamp it (with its wires) back on-canvas — a rotation near
+// the edge shifts inward to fit rather than swinging a terminal off and losing the part.
+export function rotateComponentInBounds(s: Schematic, id: string, maxGx: number, maxGy: number): Schematic {
+  const rotated = rotateComponentWithWires(s, id)
+  const rc = rotated.components.find((x) => x.id === id)
+  if (!rc) return rotated
+  const { dgx, dgy } = clampComponentDelta(rc, maxGx, maxGy)
+  if (!dgx && !dgy) return rotated
+  return moveComponentWithWires(rotated, id, rc.gx + dgx, rc.gy + dgy, attachedWireEnds(rotated, rc))
+}
+
+// Pull every off-canvas component (and its attached wires) back into view — cheap insurance for saves
+// made before the clamp existed. Returns the same object if nothing was out of bounds.
+export function clampAllInBounds(s: Schematic, maxGx: number, maxGy: number): Schematic {
+  let cur = s, changed = false
+  for (const c of s.components) {
+    const cc = cur.components.find((x) => x.id === c.id)!
+    const { dgx, dgy } = clampComponentDelta(cc, maxGx, maxGy)
+    if (dgx || dgy) { cur = moveComponentWithWires(cur, c.id, cc.gx + dgx, cc.gy + dgy, attachedWireEnds(cur, cc)); changed = true }
+  }
+  return changed ? cur : s
+}
+
 // Orthogonal two-segment route between grid points (pin-magnetic modeless wiring, Stage 3).
 // Horizontal leg first, bending at (b.x, a.y); collinear points give one segment, identical
 // points none. The preview draws exactly these segments, so what you see is what commits.

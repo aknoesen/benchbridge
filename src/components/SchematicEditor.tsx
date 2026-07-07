@@ -5,7 +5,8 @@ import { useMemo, useRef, useState, useEffect, type ReactElement, type Dispatch,
 import {
   Schematic, SchComponent, SchKind, terminalsOf, localTerminals, toCircuit, ampCategory, computeNets,
   SINGLETON_KINDS, hasKind,
-  attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentWithWires,
+  attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentInBounds,
+  clampMoveTarget, clampAllInBounds, componentTerminalBox,
   mirrorComponentWithWires, canMirror, orthoRoute, deleteComponentsWithWires, migrateSchematic,
   type WireEndRef,
 } from '../core/schematic'
@@ -324,6 +325,14 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     return () => { engineRef.current?.dispose(); engineRef.current = null }
   }, [])
 
+  // SCH-14 recovery: on mount, pull any off-canvas part (from a save made before the clamp existed)
+  // back into view. A no-op when everything is already on-canvas, so it never disturbs a valid drawing.
+  useEffect(() => {
+    const b = canvasBounds()
+    setSch((s) => clampAllInBounds(s, b.maxGx, b.maxGy))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // SCH-2: build the netlist from the drawing and run it through the engine.
   async function simulate() {
     if (result.warnings.length) { setSimStatus('Cannot simulate — ' + result.warnings.join(' ')); return }
@@ -405,7 +414,8 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         if (Array.isArray(src.components) && Array.isArray(src.wires)) {
           snapshot()
           // migrate pre-two-terminal saves (standalone 1-/2- ports → the scope's − pin)
-          setSch(migrateSchematic({ components: src.components, wires: src.wires }))
+          const b = canvasBounds()
+          setSch(clampAllInBounds(migrateSchematic({ components: src.components, wires: src.wires }), b.maxGx, b.maxGy))
           setSelected(null)
           setSelectedWire(null)
           setSimStatus(fromLab
@@ -429,6 +439,14 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
       gx: Math.max(0, Math.round((e.clientX - r.left - PAD) / GRID)),
       gy: Math.max(0, Math.round((e.clientY - r.top - PAD) / GRID)),
     }
+  }
+  // SCH-14: the usable grid region from the rendered (scroll-free) canvas size. A part's terminals
+  // must stay inside [0..maxGx] × [0..maxGy] or it is lost past the edge. A PAD margin is kept so a
+  // clamped part isn't flush against the frame. Fallback bounds if the SVG isn't measured yet.
+  function canvasBounds(): { maxGx: number; maxGy: number } {
+    const r = svgRef.current?.getBoundingClientRect()
+    if (!r || r.width < GRID || r.height < GRID) return { maxGx: 40, maxGy: 24 }
+    return { maxGx: Math.max(1, Math.floor((r.width - 2 * PAD) / GRID)), maxGy: Math.max(1, Math.floor((r.height - 2 * PAD) / GRID)) }
   }
 
   // Nearest wireable pin (a component terminal or an existing wire endpoint) within the magnetic
@@ -590,18 +608,31 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     }
     if (!drag) return
     if ('ids' in drag) {
-      // Group drag: translate the whole selection by the delta since the last grid position,
-      // clamped so nothing crosses the top/left edge.
+      // Group drag: translate the whole selection by the delta since the last grid position, clamped
+      // so no selected part's terminal crosses ANY edge (SCH-14 — parts can't be dragged off-canvas).
       let ddx = gx - drag.lastGx, ddy = gy - drag.lastGy
-      const minGx = Math.min(...drag.ids.map((id) => sch.components.find((c) => c.id === id)?.gx ?? 0))
-      const minGy = Math.min(...drag.ids.map((id) => sch.components.find((c) => c.id === id)?.gy ?? 0))
-      ddx = Math.max(ddx, -minGx); ddy = Math.max(ddy, -minGy)
+      const b = canvasBounds()
+      let gMinX = Infinity, gMinY = Infinity, gMaxX = -Infinity, gMaxY = -Infinity
+      for (const id of drag.ids) {
+        const c = sch.components.find((x) => x.id === id); if (!c) continue
+        const tb = componentTerminalBox(c)
+        gMinX = Math.min(gMinX, tb.minx); gMinY = Math.min(gMinY, tb.miny)
+        gMaxX = Math.max(gMaxX, tb.maxx); gMaxY = Math.max(gMaxY, tb.maxy)
+      }
+      ddx = Math.min(Math.max(ddx, -gMinX), b.maxGx - gMaxX)
+      ddy = Math.min(Math.max(ddy, -gMinY), b.maxGy - gMaxY)
       if (ddx !== 0 || ddy !== 0) { if (!dragSnapped.current) { snapshot(); dragSnapped.current = true } marqueeMoved.current = true; setSch((s) => moveSelectionBy(s, new Set(drag.ids), new Set(drag.wireEnds), ddx, ddy)) }
       setDrag({ ids: drag.ids, wireEnds: drag.wireEnds, lastGx: drag.lastGx + ddx, lastGy: drag.lastGy + ddy })
       return
     }
     if (!dragSnapped.current) { snapshot(); dragSnapped.current = true }
-    setSch((s) => moveComponentWithWires(s, drag.id, Math.max(0, gx - drag.ox), Math.max(0, gy - drag.oy), drag.attached))
+    const b = canvasBounds()
+    setSch((s) => {
+      const c = s.components.find((x) => x.id === drag.id)
+      if (!c) return s
+      const t = clampMoveTarget(c, gx - drag.ox, gy - drag.oy, b.maxGx, b.maxGy) // keep every terminal on-canvas
+      return moveComponentWithWires(s, drag.id, t.gx, t.gy, drag.attached)
+    })
   }
   function onMouseUp() {
     dragSnapped.current = false
@@ -661,7 +692,8 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     const target = keyTarget()
     if (target) {
       snapshot()
-      setSch((s) => rotateComponentWithWires(s, target.id))
+      const b = canvasBounds()
+      setSch((s) => rotateComponentInBounds(s, target.id, b.maxGx, b.maxGy))
     } else {
       setPlaceRotation((r) => (r + 1) % 4)
     }
@@ -675,7 +707,8 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   }
   function rotatePart(id: string) {
     snapshot()
-    setSch((s) => rotateComponentWithWires(s, id))
+    const b = canvasBounds()
+    setSch((s) => rotateComponentInBounds(s, id, b.maxGx, b.maxGy))
   }
   function flipPart(id: string) {
     snapshot()

@@ -593,3 +593,44 @@ describe('INST-1: M2K I/O are singletons (Rule 3)', () => {
     expect(m.components.filter((c) => c.kind === 'ground')).toHaveLength(2)
   })
 })
+
+import { clampMoveTarget, rotateComponentInBounds, clampAllInBounds } from './schematic'
+
+describe('SCH-14: parts stay on the (scroll-free) canvas', () => {
+  it('clampMoveTarget keeps the whole part on-canvas at every edge', () => {
+    const c: SchComponent = { id: 'R1', kind: 'resistor', gx: 0, gy: 0, value: 1000 } // terminals (0,0),(2,0)
+    expect(clampMoveTarget(c, -5, 3, 10, 10).gx).toBe(0)   // left edge
+    expect(clampMoveTarget(c, 9, 3, 10, 10).gx).toBe(8)    // right: maxx (gx+2) must be ≤ 10
+    expect(clampMoveTarget(c, 3, -5, 10, 10).gy).toBe(0)   // top edge
+    expect(clampMoveTarget(c, 3, 12, 10, 10).gy).toBe(10)  // bottom edge
+    expect(clampMoveTarget(c, 4, 4, 10, 10)).toEqual({ gx: 4, gy: 4 }) // in-bounds → unchanged
+  })
+
+  it('rotating a part near the corner never pushes a terminal off-canvas (4 turns)', () => {
+    let s: Schematic = { components: [{ id: 'R1', kind: 'resistor', gx: 8, gy: 8, value: 1000 }], wires: [] }
+    for (let i = 0; i < 4; i++) {
+      s = rotateComponentInBounds(s, 'R1', 10, 10)
+      for (const t of terminalsOf(s.components[0])) {
+        expect(t.gx).toBeGreaterThanOrEqual(0); expect(t.gx).toBeLessThanOrEqual(10)
+        expect(t.gy).toBeGreaterThanOrEqual(0); expect(t.gy).toBeLessThanOrEqual(10)
+      }
+    }
+  })
+
+  it('clampAllInBounds pulls an off-canvas part and its attached wire back into view', () => {
+    const s: Schematic = {
+      components: [{ id: 'R1', kind: 'resistor', gx: -3, gy: 2, value: 1000 }], // terminals (-3,2),(-1,2)
+      wires: [{ x1: -3, y1: 2, x2: -6, y2: 2 }], // wire endpoint on R1.a
+    }
+    const r = clampAllInBounds(s, 10, 10)
+    for (const t of terminalsOf(r.components[0])) {
+      expect(t.gx).toBeGreaterThanOrEqual(0); expect(t.gy).toBeGreaterThanOrEqual(0)
+    }
+    expect(r.wires[0].x1).toBe(0) // the attached endpoint followed the part in (−3 → 0)
+  })
+
+  it('clampAllInBounds is a no-op (same object) when everything is on-canvas', () => {
+    const s: Schematic = { components: [{ id: 'R1', kind: 'resistor', gx: 2, gy: 2, value: 1000 }], wires: [] }
+    expect(clampAllInBounds(s, 10, 10)).toBe(s)
+  })
+})
