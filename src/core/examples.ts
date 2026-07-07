@@ -98,24 +98,22 @@ function nonInvertingAmp(): Schematic {
 }
 
 // --- the flashlight (QS-4 page 3): schematic + a PRE-BUILT board -----------------------------
-// V+ (Power Supply, default +5 V) → R 470 → LED → GND. CH1 differential across R: 1+ on the
-// V+ node, 1− on the R/LED junction. Drop ≈ 5 − 1.8 ≈ 3.2 V → I ≈ 6.8 mA.
+// V+ (Power Supply, default +5 V) → R 470 → LED → GND. CH1 is a horizontal probe straddling R:
+// 1+ (4,2) taps R1.a (the V+ node), 1− (6,2) taps R1.b (the R/LED junction) — never touching the V+
+// symbol. Drop ≈ 5 − 1.8 ≈ 3.2 V → I ≈ 6.8 mA.
 const FLASHLIGHT_SCHEMATIC: Schematic = {
   components: [
     { id: 'VP', kind: 'vplus', gx: 2, gy: 4 },
     { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 470 },  // a=(4,4) b=(6,4)
     { id: 'D1', kind: 'led', gx: 6, gy: 4, value: 1.8 },       // anode=(6,4)=R1.b  cathode=(8,4); Vf 1.8 → red
     { id: 'G1', kind: 'ground', gx: 8, gy: 6 },
-    // Two-terminal scope: 1+ (4,0) on the V+ end, 1− (4,2) wired to the R/LED junction —
-    // the differential read across R1, now visibly two leads of ONE instrument.
-    { id: 'P1', kind: 'scope1', gx: 4, gy: 0 },
+    // Two-terminal scope drawn as a differential probe across R1: 1+ (4,2) on R1.a, 1− (6,2) on R1.b.
+    { id: 'P1', kind: 'scope1', gx: 4, gy: 2, rotation: 3 },
   ],
   wires: [
-    { x1: 2, y1: 4, x2: 4, y2: 4 },   // V+ -> R1.a
-    { x1: 4, y1: 0, x2: 2, y2: 0 },   // 1+ -> left
-    { x1: 2, y1: 0, x2: 2, y2: 4 },   // -> V+ node
-    { x1: 4, y1: 2, x2: 6, y2: 2 },   // 1− -> right
-    { x1: 6, y1: 2, x2: 6, y2: 4 },   // -> R1.b / LED anode (differential across R1)
+    { x1: 2, y1: 4, x2: 4, y2: 4 },   // V+ -> R1.a (straight into the resistor)
+    { x1: 4, y1: 2, x2: 4, y2: 4 },   // 1+ (4,2) -> R1.a / V+ node
+    { x1: 6, y1: 2, x2: 6, y2: 4 },   // 1− (6,2) -> R1.b / LED anode (differential across R1)
     { x1: 8, y1: 4, x2: 8, y2: 6 },   // LED cathode -> ground
   ],
 }
@@ -168,20 +166,19 @@ export const EXAMPLES: Example[] = [
         { id: 'R2', kind: 'resistor', gx: 8, gy: 4, rotation: 1, value: 20000 }, // a=(8,4) b=(8,6)
         { id: 'G1', kind: 'ground', gx: 8, gy: 8 },
         { id: 'G2', kind: 'ground', gx: 10, gy: 6 }, // scope − → GND (single-ended reference)
-        // Two-terminal scopes: CH1's two leads read ACROSS R1 (1+ on V+, 1− wired to the midpoint
-        // = differential); CH2 is single-ended across R2 (2− wired to GND). INST-2: this is a
+        // Two-terminal scopes: CH1 is a horizontal probe straddling R1 — 1+ (4,2) taps R1.a (the V+
+        // node) and 1− (6,2) taps R1.b (the midpoint), a clean differential across R1 that never
+        // touches the V+ symbol. CH2 is single-ended across R2 (2− wired to GND). INST-2: this is a
         // Voltmeter demo (read two DIFFERENT numbers), so both channels are in voltmeter view.
-        { id: 'P1', kind: 'scope1', gx: 4, gy: 0, view: 'voltmeter' },   // 1+ (4,0) → V+; 1− (4,2) → midpoint
+        { id: 'P1', kind: 'scope1', gx: 4, gy: 2, rotation: 3, view: 'voltmeter' }, // 1+ (4,2)→R1.a; 1− (6,2)→R1.b
         { id: 'P2', kind: 'scope2', gx: 10, gy: 4, view: 'voltmeter' },  // 2+ on the midpoint; 2− (10,6) → GND
       ],
       wires: [
-        { x1: 2, y1: 4, x2: 4, y2: 4 },   // V+ -> R1.a (applied)
-        { x1: 4, y1: 0, x2: 2, y2: 0 },   // 1+ -> left
-        { x1: 2, y1: 0, x2: 2, y2: 4 },   // -> V+ node
+        { x1: 2, y1: 4, x2: 4, y2: 4 },   // V+ -> R1.a (the applied voltage, straight into the divider)
+        { x1: 4, y1: 2, x2: 4, y2: 4 },   // 1+ (4,2) -> R1.a / V+ node
+        { x1: 6, y1: 2, x2: 6, y2: 4 },   // 1− (6,2) -> R1.b / midpoint (differential across R1)
         { x1: 6, y1: 4, x2: 8, y2: 4 },   // R1.b -> R2.a (the midpoint link)
         { x1: 8, y1: 4, x2: 10, y2: 4 },  // midpoint -> 2+
-        { x1: 4, y1: 2, x2: 10, y2: 2 },  // 1− -> right
-        { x1: 10, y1: 2, x2: 10, y2: 4 }, // -> midpoint (differential across R1)
         { x1: 8, y1: 6, x2: 8, y2: 8 },   // R2.b -> ground
       ],
     },

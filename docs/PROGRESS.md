@@ -8,6 +8,19 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
+## V+ divider/flashlight redraw DONE (2026-07-06 — CH1 straddles R1; V+ feeds the circuit, not the probe)
+
+Pure representation fix in `core/examples.ts`. Both examples wired CH1's 1+ onto the V+ pin and routed it
+up over the top rail, so V+ read as if it powered the *instrument*. Now CH1 is a horizontal probe
+(`scope1` `rotation:3`, 1+ left / 1− right) straddling R1: 1+ (4,2)→R1.a (V+ node), 1− (6,2)→R1.b
+(midpoint / LED anode); V+ has a single short lead straight into R1.a, untouched by the scope. **Net-
+identical** — sim-equivalence baseline byte-identical, `toCircuit`/probes unchanged (divider still CH1
+differential across R1, CH2 single-ended); the only snapshot movement is the `computeNets` point-map
+(new wire geometry), regenerated + eyeballed. The pre-built `FLASHLIGHT_BOARD` re-materialises from the
+unchanged nets and still Checks ok. 330/330, `tsc && vite build` clean, canary untouched. Verified live:
+divider + flashlight both show V+→R1 single lead and CH1 as a clean two-lead probe across R1, no top-rail
+wire (1+ left @ same row as 1− right). Next: SCH-13/14/15.
+
 ## ARB-7 DONE (2026-07-06 — symmetric passives are orientation-agnostic on the board)
 
 The reported bug: a resistor placed/flipped so its "wrong" leg faces the next part made `checkEquivalence`
