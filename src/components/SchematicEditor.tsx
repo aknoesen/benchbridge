@@ -7,7 +7,7 @@ import {
   SINGLETON_KINDS, hasKind,
   attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentInBounds,
   clampMoveTarget, clampAllInBounds, componentTerminalBox,
-  mirrorComponentWithWires, canMirror, orthoRoute, deleteComponentsWithWires, migrateSchematic,
+  mirrorComponentWithWires, canMirror, orthoRoute, rerouteAttachedWires, deleteComponentsWithWires, migrateSchematic,
   type WireEndRef,
 } from '../core/schematic'
 import { symbolFor, alignTransform, matScale, inkedInner } from '../core/symbolArt'
@@ -635,7 +635,15 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     })
   }
   function onMouseUp() {
+    const dropped = drag
+    const didMove = dragSnapped.current // a part/selection actually translated this gesture
     dragSnapped.current = false
+    // SCH-15: on drop, re-route the moved part's attached wires orthogonally so they read clean
+    // instead of stretching to diagonals. No new snapshot — part of the same one-undo drag gesture.
+    if (dropped && didMove) {
+      const ids = 'ids' in dropped ? new Set(dropped.ids) : new Set([dropped.id])
+      setSch((s) => rerouteAttachedWires(s, ids))
+    }
     if (marquee) {
       if (marqueeMoved.current) {
         const xlo = Math.min(marquee.x0, marquee.x1), xhi = Math.max(marquee.x0, marquee.x1)
@@ -1079,8 +1087,8 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
 
           {/* Stage 4 hover hint chip — fades in while a part is under the cursor */}
           <g pointerEvents="none" style={{ opacity: tool === 'select' && hoverPartId && !drag && !marquee && !pinWire ? 0.92 : 0, transition: 'opacity 0.25s' }}>
-            <rect x={8} y={8} width={198} height={20} rx={10} fill="var(--bg-panel)" stroke="var(--sch-grid)" />
-            <text x={107} y={22} fontSize={10} fill="var(--text-secondary)" textAnchor="middle">R rotate · F flip · right-click: menu</text>
+            <rect x={8} y={8} width={272} height={20} rx={10} fill="var(--bg-panel)" stroke="var(--sch-grid)" />
+            <text x={144} y={22} fontSize={10} fill="var(--text-secondary)" textAnchor="middle">drag to move (wires follow) · R rotate · F flip · right-click</text>
           </g>
         </svg>
 

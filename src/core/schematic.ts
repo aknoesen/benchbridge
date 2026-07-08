@@ -472,6 +472,29 @@ export function orthoRoute(a: { x: number; y: number }, b: { x: number; y: numbe
   return segs
 }
 
+// SCH-15: after a part/selection move, an attached wire whose OTHER end stayed put has gone diagonal
+// (its moved endpoint followed the terminal, the far end didn't). Re-route each such wire orthogonally
+// (an L bend) so connections read clean instead of stretching to diagonals. Endpoints are unchanged,
+// so nets are identical — this is purely cosmetic tidy-up. A wire with both ends on moved terminals
+// translated straight and is left alone; a wire already axis-aligned is left alone.
+export function rerouteAttachedWires(s: Schematic, movedIds: Set<string>): Schematic {
+  if (movedIds.size === 0) return s
+  const movedPts = new Set<string>()
+  for (const c of s.components) if (movedIds.has(c.id)) for (const t of terminalsOf(c)) movedPts.add(key(t.gx, t.gy))
+  let changed = false
+  const wires: Wire[] = []
+  for (const w of s.wires) {
+    const e1 = movedPts.has(key(w.x1, w.y1)), e2 = movedPts.has(key(w.x2, w.y2))
+    if (e1 === e2) { wires.push(w); continue }              // both ends moved, or neither → keep
+    const fixed = e1 ? { x: w.x2, y: w.y2 } : { x: w.x1, y: w.y1 }
+    const moved = e1 ? { x: w.x1, y: w.y1 } : { x: w.x2, y: w.y2 }
+    if (fixed.x === moved.x || fixed.y === moved.y) { wires.push(w); continue } // already orthogonal
+    wires.push(...orthoRoute(fixed, moved))                 // route from the fixed end back to the terminal
+    changed = true
+  }
+  return changed ? { ...s, wires } : s
+}
+
 // Whether F (flip) does anything for a kind. Single-pin parts (ports, ground, rails) mirror to
 // themselves, and the INA125 keeps its inline (non-catalog) render, which does not honour
 // mirror — flipping its model but not its artwork would lie about where the pins are.

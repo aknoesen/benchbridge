@@ -8,6 +8,26 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
+## SCH-15 core DONE (2026-07-08 — attached wires re-route orthogonally on move; wire-drag gesture deferred)
+
+Diagnosis first: connectivity is already sound (endpoint-based nets + `attachedWireEnds` moving wire ends +
+`bridgeWiresForMove` converting touch-connections to wires), so a move stays electrically connected. The
+real complaints were (1) diagonal wires after a non-axis move, (2) no wire-editing gesture, (3) discoverability.
+andre's call: **ship the tractable testable core now, defer the interactive wire-drag gesture** to a session
+with a working browser (the Chrome renderer wedged on editor/board drag ops all session).
+
+Delivered: `rerouteAttachedWires` (pure, `core/schematic.ts`) — after a part/selection drop, an attached wire
+whose far end stayed put (gone diagonal) is replaced by an orthogonal L (`orthoRoute`); endpoints unchanged so
+nets are identical (unit test confirms via `computeNets`), a straight/aligned or fully-translated wire is left
+alone. Editor: `onMouseUp` applies it on drop within the SAME one-undo drag gesture; the hover hint now reads
+"drag to move (wires follow) · R rotate · F flip · right-click". Editor/core only — no `core/signal.ts`, sim
+baseline + invariance snapshot unchanged. Gate: **339/339** (2 new tests), `tsc && vite build` clean.
+
+**DEFERRED (SCH-15 remainder → follow-up with a working browser):** the wire-segment/endpoint **drag-to-
+re-route gesture** (grab a wire, re-route without delete) — the literal "move connections" ask. It's a new
+drag interaction that needs reliable live testing to get the feel right, which this session's flaky renderer
+couldn't provide. ROADMAP SCH-15 = IN PROGRESS.
+
 ## SCH-14 DONE (2026-07-07 — parts can't rotate/drag off the scroll-free canvas and get lost)
 
 Data-loss bug fix. New pure helpers in `core/schematic.ts`: `componentTerminalBox`, `clampComponentDelta`,

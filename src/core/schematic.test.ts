@@ -634,3 +634,34 @@ describe('SCH-14: parts stay on the (scroll-free) canvas', () => {
     expect(clampAllInBounds(s, 10, 10)).toBe(s)
   })
 })
+
+import { rerouteAttachedWires } from './schematic'
+
+describe('SCH-15: attached wires re-route orthogonally on move (core, testable half)', () => {
+  it('replaces a diagonal attached wire with an orthogonal L, keeping the connection', () => {
+    // post-move state: the wire's R1 end sits on R1.a (4,4); its far end (0,0) stayed → diagonal.
+    const s: Schematic = {
+      components: [{ id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 1000 }], // a(4,4) b(6,4)
+      wires: [{ x1: 0, y1: 0, x2: 4, y2: 4 }],
+    }
+    const r = rerouteAttachedWires(s, new Set(['R1']))
+    expect(r.wires).toHaveLength(2)                         // one L = two segments
+    for (const w of r.wires) expect(w.x1 === w.x2 || w.y1 === w.y2).toBe(true) // each axis-aligned
+    // both original endpoints survive → the R1 terminal and the far end stay connected
+    const nets = computeNets(r)
+    expect(nets.get(keyOf(0, 0))).toBe(nets.get(keyOf(4, 4)))
+  })
+
+  it('leaves an already-orthogonal wire and a fully-translated wire alone (same reference)', () => {
+    const s: Schematic = {
+      components: [{ id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 1000 }],
+      wires: [
+        { x1: 0, y1: 4, x2: 4, y2: 4 }, // horizontal into R1.a — already orthogonal
+        { x1: 4, y1: 4, x2: 6, y2: 4 }, // both ends on R1 terminals → translated straight
+      ],
+    }
+    expect(rerouteAttachedWires(s, new Set(['R1']))).toBe(s)
+  })
+})
+
+function keyOf(x: number, y: number): string { return `${x},${y}` }
