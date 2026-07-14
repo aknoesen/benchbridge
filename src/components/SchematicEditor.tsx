@@ -323,21 +323,33 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   // editing, the view holds still and the SCH-14 clamp keeps parts inside it.
   const [fitKey, setFitKey] = useState(0)
   const refit = () => setFitKey((k) => k + 1)
+  const lastFitKey = useRef(-1)
 
   useLayoutEffect(() => {
     const content = contentRef.current
     if (!content || vp.w < GRID || vp.h < GRID) return
+    const isLoad = lastFitKey.current !== fitKey
+    lastFitKey.current = fitKey
     // getBBox measures the content group in its OWN (pre-transform) coordinates, so the fit cannot
     // feed back into what it measures — a reframe changes the viewport, never the content bbox.
     const b = sch.components.length || sch.wires.length ? content.getBBox() : null
-    const next = fitToContent(
-      b && b.width > 0 && b.height > 0 ? { x: b.x, y: b.y, w: b.width, h: b.height } : null,
-      vp,
-      { margin: GRID },
-    )
+    const box = b && b.width > 0 && b.height > 0 ? { x: b.x, y: b.y, w: b.width, h: b.height } : null
+
+    // A PAD RESIZE re-frames only if the drawing no longer fits. Placing the first part populates the
+    // Selected inspector, which can reflow the side panel and resize the pad — and an unconditional
+    // re-fit there yanked the drawing to the centre the moment you placed your first component
+    // (andre: "I cannot place the first component and it stays in that position"). If it still fits,
+    // the view does not move. Only a load (fitKey) frames unconditionally.
+    if (!isLoad) {
+      if (!box) return
+      const x0 = box.x * view.scale + view.tx, y0 = box.y * view.scale + view.ty
+      const x1 = (box.x + box.w) * view.scale + view.tx, y1 = (box.y + box.h) * view.scale + view.ty
+      if (x0 >= 0 && y0 >= 0 && x1 <= vp.w && y1 <= vp.h) return // still fully visible — hands off
+    }
+    const next = fitToContent(box, vp, { margin: GRID })
     setView((v) => (sameView(v, next) ? v : next)) // unchanged fit → same object → React bails out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fitKey, vp]) // deliberately NOT `sch` — editing must not move the view
+  }, [fitKey, vp]) // deliberately NOT `sch` — editing must never move the view
 
   const viewTransform = `translate(${view.tx.toFixed(3)} ${view.ty.toFixed(3)}) scale(${view.scale.toFixed(5)})`
   // The visible pad in world coordinates — the region the grid layer has to cover once the content
