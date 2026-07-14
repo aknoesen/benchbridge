@@ -8,6 +8,41 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
+## FIT-2 / FIT-3 / PLACE-1 + deploy cache DONE (2026-07-13 — the view holds still; one-shot placement)
+
+Live-feedback round with andre. Four things, and the last one explains why the first three looked broken.
+
+**FIT-2 (`021d2b4`) — frame on LOAD only.** andre: *"I told you wrong when I said center the circuit. What I
+meant: when examples draw their schematics, do not scrunch it to the left such that some part cannot be seen.
+NO — when one starts with a clean slate and places one component, it snaps to the center — NO."* FIT-1 re-fit on
+every change to `sch`, so placing a part re-centred the canvas under the cursor. Framing is about **arriving** at
+a drawing you can see whole, not following the user around. The fit effect is now keyed on an explicit `fitKey`
+(bumped by mount / Example / Open / Clear) + the pad size; **`sch` is deliberately not a dependency**.
+
+**FIT-3 (`fa623cb`) — a pad resize only re-frames if the drawing no longer fits.** FIT-2 wasn't enough: the
+ResizeObserver still re-framed on ANY resize, and placing a part selects it → the Selected inspector appears →
+the side panel reflows → the pad resizes → re-centre. So *every* placement centred the drawing. It reproduces
+only in a window where that reflow actually changes the panel width — mine never did, andre's did every time,
+which is exactly why I "verified" it as fixed twice. Now a resize re-frames only if the content is no longer
+fully visible under the current view; a LOAD still frames unconditionally.
+
+**PLACE-1 (`f5d8120`) — one-shot placement.** andre: *"the program goes to a second resistor automatically — NO.
+Each component that one uses should be specifically selected — do not assume what I want to do next."* The part
+tool stayed armed after a placement, so the next click dropped another resistor. It also made rotation a fight:
+with the tool armed, `R` turns the **ghost**, not the part you just placed — which is why standing a resistor up
+was so awkward. Placing now drops the tool back to Select, clears the ghost, resets the place angle/mirror, and
+leaves the new part selected, so `R`/`F` act on **it**. Place → press R → it stands up.
+
+**Deploy: never cache index.html (`a866eca`).** THREE times this session a fix was live on Render and andre still
+saw the old behaviour ("not fixed"), because the browser held a cached `index.html` — the one file that names the
+current content-hashed bundle. A stale copy pins the browser to an old build no matter how often we deploy.
+`render.yaml` now sends `no-cache, no-store, must-revalidate` for `/` and `/index.html`, and `immutable` for
+`/assets/*` (they are content-hashed, so that is safe and keeps reloads fast).
+
+**Lesson worth keeping.** I reported "fixed" twice on FIT-2 from a green check in *my* window, where the bug
+could not manifest. When a user says it is not fixed and my test says it is, the test is wrong until proven
+otherwise — check the environment difference (window size, cached bundle) before re-asserting.
+
 ## SCH-16b DONE (2026-07-13 — the polyline wire model; the "strange shapes" fix)
 
 SCH-16's first cut shipped a bad model and andre called it: dragging wires produced closed rectangles
