@@ -4,6 +4,23 @@
 auto-routed.** You declare a connection (click pin A, click pin B). The app draws the route and re-draws it
 whenever anything moves. There is no wire to grab, slide, tear or loop.
 
+## ⚠ Where this work happens — branch `wire1-connection-first`
+
+**All WIRE-1 work goes on `wire1-connection-first`** (andre's call). Check `git branch --show-current` before
+editing — Cowork writes straight to the working tree, so an edit made while the repo sits on `main` would land in
+production.
+
+- **`main` is frozen at `496f4e1`** and is what **Render auto-deploys**. It keeps serving the known-good build
+  until andre's Stage-2 GO *and* a full green gate.
+- **Restore point: tag `pre-wire1`** (= `496f4e1`, pushed). Independent of any branch — `git checkout pre-wire1`
+  returns to the working app even if the branch is deleted.
+- **Why a branch:** WIRE-1 changes how `computeNets` derives nets — the one function BOTH the simulator and the
+  board Check sit on. A bug there does not crash; it silently yields a wrong net, so the sim shows a
+  plausible-but-wrong waveform and the Check passes a wrong board. That is the worst possible thing to
+  auto-deploy to students, and clicking around will not catch it. Same playbook as the SCH-11 rework (held on a
+  branch until andre's visual acceptance, then merged `--no-ff`).
+- Merge `main` → branch at each stage boundary rather than letting them drift.
+
 ## Why this is the right model for BenchBridge
 
 Nothing downstream of the drawing uses wire geometry:
