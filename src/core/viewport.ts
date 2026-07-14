@@ -25,12 +25,10 @@ export interface FitOpts {
   // schematic too big to fit lands at minZoom, centered, rather than at an illegible scale.
   minZoom?: number
   maxZoom?: number
-  // A world box that must stay inside the frame even when the content is smaller than it — the
-  // editor passes the pad itself. Two things fall out of this:
-  //   1. content already clear of the edges ⇒ the fit is the identity, so the common case does not
-  //      shrink or shift the drawing at all (no lurching while you place parts);
-  //   2. the region a drag is clamped to (SCH-14 keeps parts on the pad) is always on screen, so a
-  //      part dragged toward an edge cannot visually leave the pad before the drop settles the fit.
+  // An extra world box that must also stay inside the frame. NOT used by the editor: passing the pad
+  // here pins the fit to the pad's origin, which anchors the drawing in the top-left corner instead
+  // of centering it (andre: "the schematic is pushed to the left side"). Kept because it is the
+  // natural way to frame content *plus* a fixed region, should anything need that.
   keepVisible?: Box
 }
 

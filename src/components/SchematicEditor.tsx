@@ -297,9 +297,9 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   }, [])
 
   // Refit after the DOM holds the new content but before paint, so a load/place never flashes clipped.
-  // Deliberately NOT run mid-drag: the drag is already clamped to the pad (SCH-14) and the pad is
-  // always framed, so the part stays in view; refitting on every mouse-move would make the canvas
-  // oscillate under the cursor. The drop (drag → null) settles the final fit.
+  // Deliberately NOT run mid-drag: the drag is clamped to the framed region, so the part stays in
+  // view; refitting on every mouse-move would make the canvas oscillate under the cursor. The drop
+  // (drag → null) settles the final fit.
   useLayoutEffect(() => {
     const content = contentRef.current
     if (!content || drag || marquee || vp.w < GRID || vp.h < GRID) return
@@ -309,7 +309,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     const next = fitToContent(
       b && b.width > 0 && b.height > 0 ? { x: b.x, y: b.y, w: b.width, h: b.height } : null,
       vp,
-      { margin: GRID, keepVisible: { x: 0, y: 0, w: vp.w, h: vp.h } },
+      { margin: GRID },
     )
     setView((v) => (sameView(v, next) ? v : next)) // unchanged fit → same object → React bails out
   }, [sch, drag, marquee, vp])
@@ -1563,14 +1563,14 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
     const cx = ax + G(1), y = ay
     const idText = (tx: number, ty: number, size = 10, fill = 'var(--text-secondary)') =>
       upright(tx, ty, <text x={tx} y={ty} fill={fill} fontSize={size} textAnchor="middle">{c.id}</text>)
-    const valText = (tx: number, ty: number) =>
-      upright(tx, ty, <text x={tx} y={ty} fill="var(--text-primary)" fontSize={9} textAnchor="middle">{fmtEng(c.value ?? 0)}{UNIT[c.kind] ?? ''}</text>)
     const labels: ReactElement[] = []
     switch (c.kind) {
       case 'resistor':
       case 'capacitor':
       case 'inductor':
-        labels.push(idText(cx, y - 15), valText(cx, y + 20))
+        // Placed in SCREEN space below (outside the rotation) — see `outerLabels`. A local-frame
+        // label rotates with the part, which swung a vertical part's value onto its left-hand
+        // neighbour's value (the RC low-pass printed "1.5kΩ" and "100nF" on top of each other).
         break
       case 'vsource':
         labels.push(idText(cx, y - 18))
@@ -1708,5 +1708,33 @@ function renderSymbol(c: SchComponent, px: (g: number) => number, selected: bool
       </g>
     )
   }
-  return <g transform={`rotate(${rot} ${ax} ${ay})`}>{inner}</g>
+  // Passive id/value labels live OUTSIDE the rotation, positioned from the part's actual (rotated)
+  // terminals: a horizontal part keeps id above / value below, a vertical one stacks both to its
+  // right. Inside the rotated group the value label swings around with the body and collides with
+  // the neighbouring part's label — which is what made the RC low-pass unreadable.
+  const outerLabels: ReactElement[] = []
+  if (c.kind === 'resistor' || c.kind === 'capacitor' || c.kind === 'inductor') {
+    const ts = terminalsOf(c)
+    const p0 = { x: px(ts[0].gx), y: px(ts[0].gy) }, p1 = { x: px(ts[1].gx), y: px(ts[1].gy) }
+    const mx = (p0.x + p1.x) / 2, my = (p0.y + p1.y) / 2
+    const val = `${fmtEng(c.value ?? 0)}${UNIT[c.kind] ?? ''}`
+    const idFill = selected ? 'var(--accent-blue)' : 'var(--text-secondary)'
+    if (p0.x === p1.x) { // vertical: stack both labels clear of the body, to its right
+      outerLabels.push(
+        <text key="id" x={mx + 15} y={my - 4} fill={idFill} fontSize={10} textAnchor="start">{c.id}</text>,
+        <text key="val" x={mx + 15} y={my + 11} fill="var(--text-primary)" fontSize={9} textAnchor="start">{val}</text>,
+      )
+    } else { // horizontal: id above, value below (unchanged)
+      outerLabels.push(
+        <text key="id" x={mx} y={my - 15} fill={idFill} fontSize={10} textAnchor="middle">{c.id}</text>,
+        <text key="val" x={mx} y={my + 20} fill="var(--text-primary)" fontSize={9} textAnchor="middle">{val}</text>,
+      )
+    }
+  }
+  return (
+    <g>
+      <g transform={`rotate(${rot} ${ax} ${ay})`}>{inner}</g>
+      {outerLabels}
+    </g>
+  )
 }
