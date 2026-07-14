@@ -13,6 +13,20 @@ services:
         value: /
       - key: NODE_VERSION
         value: "22"
+    # Cache policy. index.html must NEVER be cached: it is the only file that names the current
+    # hashed bundle, so a stale copy pins the browser to an old build and a fresh deploy looks like
+    # "the fix didn't ship" (it bit andre three times on 2026-07-13). The assets themselves carry a
+    # content hash in the filename, so they can be cached forever.
+    headers:
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache, no-store, must-revalidate
+      - path: /
+        name: Cache-Control
+        value: no-cache, no-store, must-revalidate
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
     routes:
       - type: rewrite
         source: /*
