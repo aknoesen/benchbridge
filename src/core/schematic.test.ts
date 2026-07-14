@@ -713,6 +713,61 @@ describe('DRAG-1: a multi-step drag keeps its connections (the "severed ground" 
   })
 })
 
+import { moveWireEnd, moveWireBy, wireEndsAt } from './schematic'
+
+// SCH-16: re-route a connection without deleting it.
+describe('SCH-16: wire endpoint + segment drag', () => {
+  //  W1(0,0)--(4,0)R1.a  R1.b(6,0)--(8,0)  ; a wire from R1.b to a probe at (8,0)
+  const base: Schematic = {
+    components: [
+      { id: 'W1', kind: 'awg1', gx: 0, gy: 0 },
+      { id: 'R1', kind: 'resistor', gx: 4, gy: 0, value: 1000 }, // a(4,0) b(6,0)
+      { id: 'G1', kind: 'ground', gx: 8, gy: 4 },
+    ],
+    wires: [{ x1: 0, y1: 0, x2: 4, y2: 0 }],
+  }
+
+  it('wireEndsAt finds the ends the editor can grab', () => {
+    expect(wireEndsAt(base, 0, 0)).toEqual([{ index: 0, end: 1 }])
+    expect(wireEndsAt(base, 4, 0)).toEqual([{ index: 0, end: 2 }])
+    expect(wireEndsAt(base, 2, 0)).toEqual([]) // mid-segment is a body grab, not an end
+  })
+
+  it('endpoint drag re-attaches one end and re-nets the circuit (no delete-and-redraw)', () => {
+    const before = computeNets(base)
+    expect(before.get('0,0')).toBe(before.get('4,0')) // W1.out and R1.a share a net
+    const s = moveWireEnd(base, 0, 2, 8, 4)           // drag the R1.a end onto the ground
+    const after = computeNets(s)
+    expect(after.get('0,0')).toBe(after.get('8,4'))   // now W1.out is tied to GND…
+    expect(after.get('0,0')).not.toBe(after.get('4,0')) // …and no longer to R1.a
+    expect(s.wires).toHaveLength(1)                   // still ONE wire — it moved, it didn't multiply
+  })
+
+  it('endpoint drag refuses to collapse a wire to zero length', () => {
+    expect(moveWireEnd(base, 0, 2, 0, 0)).toBe(base)
+  })
+
+  it('segment drag slides the run and BRIDGES the ends that were on pins (connection survives)', () => {
+    const s = moveWireBy(base, 0, 0, 3) // slide the whole W1→R1 wire down 3 cells
+    const nets = computeNets(s)
+    expect(nets.get('0,0')).toBe(nets.get('4,0')) // W1.out ↔ R1.a still one node
+    expect(s.wires[0]).toEqual({ x1: 0, y1: 3, x2: 4, y2: 3 }) // the run itself moved…
+    // …and both pin ends grew an orthogonal stub down to it
+    expect(s.wires).toContainEqual({ x1: 0, y1: 0, x2: 0, y2: 3 })
+    expect(s.wires).toContainEqual({ x1: 4, y1: 0, x2: 4, y2: 3 })
+  })
+
+  it('segment drag of a wire touching no pin just moves it (nothing to bridge)', () => {
+    const free: Schematic = { components: [], wires: [{ x1: 1, y1: 1, x2: 3, y2: 1 }] }
+    const s = moveWireBy(free, 0, 2, 2)
+    expect(s.wires).toEqual([{ x1: 3, y1: 3, x2: 5, y2: 3 }])
+  })
+
+  it('a zero delta is a no-op (a click on a wire must not mutate the drawing)', () => {
+    expect(moveWireBy(base, 0, 0, 0)).toBe(base)
+  })
+})
+
 describe('SCH-15: attached wires re-route orthogonally on move (core, testable half)', () => {
   it('replaces a diagonal attached wire with an orthogonal L, keeping the connection', () => {
     // post-move state: the wire's R1 end sits on R1.a (4,4); its far end (0,0) stayed → diagonal.

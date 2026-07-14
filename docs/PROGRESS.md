@@ -8,6 +8,42 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
+## SCH-16 / DRAG-1 DONE (2026-07-13 — drags stop severing connections; wires can be re-routed without deleting)
+
+Two bugs andre hit on the live site, both in the drag path (neither caused by FIT-1).
+
+**DRAG-1 — a multi-step drag severed connections.** Dragging the ground off the scope − cut it loose,
+leaving a stranded one-cell stub. Cause: the editor applied a drag **incrementally**, running
+`moveComponentWithWires` against the CURRENT state on every mousemove. That call bridges a
+touch-connection (two coincident pins, no wire — exactly how rc-lp grounds 1−) into a real wire, but
+the new wire is not in `attached`, which is captured once at mousedown. So the bridge was built on the
+first mousemove and then abandoned: the part sails on, the wire stays behind. A ONE-move drag worked
+perfectly, which is why every test and hand-check missed it. Fix: `dragBase` — every mousemove applies
+from the schematic as it was at mousedown, with the TOTAL delta, so the gesture is idempotent (the
+bridge is built once, from the full delta) and the group-drag wire-end indices stay valid (they used to
+drift as bridges were appended). Group drag moved from per-frame deltas to the grab point.
+
+**SCH-16 — wires were stuck** ("are one supposed to be able to reposition wire connections?"). This is
+SCH-15's deferred remainder, now built. Two pure ops in `core/schematic.ts`: `moveWireEnd` (drag one END
+to re-attach it — nothing is bridged, detaching is the point of the gesture; a zero-length wire is
+refused) and `moveWireBy` (drag the BODY to slide the run; any end that sat ON a component pin grows an
+orthogonal bridge, the same rule the part drag uses, so sliding never silently disconnects). Editor: a
+press on a wire ARMS a drag without committing — the first mousemove past the grab cell promotes it, so
+a press that never moves is still a click (select the wire, or start a pin-magnetic wire when the press
+is on a pin). Endpoint drags snap magnetically to pins (`pinNear` gained a `skipWire` so an end can't
+snap to itself) and the magnet ring shows while dragging. Grab handles render on the hovered/selected
+wire. Wire drags also go through `dragBase`, so they inherit DRAG-1's idempotence.
+
+Gate: **367/367** (4 DRAG-1 tests replaying the editor's loop on the shipped rc-lp — one pins the old
+incremental behaviour as the regression; 6 SCH-16 tests: endpoint re-net, zero-length refusal, segment
+bridge, no-op click). `tsc && vite build` clean, `core/signal.ts` untouched.
+
+**Verification caveat — read this.** The Chrome automation available to me fires **no intermediate
+mousemove events**, so it cannot drive ANY drag gesture; I could not hand-verify either fix in the UI.
+Both are verified by tests that replay the editor's exact loop, plus a UI check of everything reachable
+without a drag (wire click-select + grab handles render, no console errors). **The drag gestures need a
+human pass.**
+
 ## FIT-1 DONE (2026-07-13 — the schematic is always framed; and the mount clamp that was shredding circuits is gone)
 
 Two things, and the second one is the bigger deal.

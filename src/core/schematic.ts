@@ -502,6 +502,52 @@ export function orthoRoute(a: { x: number; y: number }, b: { x: number; y: numbe
   return segs
 }
 
+// ── SCH-16: re-route a wire without deleting it ────────────────────────────────
+// The two halves of "move a connection": drag one END of a wire to re-attach it somewhere else, or
+// drag the wire's BODY to slide the whole run out of the way. Both are pure; the editor supplies the
+// snapped grid target (its endpoint drag snaps magnetically to pins, as the wiring gesture does).
+
+// Move one endpoint of wire `index` to (gx,gy). Detaching an end from a pin is the POINT of the
+// gesture (you are re-routing), so nothing is bridged here — connectivity follows the endpoints, and
+// dropping the end on a pin/node connects it there. A zero-length wire is refused, not created.
+export function moveWireEnd(s: Schematic, index: number, end: 1 | 2, gx: number, gy: number): Schematic {
+  const w = s.wires[index]
+  if (!w) return s
+  const nw: Wire = end === 1 ? { ...w, x1: gx, y1: gy } : { ...w, x2: gx, y2: gy }
+  if (nw.x1 === nw.x2 && nw.y1 === nw.y2) return s
+  if (nw.x1 === w.x1 && nw.y1 === w.y1 && nw.x2 === w.x2 && nw.y2 === w.y2) return s
+  return { components: s.components, wires: s.wires.map((x, i) => (i === index ? nw : x)) }
+}
+
+// Translate the whole wire `index` by (dgx,dgy). An end that was sitting ON a component terminal is a
+// real connection, so sliding the run would silently break it — each such end gets an orthogonal
+// bridge from the pin to where the end landed. Same rule the part drag uses (bridgeWiresForMove), so
+// "the connection stretches, it does not snap" holds however you grab the drawing.
+export function moveWireBy(s: Schematic, index: number, dgx: number, dgy: number): Schematic {
+  const w = s.wires[index]
+  if (!w || (dgx === 0 && dgy === 0)) return s
+  const pins = new Set<string>()
+  for (const c of s.components) for (const t of terminalsOf(c)) pins.add(key(t.gx, t.gy))
+  const moved: Wire = { x1: w.x1 + dgx, y1: w.y1 + dgy, x2: w.x2 + dgx, y2: w.y2 + dgy }
+  const bridges: Wire[] = []
+  if (pins.has(key(w.x1, w.y1))) bridges.push(...orthoRoute({ x: w.x1, y: w.y1 }, { x: moved.x1, y: moved.y1 }))
+  if (pins.has(key(w.x2, w.y2))) bridges.push(...orthoRoute({ x: w.x2, y: w.y2 }, { x: moved.x2, y: moved.y2 }))
+  return {
+    components: s.components,
+    wires: [...s.wires.map((x, i) => (i === index ? moved : x)), ...bridges],
+  }
+}
+
+// The wire endpoints coincident with (gx,gy) — the editor's grab test for an endpoint drag.
+export function wireEndsAt(s: Schematic, gx: number, gy: number): WireEndRef[] {
+  const out: WireEndRef[] = []
+  s.wires.forEach((w, index) => {
+    if (w.x1 === gx && w.y1 === gy) out.push({ index, end: 1 })
+    if (w.x2 === gx && w.y2 === gy) out.push({ index, end: 2 })
+  })
+  return out
+}
+
 // SCH-15: after a part/selection move, an attached wire whose OTHER end stayed put has gone diagonal
 // (its moved endpoint followed the terminal, the far end didn't). Re-route each such wire orthogonally
 // (an L bend) so connections read clean instead of stretching to diagonals. Endpoints are unchanged,

@@ -6,7 +6,7 @@ import {
   Schematic, SchComponent, SchKind, terminalsOf, localTerminals, toCircuit, ampCategory, computeNets,
   SINGLETON_KINDS, hasKind,
   attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentInBounds,
-  clampMoveTarget, componentTerminalBox,
+  clampMoveTarget, componentTerminalBox, moveWireEnd, moveWireBy,
   mirrorComponentWithWires, canMirror, orthoRoute, rerouteAttachedWires, deleteComponentsWithWires, migrateSchematic,
   type WireEndRef,
 } from '../core/schematic'
@@ -248,9 +248,21 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   const [drag, setDrag] = useState<
     | { id: string; ox: number; oy: number; attached: WireEndRef[] }
     | { ids: string[]; wireEnds: string[]; startGx: number; startGy: number }
+    | { wireIdx: number; end: 1 | 2 }                              // SCH-16 endpoint drag
+    | { wireIdx: number; wStartGx: number; wStartGy: number }      // SCH-16 whole-segment drag
     | null
   >(null)
   const dragBase = useRef<Schematic | null>(null)
+  // SCH-16: a press on a wire arms a drag but does not commit to one — a press that never moves is
+  // still a click (select the wire, or start a pin-magnetic wire when the press is on a pin). The
+  // first mouse-move past the grab cell promotes it to a real wire drag.
+  const pendingWire = useRef<
+    | { wireIdx: number; end: 1 | 2; gx: number; gy: number }
+    | { wireIdx: number; wStartGx: number; wStartGy: number; gx: number; gy: number }
+    | null
+  >(null)
+  const wireDragged = useRef(false) // a drag happened → the click that follows must not re-select
+  const [hoverWire, setHoverWire] = useState<number | null>(null)
   const [placeRotation, setPlaceRotation] = useState(0)
   const [placeMirror, setPlaceMirror] = useState(false) // ghost pre-flip (Stage 4)
   // On-screen paper skin (white / green pad / blueprint) — view-only; export is always white.
@@ -519,7 +531,8 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   // Nearest wireable pin (a component terminal or an existing wire endpoint) within the magnetic
   // radius of the RAW mouse position — sub-grid distance, so the snap feels magnetic rather than
   // cell-quantized. Recomputed in the down handlers (not read from hover state) to avoid staleness.
-  function pinNear(e: React.MouseEvent): { x: number; y: number } | null {
+  // `skipWire` (SCH-16) omits one wire's own ends, so an endpoint being dragged cannot snap to itself.
+  function pinNear(e: React.MouseEvent, skipWire?: number): { x: number; y: number } | null {
     const r = svgRef.current!.getBoundingClientRect()
     const m = toWorld(view, e.clientX - r.left, e.clientY - r.top)
     let best: { x: number; y: number } | null = null
@@ -530,8 +543,43 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
       if (d < bd) { bd = d; best = { x: gx, y: gy } }
     }
     for (const c of sch.components) for (const t of terminalsOf(c)) consider(t.gx, t.gy)
-    for (const w of sch.wires) { consider(w.x1, w.y1); consider(w.x2, w.y2) }
+    sch.wires.forEach((w, i) => { if (i !== skipWire) { consider(w.x1, w.y1); consider(w.x2, w.y2) } })
     return best
+  }
+
+  // Only COMPONENT pins (not wire endpoints). A press here must keep starting the pin-magnetic wiring
+  // gesture, so the SCH-16 wire grab lets the event through and disambiguates on move (click = wire,
+  // drag = re-route the end).
+  function componentPinNear(e: React.MouseEvent): boolean {
+    const r = svgRef.current!.getBoundingClientRect()
+    const m = toWorld(view, e.clientX - r.left, e.clientY - r.top)
+    const lim = PIN_SNAP_PX / view.scale
+    for (const c of sch.components) for (const t of terminalsOf(c)) {
+      if (Math.hypot(m.x - (t.gx * GRID + PAD), m.y - (t.gy * GRID + PAD)) < lim) return true
+    }
+    return false
+  }
+
+  // SCH-16: press on a wire → arm an endpoint drag (near an end) or a whole-segment drag (on the body).
+  function onWireDown(e: React.MouseEvent, i: number) {
+    if (tool !== 'select' || pinWire) return
+    const w = sch.wires[i]
+    if (!w) return
+    const r = svgRef.current!.getBoundingClientRect()
+    const m = toWorld(view, e.clientX - r.left, e.clientY - r.top)
+    const dist = (x: number, y: number) => Math.hypot(m.x - (x * GRID + PAD), m.y - (y * GRID + PAD))
+    const d1 = dist(w.x1, w.y1), d2 = dist(w.x2, w.y2)
+    const grab = PIN_SNAP_PX / view.scale
+    const { gx, gy } = gridAt(e)
+    dragBase.current = sch
+    wireDragged.current = false
+    dragSnapped.current = false
+    pendingWire.current = Math.min(d1, d2) <= grab
+      ? { wireIdx: i, end: d1 <= d2 ? 1 : 2, gx, gy }
+      : { wireIdx: i, wStartGx: gx, wStartGy: gy, gx, gy }
+    // Swallow the press only when it is NOT on a component pin — on a pin, onSvgDown must still get
+    // it so a click there starts a wire as it always did.
+    if (!componentPinNear(e)) e.stopPropagation()
   }
 
   // Pin-magnetic wiring gesture: first pin-down starts it, second commits the orthogonal route,
@@ -647,10 +695,32 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   function onWireClick(e: React.MouseEvent, i: number) {
     e.stopPropagation()
     if (tool === 'wire') return // don't select while drawing wires
+    if (wireDragged.current) { wireDragged.current = false; return } // that was a re-route, not a click
     if (pinWire || pinNear(e)) return // the down already started/committed a pin wire — not a select
     setSelectedWire(i)
     setSelected(null)
   }
+  // SCH-16: apply a wire drag from the mousedown state (`dragBase`), like every other drag — the
+  // gesture is idempotent, so it can never trail a stale bridge (see DRAG-1 on `dragBase`).
+  function applyWireDrag(
+    e: React.MouseEvent,
+    d: { wireIdx: number; end: 1 | 2 } | { wireIdx: number; wStartGx: number; wStartGy: number },
+    gx: number, gy: number,
+  ) {
+    const base = dragBase.current ?? sch
+    const b = canvasBounds()
+    const cx = Math.min(Math.max(gx, 0), b.maxGx), cy = Math.min(Math.max(gy, 0), b.maxGy)
+    if (!dragSnapped.current) { snapshot(); dragSnapped.current = true }
+    if ('end' in d) {
+      // The end snaps magnetically onto a pin/node when it lands near one — the same magnet the
+      // wiring gesture uses — so re-attaching a connection is a drop, not a pixel hunt.
+      const pin = pinNear(e, d.wireIdx)
+      setSch(moveWireEnd(base, d.wireIdx, d.end, pin ? pin.x : cx, pin ? pin.y : cy))
+    } else {
+      setSch(moveWireBy(base, d.wireIdx, cx - d.wStartGx, cy - d.wStartGy))
+    }
+  }
+
   // Hover-targeting (Stage 2): the part whose terminal bounding box contains the snapped grid
   // point — computed from the model, not DOM enter/leave on the artwork, so the gaps between a
   // symbol's thin strokes still count as "over the part". Topmost (last rendered) wins.
@@ -670,14 +740,30 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     const { gx, gy } = gridAt(e)
     setHoverGrid({ gx, gy }) // live snap indicator for the wire tool
     setHoverPartId(partAt(gx, gy))
-    setHoverPin(tool === 'select' && !drag && !marquee ? pinNear(e) : null)
+    // The magnet ring also shows WHILE dragging a wire endpoint — that is where the end will land.
+    const endDrag = drag && 'wireIdx' in drag && 'end' in drag ? drag.wireIdx : null
+    setHoverPin(tool === 'select' && !marquee && (!drag || endDrag !== null)
+      ? pinNear(e, endDrag ?? undefined) : null)
     if (marquee) {
       if (gx !== marquee.x0 || gy !== marquee.y0) marqueeMoved.current = true
       setMarquee((m) => (m ? { ...m, x1: gx, y1: gy } : m))
       return
     }
+    // SCH-16: a pending wire grab becomes a real drag as soon as the pointer leaves the grab cell.
+    const pend = pendingWire.current
+    if (pend && !drag && (gx !== pend.gx || gy !== pend.gy)) {
+      pendingWire.current = null
+      wireDragged.current = true
+      setPinWire(null) // a press on a pin may have armed the wiring gesture — the drag wins
+      setDrag('end' in pend
+        ? { wireIdx: pend.wireIdx, end: pend.end }
+        : { wireIdx: pend.wireIdx, wStartGx: pend.wStartGx, wStartGy: pend.wStartGy })
+      applyWireDrag(e, pend, gx, gy) // apply this move too — setDrag only lands on the next render
+      return
+    }
     if (!drag) return
     const base = dragBase.current ?? sch // the drawing as it was at mousedown — see `dragBase`
+    if ('wireIdx' in drag) { applyWireDrag(e, drag, gx, gy); return }
     if ('ids' in drag) {
       // Group drag: translate the whole selection by the TOTAL delta from the grab point, clamped so
       // no selected part's terminal crosses ANY edge (SCH-14 — parts can't be dragged off-canvas).
@@ -712,9 +798,10 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     const didMove = dragSnapped.current // a part/selection actually translated this gesture
     dragSnapped.current = false
     dragBase.current = null
+    pendingWire.current = null // a press that never moved stays a click (select / start a wire)
     // SCH-15: on drop, re-route the moved part's attached wires orthogonally so they read clean
     // instead of stretching to diagonals. No new snapshot — part of the same one-undo drag gesture.
-    if (dropped && didMove) {
+    if (dropped && didMove && !('wireIdx' in dropped)) {
       const ids = 'ids' in dropped ? new Set(dropped.ids) : new Set([dropped.id])
       setSch((s) => rerouteAttachedWires(s, ids))
     }
@@ -1066,7 +1153,10 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                 strokeWidth={selectedWire === i ? 3 : 2} />
               <line x1={px(w.x1)} y1={px(w.y1)} x2={px(w.x2)} y2={px(w.y2)}
                 stroke="transparent" strokeWidth={12}
-                style={{ cursor: tool === 'wire' ? 'crosshair' : 'pointer', pointerEvents: tool === 'wire' ? 'none' : 'auto' }}
+                style={{ cursor: tool === 'wire' ? 'crosshair' : 'move', pointerEvents: tool === 'wire' ? 'none' : 'auto' }}
+                onMouseDown={(e) => onWireDown(e, i)}
+                onMouseEnter={() => tool === 'select' && setHoverWire(i)}
+                onMouseLeave={() => setHoverWire((h) => (h === i ? null : h))}
                 onClick={(e) => onWireClick(e, i)} />
             </g>
           ))}
@@ -1106,6 +1196,19 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
               grid) but OUTSIDE the measured content, so the ghost riding your cursor toward an edge
               doesn't drag the whole view around with it. */}
           <g transform={viewTransform}>
+            {/* SCH-16: grab handles on the wire under the cursor (or the selected one) — the
+                affordance that says a wire can be re-routed: drag an end to re-attach it, drag the
+                body to slide the run. */}
+            {(() => {
+              const i = drag && 'wireIdx' in drag ? drag.wireIdx : (hoverWire ?? selectedWire)
+              const w = i === null ? undefined : sch.wires[i]
+              if (!w || tool !== 'select') return null
+              return ([[w.x1, w.y1], [w.x2, w.y2]] as const).map(([x, y], k) => (
+                <rect key={k} x={px(x) - 4} y={px(y) - 4} width={8} height={8} rx={1.5}
+                  fill="var(--bg-display)" stroke="var(--accent-blue)" strokeWidth={1.5} pointerEvents="none" />
+              ))
+            })()}
+
             {/* wire-in-progress: start marker + rubber-band to the snapped cursor point */}
             {wireStart && (
               <circle cx={px(wireStart.x)} cy={px(wireStart.y)} r={4} fill="none" stroke="var(--accent-blue)" strokeWidth={2} pointerEvents="none" />
@@ -1122,7 +1225,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
 
             {/* Stage 3 pin-magnetic wiring: highlight ring on the snapped pin, and while a gesture
                 is live, the exact orthogonal route that a commit would add (dashed). */}
-            {hoverPin && !drag && !marquee && (
+            {hoverPin && !marquee && (!drag || 'end' in drag) && (
               <circle cx={px(hoverPin.x)} cy={px(hoverPin.y)} r={7} fill="none"
                 stroke="var(--accent-blue)" strokeWidth={2} pointerEvents="none" />
             )}
