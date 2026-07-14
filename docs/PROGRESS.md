@@ -8,6 +8,51 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
+## FIT-1 DONE (2026-07-13 — the schematic is always framed; and the mount clamp that was shredding circuits is gone)
+
+Two things, and the second one is the bigger deal.
+
+**The framing (the spec).** The editor had no viewport at all — it drew straight into pixel space
+(`px(g) = g*GRID + PAD`), so a part at `gx = 0` whose glyph/label overhangs its grid node rendered past
+the left edge (the reported RC low-pass: the CH2 instrument body + its ground glyph, cut off). New pure
+`core/viewport.ts` — `fitToContent(content, viewport, opts)` → `{scale, tx, ty}`, with margin, zoom
+clamp (`maxZoom = 1`, so a lone small part isn't magnified), centering, and an identity view for empty
+content. The editor renders through that transform in three layers: a **grid layer** (transformed, so
+the ruling stays aligned to the parts, sized in world units), the **content layer** (the drawing — and
+the *only* thing measured), and an **overlay layer** (ghost/marquee/wire-preview — outside the
+measurement, so the ghost riding your cursor can't drag the view around). The content extent comes from
+`getBBox()` on the content layer, which includes glyphs and text labels — measuring terminal grid points
+would still clip exactly what was being clipped. `getBBox` reports the group's *pre-transform* box, so a
+reframe can't feed back into what it measures: **no oscillation** (verified live — the transform is
+byte-stable across samples after repeated rotates). Refit runs in a `useLayoutEffect` on
+load/place/move/rotate/flip/delete/wire + a `ResizeObserver` on the pad; it is **skipped mid-drag** and
+settles on drop. Pointer→grid and the magnetic pin snap now go through `toWorld` (the snap radius stays
+a *screen* distance at any zoom).
+
+**The bug it exposed — SCH-14's mount/open-time `clampAllInBounds` is REMOVED (deviation from FIT-1's
+allowed-files list; andre approved in-session).** It clamped the drawing into whatever pane the editor
+mounted in. In the short stacked **Board** pane (maxGy ≈ 4) it didn't nudge parts, it **sheared** them:
+it pulls each part in independently, so parts land on top of each other and separate nets merge. Every
+example was affected — **rc-lp 6 nets → 4, summing 9 → 4, nmos-output-xy 7 → 3** — silently changing the
+circuit and autosaving the damage. (Pre-existing, not FIT-1: it's visible in a Board-view screenshot
+taken before I touched anything.) Its stated purpose — "an off-canvas part must not be unreachable" — is
+now the viewport's job, so there is nothing to recover by mutating the model. The **interactive** SCH-14
+clamps (drag/rotate) stay and keep their invariant, but now clamp to the **framed region** instead of the
+raw pane, so they're pane-size independent and the region always contains every existing part. The core
+`clampAllInBounds` is kept (correct as a pure op) but is wired to nothing, with a comment + a test
+locking the shear so nobody re-adds it to a load path.
+
+Gate: **357/357** (11 new `fitToContent` tests — centering, per-side margin, min/max zoom clamp, empty
+content, no-NaN, stability, `toWorld` inverse; + 1 test locking the clamp's shear). `tsc && vite build`
+clean. `core/signal.ts` untouched → 12-bit canary unaffected. Verified live in Chrome: examples load
+fully framed with a positive gutter on all four sides (measured in screen space — rc-lp `L23 T64 R633
+B285`, and the reported CH2 instrument is whole); opening the Board view now leaves the schematic
+**byte-identical** (0 parts moved, 12 wires → 12, where it used to shear 10 parts and merge 9 nets → 4);
+placing a part at the far edge reframes it into view; 3× rotate leaves the fit stable; no console errors.
+
+**Note for the next session:** manual pan/zoom is intentionally absent (always-reframe is André's call,
+FIT-1 out-of-scope list). Breadboard-view framing was not touched.
+
 ## CHECK-1 DONE (2026-07-13 — an explicit scope-−→GND wire is no longer reported as a short)
 
 The reported false failure — RC low-pass, scope − wired to GND on both sides, Check says *"GND and 1- are

@@ -633,6 +633,27 @@ describe('SCH-14: parts stay on the (scroll-free) canvas', () => {
     const s: Schematic = { components: [{ id: 'R1', kind: 'resistor', gx: 2, gy: 2, value: 1000 }], wires: [] }
     expect(clampAllInBounds(s, 10, 10)).toBe(s)
   })
+
+  // FIT-1: why the editor no longer runs this on mount/open. Clamping into a box SMALLER than the
+  // drawing does not translate the circuit, it SHEARS it — each part is pulled in independently, so
+  // parts land on top of each other and separate nets merge. The editor used to do exactly this with
+  // the mounting pane's height, which in the short stacked Board pane silently rewired every example
+  // (rc-lp 6 nets → 4) and autosaved the damage. The viewport frames the drawing now; nothing clamps
+  // it. Do not re-wire this to a load path.
+  it('clampAllInBounds SHEARS a circuit when the box is smaller than the drawing (nets merge)', () => {
+    const s: Schematic = {
+      components: [
+        { id: 'W1', kind: 'awg1', gx: 2, gy: 4 },
+        { id: 'R1', kind: 'resistor', gx: 4, gy: 4, value: 1500 },
+        { id: 'C1', kind: 'capacitor', gx: 6, gy: 4, rotation: 1, value: 1e-7 },
+        { id: 'G1', kind: 'ground', gx: 6, gy: 8 },
+      ],
+      wires: [{ x1: 2, y1: 4, x2: 4, y2: 4 }, { x1: 6, y1: 6, x2: 6, y2: 8 }],
+    }
+    const nets = (x: Schematic) => new Set(computeNets(x).values()).size
+    const squashed = clampAllInBounds(s, 40, 4) // the short Board pane: only 4 grid rows
+    expect(nets(squashed)).toBeLessThan(nets(s)) // the circuit is NOT the one the student drew
+  })
 })
 
 import { rerouteAttachedWires } from './schematic'

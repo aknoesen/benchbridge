@@ -473,8 +473,15 @@ export function rotateComponentInBounds(s: Schematic, id: string, maxGx: number,
   return moveComponentWithWires(rotated, id, rc.gx + dgx, rc.gy + dgy, attachedWireEnds(rotated, rc))
 }
 
-// Pull every off-canvas component (and its attached wires) back into view — cheap insurance for saves
-// made before the clamp existed. Returns the same object if nothing was out of bounds.
+// Pull every off-canvas component (and its attached wires) back into view. Returns the same object if
+// nothing was out of bounds.
+//
+// NOT wired to the editor any more — do not re-add it on mount/open (FIT-1). It clamps each part
+// independently, so when the box is smaller than the drawing it does not translate the circuit, it
+// SHEARS it: parts collapse onto each other and nets merge (in the short stacked Board pane every
+// example lost nets — rc-lp 6→4, summing 9→4 — silently changing the circuit and autosaving it).
+// Keeping the whole drawing reachable is the viewport's job now: SchematicEditor auto-fits the view
+// to the content (core/viewport.ts), so nothing can be off-canvas and nothing has to be moved.
 export function clampAllInBounds(s: Schematic, maxGx: number, maxGy: number): Schematic {
   let cur = s, changed = false
   for (const c of s.components) {

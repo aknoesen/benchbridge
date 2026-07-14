@@ -1,15 +1,16 @@
 // Schematic editor (SCH-1) — a lightweight node-and-wire editor (NOT KiCad). Place R/C/L/V/
 // op-amp/ground/probe on a grid, draw wires, edit values. Produces a SPICE-2 Circuit via
 // toCircuit(). See docs/specs/schematic-ngspice.md (SCH-1).
-import { useMemo, useRef, useState, useEffect, type ReactElement, type Dispatch, type SetStateAction, type CSSProperties } from 'react'
+import { useMemo, useRef, useState, useEffect, useLayoutEffect, type ReactElement, type Dispatch, type SetStateAction, type CSSProperties } from 'react'
 import {
   Schematic, SchComponent, SchKind, terminalsOf, localTerminals, toCircuit, ampCategory, computeNets,
   SINGLETON_KINDS, hasKind,
   attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentInBounds,
-  clampMoveTarget, clampAllInBounds, componentTerminalBox,
+  clampMoveTarget, componentTerminalBox,
   mirrorComponentWithWires, canMirror, orthoRoute, rerouteAttachedWires, deleteComponentsWithWires, migrateSchematic,
   type WireEndRef,
 } from '../core/schematic'
+import { fitToContent, toWorld, sameView, IDENTITY_VIEW, type View } from '../core/viewport'
 import { symbolFor, alignTransform, matScale, inkedInner } from '../core/symbolArt'
 import { SYMBOL_CATALOG } from '../core/symbolCatalog'
 import { buildNetlist, TRANSISTOR_PARTS } from '../core/netlist'
@@ -223,6 +224,7 @@ interface EditorProps {
 
 export default function SchematicEditor({ schematic, setSchematic, snapshot, undo, redo, onLoadGenerators, onLoadScope, onOpenTracer, onLoadBoard, w1Wave, w2Wave }: EditorProps) {
   const svgRef = useRef<SVGSVGElement>(null)
+  const contentRef = useRef<SVGGElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   // Whether the pointer is over this panel — gates the global R handler (see the keydown effect).
   const pointerInsideRef = useRef(false)
@@ -271,6 +273,54 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   const [hoverPin, setHoverPin] = useState<{ x: number; y: number } | null>(null)
   const [pinWire, setPinWire] = useState<{ x: number; y: number } | null>(null)
   const [selectedWire, setSelectedWire] = useState<number | null>(null)
+
+  // ---- FIT-1: the schematic is always fully framed on the pad ----------------------------------
+  // The drawing is rendered through this transform. It is recomputed from the RENDERED extent of
+  // the content layer (getBBox — glyphs, ground symbols and text labels included, which grid
+  // coordinates alone would miss) after every change that can move the bounding box, so no part of
+  // the circuit can end up past an edge where the student can neither see nor reach it.
+  const [view, setView] = useState<View>(IDENTITY_VIEW)
+  const [vp, setVp] = useState<{ w: number; h: number }>({ w: 0, h: 0 }) // the pad's rendered size
+
+  useEffect(() => {
+    const el = svgRef.current
+    if (!el) return
+    const measure = () => {
+      const r = el.getBoundingClientRect()
+      setVp((p) => (Math.abs(p.w - r.width) < 0.5 && Math.abs(p.h - r.height) < 0.5 ? p : { w: r.width, h: r.height }))
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure) // the split view is draggable — refit when the pad resizes
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // Refit after the DOM holds the new content but before paint, so a load/place never flashes clipped.
+  // Deliberately NOT run mid-drag: the drag is already clamped to the pad (SCH-14) and the pad is
+  // always framed, so the part stays in view; refitting on every mouse-move would make the canvas
+  // oscillate under the cursor. The drop (drag → null) settles the final fit.
+  useLayoutEffect(() => {
+    const content = contentRef.current
+    if (!content || drag || marquee || vp.w < GRID || vp.h < GRID) return
+    // getBBox measures the content group in its OWN (pre-transform) coordinates, so the fit cannot
+    // feed back into what it measures — a reframe changes the viewport, never the content bbox.
+    const b = sch.components.length || sch.wires.length ? content.getBBox() : null
+    const next = fitToContent(
+      b && b.width > 0 && b.height > 0 ? { x: b.x, y: b.y, w: b.width, h: b.height } : null,
+      vp,
+      { margin: GRID, keepVisible: { x: 0, y: 0, w: vp.w, h: vp.h } },
+    )
+    setView((v) => (sameView(v, next) ? v : next)) // unchanged fit → same object → React bails out
+  }, [sch, drag, marquee, vp])
+
+  const viewTransform = `translate(${view.tx.toFixed(3)} ${view.ty.toFixed(3)}) scale(${view.scale.toFixed(5)})`
+  // The visible pad in world coordinates — the region the grid layer has to cover once the content
+  // is scaled/panned (a plain 100%-sized rect would only cover the un-transformed viewport).
+  function worldRect(): { x: number; y: number; w: number; h: number } {
+    const tl = toWorld(view, 0, 0), br = toWorld(view, vp.w || 1200, vp.h || 800)
+    return { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y }
+  }
 
   // ---- Clipboard (copy/paste/cut). Undo/redo (snapshot/undo/redo) come from App via props. -----
   const dragSnapped = useRef(false) // snapshot once per drag/tune gesture, not per mouse-move
@@ -325,13 +375,14 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     return () => { engineRef.current?.dispose(); engineRef.current = null }
   }, [])
 
-  // SCH-14 recovery: on mount, pull any off-canvas part (from a save made before the clamp existed)
-  // back into view. A no-op when everything is already on-canvas, so it never disturbs a valid drawing.
-  useEffect(() => {
-    const b = canvasBounds()
-    setSch((s) => clampAllInBounds(s, b.maxGx, b.maxGy))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // FIT-1 supersedes SCH-14's mount-time recovery clamp (`clampAllInBounds` on mount/open), which is
+  // REMOVED. It rewrote the drawing to fit whatever pane the editor happened to mount in — and in the
+  // short stacked Board pane (maxGy ≈ 4) it did not merely nudge parts, it sheared them into each
+  // other: every example lost nets (rc-lp 6→4, summing 9→4), silently changing the circuit and
+  // autosaving the damage. Its purpose — "an off-canvas part must not be unreachable" — is now met by
+  // the viewport instead of by mutating the model: the fit always frames the whole drawing, so there
+  // is nothing to recover. The INTERACTIVE clamps (drag/rotate, below) still hold the SCH-14
+  // invariant; they now clamp to the framed region, so they are pane-size independent too.
 
   // SCH-2: build the netlist from the drawing and run it through the engine.
   async function simulate() {
@@ -413,9 +464,9 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
         const src = fromLab ? d.schematic : d
         if (Array.isArray(src.components) && Array.isArray(src.wires)) {
           snapshot()
-          // migrate pre-two-terminal saves (standalone 1-/2- ports → the scope's − pin)
-          const b = canvasBounds()
-          setSch(clampAllInBounds(migrateSchematic({ components: src.components, wires: src.wires }), b.maxGx, b.maxGy))
+          // migrate pre-two-terminal saves (standalone 1-/2- ports → the scope's − pin). FIT-1: the
+          // opened drawing is framed, not clamped — an old save keeps its geometry exactly as drawn.
+          setSch(migrateSchematic({ components: src.components, wires: src.wires }))
           setSelected(null)
           setSelectedWire(null)
           setSimStatus(fromLab
@@ -432,21 +483,29 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     e.target.value = '' // allow re-loading the same file
   }
 
-  // Mouse position → snapped grid coordinates.
+  // Mouse position → snapped grid coordinates. FIT-1: the content is drawn through a fit transform,
+  // so a screen point goes back through `toWorld` before it means anything in grid space.
   function gridAt(e: React.MouseEvent): { gx: number; gy: number } {
     const r = svgRef.current!.getBoundingClientRect()
+    const w = toWorld(view, e.clientX - r.left, e.clientY - r.top)
     return {
-      gx: Math.max(0, Math.round((e.clientX - r.left - PAD) / GRID)),
-      gy: Math.max(0, Math.round((e.clientY - r.top - PAD) / GRID)),
+      gx: Math.max(0, Math.round((w.x - PAD) / GRID)),
+      gy: Math.max(0, Math.round((w.y - PAD) / GRID)),
     }
   }
-  // SCH-14: the usable grid region from the rendered (scroll-free) canvas size. A part's terminals
-  // must stay inside [0..maxGx] × [0..maxGy] or it is lost past the edge. A PAD margin is kept so a
-  // clamped part isn't flush against the frame. Fallback bounds if the SVG isn't measured yet.
+  // SCH-14: the usable grid region — a part's terminals must stay inside [0..maxGx] × [0..maxGy] or
+  // it is dragged/rotated somewhere the student can't see or reach. FIT-1 measures it from the FRAMED
+  // world region rather than the raw pane: the fit always frames the whole drawing, so this region
+  // always contains every existing part (a short pane can no longer squash the circuit into itself),
+  // and it grows as the view zooms out — you can always drag a part outward to make room, and the
+  // drop reframes. Fallback bounds if the pad isn't measured yet.
   function canvasBounds(): { maxGx: number; maxGy: number } {
-    const r = svgRef.current?.getBoundingClientRect()
-    if (!r || r.width < GRID || r.height < GRID) return { maxGx: 40, maxGy: 24 }
-    return { maxGx: Math.max(1, Math.floor((r.width - 2 * PAD) / GRID)), maxGy: Math.max(1, Math.floor((r.height - 2 * PAD) / GRID)) }
+    if (vp.w < GRID || vp.h < GRID) return { maxGx: 40, maxGy: 24 }
+    const r = worldRect()
+    return {
+      maxGx: Math.max(1, Math.floor((r.x + r.w - PAD) / GRID)),
+      maxGy: Math.max(1, Math.floor((r.y + r.h - PAD) / GRID)),
+    }
   }
 
   // Nearest wireable pin (a component terminal or an existing wire endpoint) within the magnetic
@@ -454,11 +513,12 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   // cell-quantized. Recomputed in the down handlers (not read from hover state) to avoid staleness.
   function pinNear(e: React.MouseEvent): { x: number; y: number } | null {
     const r = svgRef.current!.getBoundingClientRect()
-    const mx = e.clientX - r.left, my = e.clientY - r.top
+    const m = toWorld(view, e.clientX - r.left, e.clientY - r.top)
     let best: { x: number; y: number } | null = null
-    let bd = PIN_SNAP_PX
+    // The magnetic radius is a SCREEN distance, so it feels the same at any fit zoom.
+    let bd = PIN_SNAP_PX / view.scale
     const consider = (gx: number, gy: number) => {
-      const d = Math.hypot(mx - (gx * GRID + PAD), my - (gy * GRID + PAD))
+      const d = Math.hypot(m.x - (gx * GRID + PAD), m.y - (gy * GRID + PAD))
       if (d < bd) { bd = d; best = { x: gx, y: gy } }
     }
     for (const c of sch.components) for (const t of terminalsOf(c)) consider(t.gx, t.gy)
@@ -970,7 +1030,19 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                   </>}
             </pattern>
           </defs>
-          <rect x={0} y={0} width="100%" height="100%" fill="url(#gridDots)" />
+          {/* FIT-1 grid layer: transformed with the content so the ruling stays aligned to the
+              parts at any fit zoom, and sized in world units so it still covers the whole pad. */}
+          <g transform={viewTransform}>
+            {(() => {
+              const r = worldRect()
+              return <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="url(#gridDots)" />
+            })()}
+          </g>
+
+          {/* FIT-1 content layer — the drawing itself, and the ONLY thing the fit measures. Transient
+              overlays (cursor ghost, marquee, wire preview) live in the layer below so they can't
+              inflate the bounding box and pull the view around while you hover. */}
+          <g ref={contentRef} transform={viewTransform}>
 
           {/* wires (thin visible line + a fat transparent hit area for easy clicking) */}
           {sch.wires.map((w, i) => (
@@ -985,57 +1057,6 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
             </g>
           ))}
 
-          {/* wire-in-progress: start marker + rubber-band to the snapped cursor point */}
-          {wireStart && (
-            <circle cx={px(wireStart.x)} cy={px(wireStart.y)} r={4} fill="none" stroke="var(--accent-blue)" strokeWidth={2} />
-          )}
-          {tool === 'wire' && wireStart && hoverGrid && (
-            <line x1={px(wireStart.x)} y1={px(wireStart.y)} x2={px(hoverGrid.gx)} y2={px(hoverGrid.gy)}
-              stroke="var(--accent-blue)" strokeWidth={1} strokeDasharray="4 3" pointerEvents="none" />
-          )}
-          {/* live snap indicator: shows exactly which grid point the wire/part will land on */}
-          {tool === 'wire' && hoverGrid && (
-            <circle cx={px(hoverGrid.gx)} cy={px(hoverGrid.gy)} r={5} fill="none"
-              stroke="var(--accent-blue)" strokeWidth={1.5} pointerEvents="none" />
-          )}
-
-          {/* Stage 3 pin-magnetic wiring: highlight ring on the snapped pin, and while a gesture
-              is live, the exact orthogonal route that a commit would add (dashed). */}
-          {hoverPin && !drag && !marquee && (
-            <circle cx={px(hoverPin.x)} cy={px(hoverPin.y)} r={7} fill="none"
-              stroke="var(--accent-blue)" strokeWidth={2} pointerEvents="none" />
-          )}
-          {pinWire && (
-            <circle cx={px(pinWire.x)} cy={px(pinWire.y)} r={4.5} fill="var(--accent-blue)" pointerEvents="none" />
-          )}
-          {pinWire && hoverGrid && (() => {
-            const end = hoverPin ?? { x: hoverGrid.gx, y: hoverGrid.gy }
-            return orthoRoute(pinWire, end).map((w, i) => (
-              <line key={`pw${i}`} x1={px(w.x1)} y1={px(w.y1)} x2={px(w.x2)} y2={px(w.y2)}
-                stroke="var(--accent-blue)" strokeWidth={1.5} strokeDasharray="5 3" pointerEvents="none" />
-            ))
-          })()}
-          {/* marquee box-select */}
-          {marquee && (
-            <rect x={px(Math.min(marquee.x0, marquee.x1))} y={px(Math.min(marquee.y0, marquee.y1))}
-              width={Math.abs(marquee.x1 - marquee.x0) * GRID} height={Math.abs(marquee.y1 - marquee.y0) * GRID}
-              fill="var(--accent-blue)" fillOpacity={0.12} stroke="var(--accent-blue)" strokeWidth={1}
-              strokeDasharray="4 3" pointerEvents="none" />
-          )}
-
-          {/* committed multi-selection: a visible grab-box so it's clear you can press inside and
-              drag to move. The +/-1 pad matches the hit area in onSvgDown. Hidden while marquee-ing. */}
-          {!marquee && (selSet.size + selWires.size) >= 2 && (() => {
-            const b = selectionBounds()
-            if (!b) return null
-            return (
-              <rect x={px(b.minx - 1)} y={px(b.miny - 1)}
-                width={(b.maxx - b.minx + 2) * GRID} height={(b.maxy - b.miny + 2) * GRID}
-                fill="var(--accent-blue)" fillOpacity={0.06} stroke="var(--accent-blue)" strokeWidth={1}
-                strokeDasharray="2 4" pointerEvents="none" />
-            )
-          })()}
-
           {/* components */}
           {sch.components.map((c) => (
             <g key={c.id} onMouseDown={(e) => onComponentDown(e, c.id)} onClick={(e) => e.stopPropagation()}
@@ -1046,25 +1067,6 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
               ))}
             </g>
           ))}
-
-          {/* Stage 4 ghost-place: the active palette part rides the cursor (R/F pre-rotate/flip);
-              the click that commits it is unchanged (onBackgroundClick places at the same snap). */}
-          {placing && hoverGrid && (() => {
-            const kind = tool as SchKind
-            const ghost: SchComponent = {
-              id: newId(kind, sch.components), kind, gx: hoverGrid.gx, gy: hoverGrid.gy,
-              rotation: placeRotation, mirror: (placeMirror && canMirror(kind)) || undefined,
-              value: DEFAULT_VALUE[kind], part: DEFAULT_PART[kind],
-            }
-            return (
-              <g opacity={0.45} pointerEvents="none">
-                {renderSymbol(ghost, px, false)}
-                {terminalsOf(ghost).map((t, i) => (
-                  <circle key={i} cx={px(t.gx)} cy={px(t.gy)} r={3} fill="var(--node-color)" />
-                ))}
-              </g>
-            )
-          })()}
 
           {/* junction dots — a filled dot where two pins butt together (a touch-connection) or three
               or more pins/wires meet, so "these are electrically connected here" is always visible. */}
@@ -1084,8 +1086,85 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
             }
             return dots
           })()}
+          </g>{/* end content layer */}
 
-          {/* Stage 4 hover hint chip — fades in while a part is under the cursor */}
+          {/* FIT-1 overlay layer: transient, cursor-following art. World-space (so it lands on the
+              grid) but OUTSIDE the measured content, so the ghost riding your cursor toward an edge
+              doesn't drag the whole view around with it. */}
+          <g transform={viewTransform}>
+            {/* wire-in-progress: start marker + rubber-band to the snapped cursor point */}
+            {wireStart && (
+              <circle cx={px(wireStart.x)} cy={px(wireStart.y)} r={4} fill="none" stroke="var(--accent-blue)" strokeWidth={2} pointerEvents="none" />
+            )}
+            {tool === 'wire' && wireStart && hoverGrid && (
+              <line x1={px(wireStart.x)} y1={px(wireStart.y)} x2={px(hoverGrid.gx)} y2={px(hoverGrid.gy)}
+                stroke="var(--accent-blue)" strokeWidth={1} strokeDasharray="4 3" pointerEvents="none" />
+            )}
+            {/* live snap indicator: shows exactly which grid point the wire/part will land on */}
+            {tool === 'wire' && hoverGrid && (
+              <circle cx={px(hoverGrid.gx)} cy={px(hoverGrid.gy)} r={5} fill="none"
+                stroke="var(--accent-blue)" strokeWidth={1.5} pointerEvents="none" />
+            )}
+
+            {/* Stage 3 pin-magnetic wiring: highlight ring on the snapped pin, and while a gesture
+                is live, the exact orthogonal route that a commit would add (dashed). */}
+            {hoverPin && !drag && !marquee && (
+              <circle cx={px(hoverPin.x)} cy={px(hoverPin.y)} r={7} fill="none"
+                stroke="var(--accent-blue)" strokeWidth={2} pointerEvents="none" />
+            )}
+            {pinWire && (
+              <circle cx={px(pinWire.x)} cy={px(pinWire.y)} r={4.5} fill="var(--accent-blue)" pointerEvents="none" />
+            )}
+            {pinWire && hoverGrid && (() => {
+              const end = hoverPin ?? { x: hoverGrid.gx, y: hoverGrid.gy }
+              return orthoRoute(pinWire, end).map((w, i) => (
+                <line key={`pw${i}`} x1={px(w.x1)} y1={px(w.y1)} x2={px(w.x2)} y2={px(w.y2)}
+                  stroke="var(--accent-blue)" strokeWidth={1.5} strokeDasharray="5 3" pointerEvents="none" />
+              ))
+            })()}
+
+            {/* marquee box-select */}
+            {marquee && (
+              <rect x={px(Math.min(marquee.x0, marquee.x1))} y={px(Math.min(marquee.y0, marquee.y1))}
+                width={Math.abs(marquee.x1 - marquee.x0) * GRID} height={Math.abs(marquee.y1 - marquee.y0) * GRID}
+                fill="var(--accent-blue)" fillOpacity={0.12} stroke="var(--accent-blue)" strokeWidth={1}
+                strokeDasharray="4 3" pointerEvents="none" />
+            )}
+
+            {/* committed multi-selection: a visible grab-box so it's clear you can press inside and
+                drag to move. The +/-1 pad matches the hit area in onSvgDown. Hidden while marquee-ing. */}
+            {!marquee && (selSet.size + selWires.size) >= 2 && (() => {
+              const b = selectionBounds()
+              if (!b) return null
+              return (
+                <rect x={px(b.minx - 1)} y={px(b.miny - 1)}
+                  width={(b.maxx - b.minx + 2) * GRID} height={(b.maxy - b.miny + 2) * GRID}
+                  fill="var(--accent-blue)" fillOpacity={0.06} stroke="var(--accent-blue)" strokeWidth={1}
+                  strokeDasharray="2 4" pointerEvents="none" />
+              )
+            })()}
+
+            {/* Stage 4 ghost-place: the active palette part rides the cursor (R/F pre-rotate/flip);
+                the click that commits it is unchanged (onBackgroundClick places at the same snap). */}
+            {placing && hoverGrid && (() => {
+              const kind = tool as SchKind
+              const ghost: SchComponent = {
+                id: newId(kind, sch.components), kind, gx: hoverGrid.gx, gy: hoverGrid.gy,
+                rotation: placeRotation, mirror: (placeMirror && canMirror(kind)) || undefined,
+                value: DEFAULT_VALUE[kind], part: DEFAULT_PART[kind],
+              }
+              return (
+                <g opacity={0.45} pointerEvents="none">
+                  {renderSymbol(ghost, px, false)}
+                  {terminalsOf(ghost).map((t, i) => (
+                    <circle key={i} cx={px(t.gx)} cy={px(t.gy)} r={3} fill="var(--node-color)" />
+                  ))}
+                </g>
+              )
+            })()}
+          </g>
+
+          {/* Stage 4 hover hint chip — screen-space (never scaled by the fit) */}
           <g pointerEvents="none" style={{ opacity: tool === 'select' && hoverPartId && !drag && !marquee && !pinWire ? 0.92 : 0, transition: 'opacity 0.25s' }}>
             <rect x={8} y={8} width={272} height={20} rx={10} fill="var(--bg-panel)" stroke="var(--sch-grid)" />
             <text x={144} y={22} fontSize={10} fill="var(--text-secondary)" textAnchor="middle">drag to move (wires follow) · R rotate · F flip · right-click</text>
