@@ -238,11 +238,19 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
   const marqueeMoved = useRef(false)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
   // Single drag (one component, absolute target) OR group drag (a set + wire ends, by delta).
+  // A drag is applied from the schematic as it was at MOUSEDOWN (`dragBase`), never incrementally
+  // from the last frame. Incremental application silently broke connections: moveComponentWithWires
+  // bridges a touch-connection into a real wire, but that new wire is not in `attached` (captured at
+  // mousedown), so on the next mouse-move it was left behind — a real drag ends up trailing a
+  // one-cell stub while the part sails away disconnected (andre: "why is the connection to ground
+  // severed"). Re-deriving from the base each move makes the gesture idempotent: the bridge is built
+  // once, from the full delta, and the wire-end indices stay valid.
   const [drag, setDrag] = useState<
     | { id: string; ox: number; oy: number; attached: WireEndRef[] }
-    | { ids: string[]; wireEnds: string[]; lastGx: number; lastGy: number }
+    | { ids: string[]; wireEnds: string[]; startGx: number; startGy: number }
     | null
   >(null)
+  const dragBase = useRef<Schematic | null>(null)
   const [placeRotation, setPlaceRotation] = useState(0)
   const [placeMirror, setPlaceMirror] = useState(false) // ghost pre-flip (Stage 4)
   // On-screen paper skin (white / green pad / blueprint) — view-only; export is always white.
@@ -566,7 +574,8 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     // Press inside an existing selection → drag the whole group; press outside → start a new box.
     const b = selectionBounds()
     if (b && gx >= b.minx - 1 && gx <= b.maxx + 1 && gy >= b.miny - 1 && gy <= b.maxy + 1) {
-      setDrag({ ids: [...selSet], wireEnds: [...selWires], lastGx: gx, lastGy: gy })
+      dragBase.current = sch
+      setDrag({ ids: [...selSet], wireEnds: [...selWires], startGx: gx, startGy: gy })
       return
     }
     setMarquee({ x0: gx, y0: gy, x1: gx, y1: gy })
@@ -627,8 +636,9 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     if (!groupDrag) { setSelSet(new Set([id])); setSelWires(new Set()) }
     if (tool !== 'select') return
     const { gx, gy } = gridAt(e)
+    dragBase.current = sch
     if (groupDrag) {
-      setDrag({ ids: [...selSet], wireEnds: [...selWires], lastGx: gx, lastGy: gy })
+      setDrag({ ids: [...selSet], wireEnds: [...selWires], startGx: gx, startGy: gy })
     } else {
       const c = sch.components.find((x) => x.id === id)!
       setDrag({ id, ox: gx - c.gx, oy: gy - c.gy, attached: attachedWireEnds(sch, c) })
@@ -667,37 +677,41 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
       return
     }
     if (!drag) return
+    const base = dragBase.current ?? sch // the drawing as it was at mousedown — see `dragBase`
     if ('ids' in drag) {
-      // Group drag: translate the whole selection by the delta since the last grid position, clamped
-      // so no selected part's terminal crosses ANY edge (SCH-14 — parts can't be dragged off-canvas).
-      let ddx = gx - drag.lastGx, ddy = gy - drag.lastGy
+      // Group drag: translate the whole selection by the TOTAL delta from the grab point, clamped so
+      // no selected part's terminal crosses ANY edge (SCH-14 — parts can't be dragged off-canvas).
+      let ddx = gx - drag.startGx, ddy = gy - drag.startGy
       const b = canvasBounds()
       let gMinX = Infinity, gMinY = Infinity, gMaxX = -Infinity, gMaxY = -Infinity
       for (const id of drag.ids) {
-        const c = sch.components.find((x) => x.id === id); if (!c) continue
+        const c = base.components.find((x) => x.id === id); if (!c) continue
         const tb = componentTerminalBox(c)
         gMinX = Math.min(gMinX, tb.minx); gMinY = Math.min(gMinY, tb.miny)
         gMaxX = Math.max(gMaxX, tb.maxx); gMaxY = Math.max(gMaxY, tb.maxy)
       }
       ddx = Math.min(Math.max(ddx, -gMinX), b.maxGx - gMaxX)
       ddy = Math.min(Math.max(ddy, -gMinY), b.maxGy - gMaxY)
-      if (ddx !== 0 || ddy !== 0) { if (!dragSnapped.current) { snapshot(); dragSnapped.current = true } marqueeMoved.current = true; setSch((s) => moveSelectionBy(s, new Set(drag.ids), new Set(drag.wireEnds), ddx, ddy)) }
-      setDrag({ ids: drag.ids, wireEnds: drag.wireEnds, lastGx: drag.lastGx + ddx, lastGy: drag.lastGy + ddy })
+      if (ddx !== 0 || ddy !== 0) {
+        if (!dragSnapped.current) { snapshot(); dragSnapped.current = true }
+        marqueeMoved.current = true
+      }
+      setSch(moveSelectionBy(base, new Set(drag.ids), new Set(drag.wireEnds), ddx, ddy))
       return
     }
-    if (!dragSnapped.current) { snapshot(); dragSnapped.current = true }
     const b = canvasBounds()
-    setSch((s) => {
-      const c = s.components.find((x) => x.id === drag.id)
-      if (!c) return s
-      const t = clampMoveTarget(c, gx - drag.ox, gy - drag.oy, b.maxGx, b.maxGy) // keep every terminal on-canvas
-      return moveComponentWithWires(s, drag.id, t.gx, t.gy, drag.attached)
-    })
+    const c = base.components.find((x) => x.id === drag.id)
+    if (!c) return
+    const t = clampMoveTarget(c, gx - drag.ox, gy - drag.oy, b.maxGx, b.maxGy) // keep every terminal on-canvas
+    if (t.gx === c.gx && t.gy === c.gy) { setSch(base); return }
+    if (!dragSnapped.current) { snapshot(); dragSnapped.current = true }
+    setSch(moveComponentWithWires(base, drag.id, t.gx, t.gy, drag.attached))
   }
   function onMouseUp() {
     const dropped = drag
     const didMove = dragSnapped.current // a part/selection actually translated this gesture
     dragSnapped.current = false
+    dragBase.current = null
     // SCH-15: on drop, re-route the moved part's attached wires orthogonally so they read clean
     // instead of stretching to diagonals. No new snapshot — part of the same one-undo drag gesture.
     if (dropped && didMove) {
@@ -1002,7 +1016,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
           onMouseDown={onSvgDown}
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}
-          onMouseLeave={() => { setMarquee(null); setDrag(null); setHoverPartId(null); setHoverPin(null); setHoverGrid(null) }}
+          onMouseLeave={() => { setMarquee(null); setDrag(null); dragBase.current = null; setHoverPartId(null); setHoverPin(null); setHoverGrid(null) }}
           onContextMenu={(e) => {
             // Right-click a part → action menu (mouse/touch discoverability for R/F etc.).
             e.preventDefault()

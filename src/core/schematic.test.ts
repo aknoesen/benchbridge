@@ -657,6 +657,61 @@ describe('SCH-14: parts stay on the (scroll-free) canvas', () => {
 })
 
 import { rerouteAttachedWires } from './schematic'
+import { EXAMPLES } from './examples'
+
+// DRAG-1: a mouse drag is many mousemoves. The editor MUST apply each one from the schematic as it
+// was at mousedown, never incrementally from the previous frame: moveComponentWithWires turns a
+// touch-connection into a real bridge wire, and that new wire is not in the `attached` list captured
+// at mousedown — so an incremental drag leaves the bridge behind after the first step and the part
+// sails away disconnected. This replays the editor's loop both ways and locks the correct one.
+describe('DRAG-1: a multi-step drag keeps its connections (the "severed ground" bug)', () => {
+  const rc = EXAMPLES.find((e) => e.id === 'rc-lp')!.schematic
+
+  // Is the scope CH1 minus on the same net as some ground symbol?
+  const minusGrounded = (s: Schematic): boolean => {
+    const nets = computeNets(s)
+    const p = s.components.find((c) => c.kind === 'scope1')!
+    const nMinus = nets.get(`${terminalsOf(p)[1].gx},${terminalsOf(p)[1].gy}`)
+    return s.components.filter((c) => c.kind === 'ground')
+      .some((g) => nets.get(`${terminalsOf(g)[0].gx},${terminalsOf(g)[0].gy}`) === nMinus)
+  }
+  // The editor's drag: `attached` captured once at mousedown, every move applied to `base`.
+  const dragFromBase = (base: Schematic, id: string, path: [number, number][]): Schematic => {
+    const attached = attachedWireEnds(base, base.components.find((c) => c.id === id)!)
+    let s = base
+    for (const [gx, gy] of path) s = moveComponentWithWires(base, id, gx, gy, attached)
+    return s
+  }
+
+  it('rc-lp starts with 1− grounded by a touch-connection (G2 sits on the − pin, no wire)', () => {
+    expect(rc.wires.some((w) => (w.x1 === 8 && w.y1 === 6) || (w.x2 === 8 && w.y2 === 6))).toBe(false)
+    expect(minusGrounded(rc)).toBe(true)
+  })
+
+  it('dragging that ground away over MANY steps keeps 1− grounded (bridges into a real wire)', () => {
+    const s = dragFromBase(rc, 'G2', [[8, 7], [7, 8], [6, 9], [5, 10]]) // a real mouse path
+    expect(minusGrounded(s)).toBe(true)
+    expect(s.wires).toContainEqual({ x1: 8, y1: 6, x2: 5, y2: 10 }) // ONE bridge, the full delta
+  })
+
+  it('the old incremental drag severed it — the regression this locks out', () => {
+    let s = rc
+    const attached = attachedWireEnds(rc, rc.components.find((c) => c.id === 'G2')!)
+    for (const [gx, gy] of [[8, 7], [7, 8], [6, 9], [5, 10]] as [number, number][]) {
+      s = moveComponentWithWires(s, 'G2', gx, gy, attached) // applied to the CURRENT state — wrong
+    }
+    expect(minusGrounded(s)).toBe(false)      // ← the reported bug
+    expect(s.wires).toContainEqual({ x1: 8, y1: 6, x2: 8, y2: 7 }) // the stranded one-cell stub
+  })
+
+  it('a group drag keeps its connections over many steps too', () => {
+    const ids = new Set(['G2'])
+    const path: [number, number][] = [[1, 1], [2, 2], [3, 3], [-3, 4]] // cumulative deltas
+    let s = rc
+    for (const [dx, dy] of path) s = moveSelectionBy(rc, ids, new Set(), dx, dy) // always from base
+    expect(minusGrounded(s)).toBe(true)
+  })
+})
 
 describe('SCH-15: attached wires re-route orthogonally on move (core, testable half)', () => {
   it('replaces a diagonal attached wire with an orthogonal L, keeping the connection', () => {
