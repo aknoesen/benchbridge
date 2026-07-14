@@ -256,6 +256,29 @@ export function computeNets(s: Schematic): Map<string, string> {
   return out
 }
 
+// The computeNets nets that ARE node 0: every ground symbol the designer drew, plus the W1/W2
+// ground returns (the M2K's fixed internal bond — instrument model Rule 1). Nothing is inferred
+// here: a scope − reaches this set only when the designer explicitly wired it to a ground, which
+// is exactly how a single-ended measurement is expressed (completeness corollary).
+//
+// CHECK-1: this is the SINGLE source of truth for "what is ground", shared by toCircuit's rename,
+// the board Check (schematicExpectation) and boardNodeMap. Ground symbols are repeatable, so a
+// schematic has many raw ground nets that are one node — a consumer that skips this fold sees
+// nodes that differ on the schematic but not on the board, and reports shorts that do not exist.
+export function groundNetsOf(s: Schematic, nets: Map<string, string>): Set<string> {
+  const out = new Set<string>()
+  const add = (t: SchTerminal | undefined) => {
+    const n = t && nets.get(key(t.gx, t.gy))
+    if (n) out.add(n)
+  }
+  for (const c of s.components) {
+    const ts = terminalsOf(c)
+    if (c.kind === 'ground') add(ts[0])
+    else if (c.kind === 'awg1' || c.kind === 'awg2') add(ts[1]) // the drawn return
+  }
+  return out
+}
+
 // ── Rubber-band wires (EDIT-1) ─────────────────────────────────────────────────
 // When a component moves or rotates, wire endpoints sitting on its terminals follow, so
 // connections stretch instead of breaking. Connectivity here is by coordinate coincidence,
@@ -640,7 +663,7 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
   for (const w of s.wires) { bump(key(w.x1, w.y1)); bump(key(w.x2, w.y2)) }
   const connected = (t: SchTerminal) => (occ.get(key(t.gx, t.gy)) ?? 0) > 1
 
-  const groundNets = new Set<string>() // every ground symbol's net normalises to '0'
+  const groundNets = groundNetsOf(s, nets) // ground symbols + the W1/W2 returns → node '0'
   let inNet: string | undefined
   let in2Net: string | undefined
   let railNet: string | undefined // a DC supply rail (V+/V-) also counts as a source (DC labs)
@@ -656,8 +679,7 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
   for (const c of s.components) {
     const ts = terminalsOf(c)
     const net = netOf(ts[0].gx, ts[0].gy)
-    if (c.kind === 'ground') groundNets.add(net)
-    else if (c.kind === 'probe') outNet = net
+    if (c.kind === 'probe') outNet = net
     else if (c.kind === 'scope1') {
       // + → probe net; − → reference net when wired: to GND = single-ended (renames to '0'),
       // to a node = differential. Left open = incomplete (flagged below, no inferred ground).
@@ -668,10 +690,9 @@ export function toCircuit(s: Schematic, title = 'Schematic'): ToCircuitResult {
       if (connected(ts[1])) { scope2RefNet = netOf(ts[1].gx, ts[1].gy); scope2NegWired = true }
     } else if (c.kind === 'vsource') inNet = net
     else if (c.kind === 'awg1' || c.kind === 'awg2') {
-      // t0 = output; t1 = the drawn ground return — bonded to the M2K's one internal ground,
-      // so its whole net is forced to node 0. W1 and W2 SHARE that ground (no per-generator 0).
+      // t0 = output; t1 = the drawn ground return — bonded to the M2K's one internal ground, so its
+      // whole net is forced to node 0 (in groundNetsOf). W1 and W2 SHARE it (no per-generator 0).
       if (c.kind === 'awg1') inNet = net; else in2Net = net
-      groundNets.add(netOf(ts[1].gx, ts[1].gy))
     } else if (c.kind === 'vplus' || c.kind === 'vminus' || c.kind === 'dcrail') railNet = net
   }
   if (groundNets.size === 0) warnings.push('No ground — add a ground symbol.')

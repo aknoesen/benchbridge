@@ -32,7 +32,7 @@ describe('breadboard nets (F-1)', () => {
 
 import { checkEquivalence, boardNodeMap, PORT_TERMINAL, to92PinHoles, type BoardLayout } from './breadboard'
 import { normalizeBoardOrder, nextBoardSeq } from './breadboard'
-import { type Schematic } from './schematic'
+import { toCircuit, type Schematic } from './schematic'
 
 import { shiftHole, canDropPart, canDropDip, canDropTransistor, movePart, moveDip, moveTransistor, occupiedHoles } from './breadboard'
 import { rotatePartOnBoard, dipPinHolesPlaced, to92PinHolesPlaced } from './breadboard'
@@ -646,5 +646,89 @@ describe('ARB-7: symmetric passives are orientation-agnostic; polarized parts ar
     const rcElyo: Schematic = { ...rcSch, components: rcSch.components.map((c) => c.id === 'C1' ? { ...c, value: 10e-6 } : c) }
     const bElyo = correctBoard(); flip(bElyo, 'C1')
     expect(checkEquivalence(rcElyo, bElyo, holes).ok).toBe(false) // 10 µF electrolytic → polarized
+  })
+})
+
+// CHECK-1: a scope − EXPLICITLY wired to GND is the single-ended measurement — it makes 1−/2− and
+// GND one node on BOTH sides of the Check, so a board that ties them (correctly) must never be
+// flagged. The fixture is the shipped RC low-pass, the exact circuit that reported the false
+// failure "GND and 1- are different nodes, but your board connects them": its 1− and 2− each carry
+// their own ground symbol, and ground symbols are repeatable — three raw ground nets, one node 0.
+describe('CHECK-1: an explicit scope-− → GND wire is not a short', () => {
+  const holes = buildHoles()
+  const rcLowPass = EXAMPLES.find((e) => e.id === 'rc-lp')!.schematic
+
+  // The correct student build: R1 col1→col3, C1 col3→col5; 1+ on the RC output, 2+ on the W1 input,
+  // the shunt leg on GND — and both scope minuses jumpered to the GND terminal (single-ended).
+  const builtBoard = (): BoardLayout => ({
+    parts: [
+      { id: 'R1', kind: 'resistor', aHole: 'b1', bHole: 'a3' },
+      { id: 'C1', kind: 'capacitor', aHole: 'c3', bHole: 'a5' },
+    ],
+    jumpers: [
+      { a: PORT_TERMINAL['W1'], b: 'a1' },                  // W1 → col1 (in)
+      { a: PORT_TERMINAL['2+'], b: 'c1' },                  // 2+ → col1 (probes the W1 node)
+      { a: PORT_TERMINAL['1+'], b: 'b3' },                  // 1+ → col3 (the RC output)
+      { a: PORT_TERMINAL['GND'], b: 'b5' },                 // GND → col5 (the shunt leg)
+      { a: PORT_TERMINAL['1-'], b: PORT_TERMINAL['GND'] },  // 1− → GND: single-ended
+      { a: PORT_TERMINAL['2-'], b: PORT_TERMINAL['GND'] },  // 2− → GND: single-ended
+    ],
+    ports: [],
+  })
+
+  it('the reported case: the RC low-pass with both minuses wired to GND Checks clean', () => {
+    const r = checkEquivalence(rcLowPass, builtBoard(), holes)
+    expect(r.message).not.toContain('different nodes')
+    expect(r.ok).toBe(true)
+  })
+
+  it('1− ≡ GND and 2− ≡ GND on the schematic side — one node 0, not three ground nets', () => {
+    const exp = schematicExpectation(rcLowPass)
+    const net = (name: string) => exp.ports.find((p) => p.name === name)!.net
+    expect(net('GND')).toBe('0')
+    expect(net('1-')).toBe('0')
+    expect(net('2-')).toBe('0')
+    expect(exp.parts.find((p) => p.id === 'C1')!.b).toBe('0') // the shunt leg's own ground symbol
+  })
+
+  it('symmetric: each minus passes alone — 1− grounded with 2− grounded, and vice versa', () => {
+    // Drop one minus jumper at a time: the schematic grounds BOTH, so an ungrounded minus terminal
+    // is a missing connection, and the other minus must still be silent (no "different nodes").
+    for (const missing of ['1-', '2-']) {
+      const b = builtBoard()
+      b.jumpers = b.jumpers.filter((j) => j.a !== PORT_TERMINAL[missing])
+      const r = checkEquivalence(rcLowPass, b, holes)
+      expect(r.ok, `${missing} unwired on the board`).toBe(false)
+      expect(r.message.toLowerCase()).toContain('same node') // "run a jumper", not a phantom short
+    }
+  })
+
+  it('still catches a minus wired to the WRONG node (differential board vs single-ended schematic)', () => {
+    const b = builtBoard()
+    b.jumpers = b.jumpers.map((j) => (j.a === PORT_TERMINAL['1-'] ? { a: j.a, b: 'd3' } : j)) // 1− → the output column
+    const r = checkEquivalence(rcLowPass, b, holes)
+    expect(r.ok).toBe(false)
+    expect(r.message).toContain('1-') // reported as the GND connection the board is missing
+  })
+
+  it('still catches a board short between two nodes the schematic keeps apart', () => {
+    const b = builtBoard()
+    b.jumpers.push({ a: 'b1', b: 'b3' }) // col1 (in) ↔ col3 (out): shorts R1 out
+    const r = checkEquivalence(rcLowPass, b, holes)
+    expect(r.ok).toBe(false)
+    expect(r.message.toLowerCase()).toContain('different nodes')
+  })
+
+  it('an UNWIRED minus is still incomplete — no inferred ground (Rule 2 / completeness corollary)', () => {
+    // Same circuit with the 1− ground symbol removed: the − is left open. toCircuit must still flag
+    // it (the floating-minus rule is a separate check, untouched by CHECK-1), and the schematic side
+    // must NOT quietly fold that open − into ground.
+    const floating: Schematic = {
+      ...rcLowPass,
+      components: rcLowPass.components.filter((c) => c.id !== 'G2'), // G2 = the ground on 1−
+    }
+    expect(toCircuit(floating).warnings.some((w) => w.includes('CH1 −'))).toBe(true)
+    const exp = schematicExpectation(floating)
+    expect(exp.ports.find((p) => p.name === '1-')!.net).not.toBe('0')
   })
 })

@@ -8,6 +8,38 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
+## CHECK-1 DONE (2026-07-13 — an explicit scope-−→GND wire is no longer reported as a short)
+
+The reported false failure — RC low-pass, scope − wired to GND on both sides, Check says *"GND and 1- are
+different nodes, but your board connects them"* — was **cause (a) from the spec**: the Check's schematic side
+did not use the same net model as the sim. `toCircuit` folds every ground symbol **plus** the W1/W2 ground
+returns into node `0`; `schematicExpectation` (breadboard.ts) instead used the raw `computeNets` names and
+anchored the `GND` port on the *first* ground symbol only. Ground symbols are repeatable, so `rc-lp`'s three
+grounds (G1 on the shunt leg, G2 on 1−, G3 on 2−) were three different schematic nets. The board correctly
+ties all three to its one GND rail → the comparator saw the board merging nets the schematic held apart.
+Not cause (b): the comparator was already a clean pin-pair partition test with no `1− ≠ GND` special case.
+
+Fix (pure `core/`, no `core/signal.ts`): new **`groundNetsOf(s, nets)`** in `core/schematic.ts` — the single
+source of truth for "which nets are node 0" (drawn ground symbols + the W1/W2 internal returns; nothing
+inferred). `toCircuit` now *calls* it instead of building its own set, `schematicExpectation` folds those nets
+to `'0'` in its `netOf`, and `boardNodeMap`'s duplicate ground scan reads it too — three consumers, one model.
+Because the auto-router (`autoRouteJumpers`) is built on `schematicExpectation`, it now also routes 1−/2− to
+the GND rail as one net (previously it treated each ground as its own net).
+
+Invariants held: **no auto-grounding re-introduced** (INST-1 Rule 2) — only nets containing a ground the
+designer actually drew are folded; an **unwired** minus still lands in its own net and is still flagged by the
+separate floating-minus rule (`toCircuit` warning + the board-side floating hint), locked by a new test.
+
+Gate: **345/345** (6 new CHECK-1 tests: the shipped `rc-lp` fixture Checks clean; `1-`/`2-`/`GND` all resolve
+to `'0'`; a minus on the wrong node, a board short, and a missing minus jumper all still fail; an unwired minus
+is still incomplete). `tsc && vite build` clean. `core/signal.ts` untouched → 12-bit canary unaffected.
+Verified live in Chrome: loaded the RC low-pass example, placed R1+C1, Auto-wired → **✓ Match** (no "different
+nodes"); took over one generated jumper (removing the W1 wire) → Check correctly fails with *"W1 and R1 …
+should be the same node"*. No console errors.
+
+**Next:** FIT-1 (schematic auto-fit / never clipped by the pad edge) — the RC low-pass reproduces it: the
+left-most instrument (CH2 + its ground) is cut by the canvas's left edge on load.
+
 ## SCH-15 core DONE (2026-07-08 — attached wires re-route orthogonally on move; wire-drag gesture deferred)
 
 Diagnosis first: connectivity is already sound (endpoint-based nets + `attachedWireEnds` moving wire ends +

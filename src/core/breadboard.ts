@@ -5,8 +5,12 @@
 // layout can later be checked for electrical equivalence with a drawn circuit (F-2).
 // See docs/specs/breadboard.md.
 
-import { computeNets, terminalsOf, type Schematic, type SchKind } from './schematic'
+import { computeNets, groundNetsOf, terminalsOf, type Schematic, type SchKind } from './schematic'
 import { getOpamp, isKitOpamp } from './opamps'
+
+// The one schematic node every ground net collapses to — the same name toCircuit gives it, so a
+// board net mapped to ground reads back as the simulator's node 0 (CHECK-1 / ARB-2).
+const GND_NET = '0'
 
 export const COLS = 30
 export const PITCH = 18   // px between adjacent holes
@@ -593,7 +597,17 @@ export interface SchematicExpectation {
 }
 export function schematicExpectation(s: Schematic): SchematicExpectation {
   const nets = computeNets(s)
-  const netOf = (gx: number, gy: number) => nets.get(`${gx},${gy}`) ?? `x_${gx}_${gy}`
+  // CHECK-1: fold every ground net into the one node '0' — the same net model toCircuit simulates.
+  // Ground symbols are repeatable, so the raw union-find gives a schematic several ground nets (the
+  // shunt leg's, the one on the scope −, the W1 return). The board ties them all to its single GND
+  // rail, which is correct; without this fold the Check saw the board merging nodes the schematic
+  // kept apart and reported a short — "GND and 1- are different nodes, but your board connects
+  // them" — on a correctly-built single-ended measurement.
+  const gndNets = groundNetsOf(s, nets)
+  const netOf = (gx: number, gy: number) => {
+    const n = nets.get(`${gx},${gy}`) ?? `x_${gx}_${gy}`
+    return gndNets.has(n) ? GND_NET : n
+  }
   const parts: SchematicExpectation['parts'] = []
   const dips: SchematicExpectation['dips'] = []
   const transistors: SchematicExpectation['transistors'] = []
@@ -1058,7 +1072,7 @@ export function boardNodeMap(s: Schematic, board: BoardLayout, holes: Hole[]): M
   for (const w of s.wires) { bump(`${w.x1},${w.y1}`); bump(`${w.x2},${w.y2}`) }
   const connected = (t: { gx: number; gy: number }) => (occ.get(`${t.gx},${t.gy}`) ?? 0) > 1
 
-  const groundNets = new Set<string>()
+  const groundNets = groundNetsOf(s, nets)
   let inNet: string | undefined, in2Net: string | undefined
   let outNet: string | undefined, outRefNet: string | undefined
   let scope2Net: string | undefined, scope2RefNet: string | undefined
@@ -1066,8 +1080,7 @@ export function boardNodeMap(s: Schematic, board: BoardLayout, holes: Hole[]): M
     const ts = terminalsOf(c)
     const net = rawNetOf(ts[0])
     if (!net) continue
-    if (c.kind === 'ground') groundNets.add(net)
-    else if (c.kind === 'probe') outNet = net
+    if (c.kind === 'probe') outNet = net
     else if (c.kind === 'scope1') {
       outNet = net
       if (connected(ts[1])) outRefNet = rawNetOf(ts[1])
@@ -1077,12 +1090,12 @@ export function boardNodeMap(s: Schematic, board: BoardLayout, holes: Hole[]): M
     } else if (c.kind === 'vsource') inNet = net
     else if (c.kind === 'awg1' || c.kind === 'awg2') {
       if (c.kind === 'awg1') inNet = net; else in2Net = net
-      const ret = rawNetOf(ts[1])
-      if (ret) groundNets.add(ret)
     }
   }
+  // The nets arriving here are schematicExpectation's, whose ground nets are already folded to
+  // GND_NET; groundNets covers a raw net reaching this rename by any other route.
   const rename = (net: string): string =>
-    groundNets.has(net) ? '0'
+    net === GND_NET || groundNets.has(net) ? '0'
       : net === inNet ? 'in'
       : net === in2Net ? 'in2'
       : net === outNet ? 'out'
