@@ -676,6 +676,15 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     const c: SchComponent = { id: newId(kind, sch.components), kind, gx, gy, rotation: placeRotation, mirror: (placeMirror && canMirror(kind)) || undefined, value: DEFAULT_VALUE[kind], part: DEFAULT_PART[kind] }
     snapshot()
     setSch((s) => ({ ...s, components: [...s.components, c] }))
+    // ONE-SHOT placement (andre, 2026-07-13): the tool drops back to Select after a part lands. It
+    // used to stay armed, so the next click dropped a SECOND resistor you never asked for — the app
+    // guessing what you want next. It also meant R kept rotating the GHOST instead of the part you
+    // just placed, which is what made standing a resistor upright such a fight. Now the new part is
+    // the selection, so R/F act on IT immediately.
+    setTool('select')
+    setHoverGrid(null)
+    setPlaceRotation(0)
+    setPlaceMirror(false)
     setSelected(c.id)
     setSelSet(new Set([c.id]))
     setSelWires(new Set())
