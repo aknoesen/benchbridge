@@ -8,6 +8,41 @@ state each phase is in; PROGRESS says *how it went and what the next session nee
 
 ---
 
+## SCH-16b DONE (2026-07-13 — the polyline wire model; the "strange shapes" fix)
+
+SCH-16's first cut shipped a bad model and andre called it: dragging wires produced closed rectangles
+and ever-growing wire soup. Cause: it treated "never break a connection" as "grow a bridge from wherever
+the end was to wherever it landed". A DIAGONAL drag bridged each end with an orthogonal **L** (two
+segments) — moved wire + two Ls + the segment left behind = a **closed rectangle** — and every gesture
+grew a *new* bridge instead of reusing the one already there, so it accumulated.
+
+andre chose the polyline model (the one every schematic editor uses). `dragWireSegment` replaces
+`moveWireBy`, on three rules:
+1. **A segment slides PERPENDICULAR to itself** (a horizontal run only moves up/down). Every re-route
+   stays orthogonal, so a connector is one straight segment — never an L, so never a loop.
+2. **A neighbour at a bare corner STRETCHES** to follow (re-pointed, not duplicated) — a run bends
+   instead of accumulating wire.
+3. **Only an end anchored to a fixed component pin grows a connector, and exactly one.** On the next
+   drag that connector is itself the neighbour, so rule 2 stretches it. Nothing accumulates, ever.
+
+`moveWireEnd` keeps its vertex semantics (every wire endpoint on the grabbed point travels, so corners
+don't tear). Also fixed: a wire end sitting ON a component pin was **un-grabbable** — the part's terminal
+dot paints over it, so the press always became the pin-wiring gesture. `onComponentDown` now arms an
+endpoint drag alongside it: press-and-release still starts a wire (unchanged), press-and-DRAG pulls the
+wire end off the pin. That is the actual "re-route a connection" gesture and it was unreachable before.
+
+Gate: **372/372**. And this time the gestures were driven for real in the browser (synthetic mousedown →
+N mousemoves → mouseup against the live editor; the earlier "no drag possible" was me grabbing the wrong
+element, not a tool limit). Verified on the shipped rc-lp: a diagonal body pull slides straight (no L);
+re-dragging the same segment holds the wire count steady (connectors stretch); a corner drag carries both
+segments; an end on R1's pin pulls off and re-routes; pressing a pin without moving still starts a wire
+and the second click still commits an orthogonal route. `tsc && vite build` clean, `core/signal.ts`
+untouched.
+
+**Harness note for the next session:** you CAN drive drags — `elementFromPoint` on the wire's transparent
+hit-line / the part glyph, then dispatch mousedown + several mousemoves + mouseup with `bubbles: true`.
+Read results back from the rendered `<line>` elements, not localStorage (the autosave lags).
+
 ## SCH-16 / DRAG-1 DONE (2026-07-13 — drags stop severing connections; wires can be re-routed without deleting)
 
 Two bugs andre hit on the live site, both in the drag path (neither caused by FIT-1).

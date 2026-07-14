@@ -6,7 +6,7 @@ import {
   Schematic, SchComponent, SchKind, terminalsOf, localTerminals, toCircuit, ampCategory, computeNets,
   SINGLETON_KINDS, hasKind,
   attachedWireEnds, moveComponentWithWires, moveSelectionBy, rotateComponentInBounds,
-  clampMoveTarget, componentTerminalBox, moveWireEnd, moveWireBy,
+  clampMoveTarget, componentTerminalBox, moveWireEnd, dragWireSegment, wireEndsAt,
   mirrorComponentWithWires, canMirror, orthoRoute, rerouteAttachedWires, deleteComponentsWithWires, migrateSchematic,
   type WireEndRef,
 } from '../core/schematic'
@@ -669,7 +669,24 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     // paint inside the component group, so the wiring check must run here too.
     if (tool === 'select') {
       const pin = pinNear(e)
-      if (pinWire || pin) { pinWireDown(pin); return }
+      if (pinWire || pin) {
+        // SCH-16: a pin that already carries a wire END is the one place the wire is unreachable —
+        // the part's terminal dot paints over it. Arm an endpoint drag alongside the wiring gesture:
+        // press-and-release still starts a wire (unchanged), press-and-DRAG pulls the wire end off
+        // the pin, which is how a connection gets re-routed to somewhere else.
+        if (pin && !pinWire) {
+          const ends = wireEndsAt(sch, pin.x, pin.y)
+          if (ends.length) {
+            const { gx, gy } = gridAt(e)
+            dragBase.current = sch
+            wireDragged.current = false
+            dragSnapped.current = false
+            pendingWire.current = { wireIdx: ends[0].index, end: ends[0].end, gx, gy }
+          }
+        }
+        pinWireDown(pin)
+        return
+      }
     }
     setSelectedWire(null)
     dragSnapped.current = false
@@ -717,7 +734,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
       const pin = pinNear(e, d.wireIdx)
       setSch(moveWireEnd(base, d.wireIdx, d.end, pin ? pin.x : cx, pin ? pin.y : cy))
     } else {
-      setSch(moveWireBy(base, d.wireIdx, cx - d.wStartGx, cy - d.wStartGy))
+      setSch(dragWireSegment(base, d.wireIdx, cx - d.wStartGx, cy - d.wStartGy))
     }
   }
 

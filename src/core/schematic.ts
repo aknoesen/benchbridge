@@ -533,27 +533,53 @@ export function moveWireEnd(s: Schematic, index: number, end: 1 | 2, gx: number,
   return { components: s.components, wires: wires.filter((x) => x.x1 !== x.x2 || x.y1 !== x.y2) }
 }
 
-// Translate the whole wire `index` by (dgx,dgy). An end that was CONNECTED to anything else — a
-// component pin, or another wire's endpoint (a bare corner/junction) — would silently break when the
-// run slides away, so each such end gets an orthogonal bridge from the old point to where the end
-// landed. Same rule the part drag uses (bridgeWiresForMove): the connection stretches, it never snaps.
-export function moveWireBy(s: Schematic, index: number, dgx: number, dgy: number): Schematic {
+// Slide wire `index` — the polyline model, and the fix for the "strange shapes" (andre, 2026-07-13):
+// dragging wires used to GROW an orthogonal bridge at each end on every gesture, so a diagonal drag
+// added two L-bends (moved wire + two Ls + the segment it left behind = a closed rectangle) and a
+// second drag added another set. Wire soup. Three rules kill it:
+//
+//   1. A segment slides PERPENDICULAR to itself (a horizontal run only moves up/down). Every re-route
+//      stays orthogonal, so a connector is one straight segment — never an L, so never a loop.
+//   2. A neighbouring segment (one sharing the end point — a bare corner) STRETCHES to follow. It is
+//      re-pointed, not duplicated, so a run bends instead of accumulating wire.
+//   3. Only an end anchored to a fixed COMPONENT PIN, with no neighbour to stretch, grows a connector
+//      — exactly ONE. On the next drag that connector is itself the neighbour, so rule 2 stretches it
+//      rather than adding a second. Nothing accumulates however many times you drag.
+export function dragWireSegment(s: Schematic, index: number, dgx: number, dgy: number): Schematic {
   const w = s.wires[index]
-  if (!w || (dgx === 0 && dgy === 0)) return s
-  // Everything that shares a point with this wire's ends, EXCLUDING the wire itself.
-  const attached = new Set<string>()
-  for (const c of s.components) for (const t of terminalsOf(c)) attached.add(key(t.gx, t.gy))
-  s.wires.forEach((o, i) => {
-    if (i === index) return
-    attached.add(key(o.x1, o.y1)); attached.add(key(o.x2, o.y2))
-  })
-  const moved: Wire = { x1: w.x1 + dgx, y1: w.y1 + dgy, x2: w.x2 + dgx, y2: w.y2 + dgy }
-  const bridges: Wire[] = []
-  if (attached.has(key(w.x1, w.y1))) bridges.push(...orthoRoute({ x: w.x1, y: w.y1 }, { x: moved.x1, y: moved.y1 }))
-  if (attached.has(key(w.x2, w.y2))) bridges.push(...orthoRoute({ x: w.x2, y: w.y2 }, { x: moved.x2, y: moved.y2 }))
+  if (!w) return s
+  let dx = dgx, dy = dgy
+  if (w.y1 === w.y2 && w.x1 !== w.x2) dx = 0         // horizontal run → vertical slide only
+  else if (w.x1 === w.x2 && w.y1 !== w.y2) dy = 0    // vertical run → horizontal slide only
+  if (dx === 0 && dy === 0) return s
+
+  const pins = new Set<string>()
+  for (const c of s.components) for (const t of terminalsOf(c)) pins.add(key(t.gx, t.gy))
+  const moved: Wire = { x1: w.x1 + dx, y1: w.y1 + dy, x2: w.x2 + dx, y2: w.y2 + dy }
+
+  let wires: Wire[] = s.wires.map((x, i) => (i === index ? moved : x))
+  const connectors: Wire[] = []
+  const ends: [number, number, number, number][] = [
+    [w.x1, w.y1, moved.x1, moved.y1],
+    [w.x2, w.y2, moved.x2, moved.y2],
+  ]
+  for (const [ox, oy, nx, ny] of ends) {
+    if (pins.has(key(ox, oy))) {
+      connectors.push({ x1: ox, y1: oy, x2: nx, y2: ny }) // rule 3: one straight connector to the pin
+    } else {
+      wires = wires.map((x, i) => { // rule 2: the neighbours at this corner stretch to follow
+        if (i === index) return x
+        let nw = x
+        if (nw.x1 === ox && nw.y1 === oy) nw = { ...nw, x1: nx, y1: ny }
+        if (nw.x2 === ox && nw.y2 === oy) nw = { ...nw, x2: nx, y2: ny }
+        return nw
+      })
+    }
+  }
+  // A neighbour can shrink to nothing as the run slides over it — drop it, don't keep a dead stub.
   return {
     components: s.components,
-    wires: [...s.wires.map((x, i) => (i === index ? moved : x)), ...bridges],
+    wires: [...wires, ...connectors].filter((x) => x.x1 !== x.x2 || x.y1 !== x.y2),
   }
 }
 

@@ -713,7 +713,7 @@ describe('DRAG-1: a multi-step drag keeps its connections (the "severed ground" 
   })
 })
 
-import { moveWireEnd, moveWireBy, wireEndsAt } from './schematic'
+import { moveWireEnd, dragWireSegment, wireEndsAt } from './schematic'
 
 // SCH-16: re-route a connection without deleting it.
 describe('SCH-16: wire endpoint + segment drag', () => {
@@ -747,24 +747,42 @@ describe('SCH-16: wire endpoint + segment drag', () => {
     expect(moveWireEnd(base, 0, 2, 0, 0)).toBe(base)
   })
 
-  it('segment drag slides the run and BRIDGES the ends that were on pins (connection survives)', () => {
-    const s = moveWireBy(base, 0, 0, 3) // slide the whole W1→R1 wire down 3 cells
+  it('segment drag slides the run, and each PIN end grows exactly one straight connector', () => {
+    const s = dragWireSegment(base, 0, 0, 3) // slide the W1→R1 wire (both ends on pins) down 3
     const nets = computeNets(s)
     expect(nets.get('0,0')).toBe(nets.get('4,0')) // W1.out ↔ R1.a still one node
-    expect(s.wires[0]).toEqual({ x1: 0, y1: 3, x2: 4, y2: 3 }) // the run itself moved…
-    // …and both pin ends grew an orthogonal stub down to it
-    expect(s.wires).toContainEqual({ x1: 0, y1: 0, x2: 0, y2: 3 })
+    expect(s.wires[0]).toEqual({ x1: 0, y1: 3, x2: 4, y2: 3 })
+    expect(s.wires).toContainEqual({ x1: 0, y1: 0, x2: 0, y2: 3 }) // one straight connector per pin
     expect(s.wires).toContainEqual({ x1: 4, y1: 0, x2: 4, y2: 3 })
+    expect(s.wires).toHaveLength(3) // …and nothing else
   })
 
-  it('segment drag of a wire touching no pin just moves it (nothing to bridge)', () => {
+  // The "strange shapes" bug: bridging every drag added L-bends that closed into rectangles, and
+  // each new gesture added more. A segment now slides perpendicular (no Ls) and re-drags STRETCH the
+  // connector instead of growing another one.
+  it('dragging the same segment again REUSES its connectors — no wire accumulates', () => {
+    const once = dragWireSegment(base, 0, 0, 3)
+    const twice = dragWireSegment(once, 0, 0, 2) // drag it again, from the new state
+    expect(twice.wires).toHaveLength(3)          // still 3 — the connectors stretched
+    expect(twice.wires[0]).toEqual({ x1: 0, y1: 5, x2: 4, y2: 5 })
+    expect(twice.wires).toContainEqual({ x1: 0, y1: 0, x2: 0, y2: 5 })
+    expect(twice.wires).toContainEqual({ x1: 4, y1: 0, x2: 4, y2: 5 })
+    expect(computeNets(twice).get('0,0')).toBe(computeNets(twice).get('4,0'))
+  })
+
+  it('a segment only slides PERPENDICULAR to itself — a sideways pull on a horizontal run is ignored', () => {
+    const s = dragWireSegment(base, 0, 5, 3) // horizontal wire: the dx is dropped, the dy applies
+    expect(s.wires[0]).toEqual({ x1: 0, y1: 3, x2: 4, y2: 3 })
+    expect(dragWireSegment(base, 0, 5, 0)).toBe(base) // pure sideways pull → nothing to do
+  })
+
+  it('segment drag of a wire touching nothing just slides it', () => {
     const free: Schematic = { components: [], wires: [{ x1: 1, y1: 1, x2: 3, y2: 1 }] }
-    const s = moveWireBy(free, 0, 2, 2)
-    expect(s.wires).toEqual([{ x1: 3, y1: 3, x2: 5, y2: 3 }])
+    expect(dragWireSegment(free, 0, 0, 2).wires).toEqual([{ x1: 1, y1: 3, x2: 3, y2: 3 }])
   })
 
   it('a zero delta is a no-op (a click on a wire must not mutate the drawing)', () => {
-    expect(moveWireBy(base, 0, 0, 0)).toBe(base)
+    expect(dragWireSegment(base, 0, 0, 0)).toBe(base)
   })
 
   // andre: "one move wires - they break". A wire RUN is a chain of segments meeting at bare corners
@@ -784,9 +802,10 @@ describe('SCH-16: wire endpoint + segment drag', () => {
       expect(rc.components.some((c) => terminalsOf(c).some((t) => t.gx === 2 && t.gy === 2))).toBe(false)
     })
 
-    it('sliding a segment away from that bare corner keeps the run connected (bridged)', () => {
-      const s = moveWireBy(rc, iBend, 3, 0) // slide one leg of the run sideways
-      expect(w1ToScope2(s)).toBe(true)      // ← used to break: only pins were bridged
+    it('sliding a segment keeps the run connected — the neighbour at the bare corner stretches', () => {
+      const s = dragWireSegment(rc, iBend, 3, 0) // the bend leg is vertical → slides sideways
+      expect(w1ToScope2(s)).toBe(true)           // ← used to break: only pins were bridged
+      expect(s.wires.length).toBeLessThanOrEqual(rc.wires.length + 1) // no wire soup
     })
 
     it('dragging the corner itself moves BOTH segments — the L does not tear', () => {
