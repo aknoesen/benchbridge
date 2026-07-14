@@ -766,6 +766,38 @@ describe('SCH-16: wire endpoint + segment drag', () => {
   it('a zero delta is a no-op (a click on a wire must not mutate the drawing)', () => {
     expect(moveWireBy(base, 0, 0, 0)).toBe(base)
   })
+
+  // andre: "one move wires - they break". A wire RUN is a chain of segments meeting at bare corners
+  // (rc-lp bends at (2,2)) — those junctions are connections too, and the first cut of SCH-16 only
+  // ever bridged component pins. Both gestures now hold a run together.
+  describe('a wire run does not tear apart', () => {
+    const rc = EXAMPLES.find((e) => e.id === 'rc-lp')!.schematic
+    // rc-lp: W1.out(2,4) →(2,2)→ 2+(0,2). The bend at (2,2) is a bare wire-to-wire corner.
+    const w1ToScope2 = (s: Schematic) => {
+      const nets = computeNets(s)
+      return nets.get('2,4') === nets.get('0,2') // W1's output still reaches the 2+ probe
+    }
+    const iBend = rc.wires.findIndex((w) => (w.x1 === 2 && w.y1 === 2) || (w.x2 === 2 && w.y2 === 2))
+
+    it('sanity: the run W1 → bend → 2+ is connected, and the bend is a bare corner (no part there)', () => {
+      expect(w1ToScope2(rc)).toBe(true)
+      expect(rc.components.some((c) => terminalsOf(c).some((t) => t.gx === 2 && t.gy === 2))).toBe(false)
+    })
+
+    it('sliding a segment away from that bare corner keeps the run connected (bridged)', () => {
+      const s = moveWireBy(rc, iBend, 3, 0) // slide one leg of the run sideways
+      expect(w1ToScope2(s)).toBe(true)      // ← used to break: only pins were bridged
+    })
+
+    it('dragging the corner itself moves BOTH segments — the L does not tear', () => {
+      const i = rc.wires.findIndex((w) => w.x1 === 2 && w.y1 === 2)
+      const end: 1 | 2 = 1
+      const s = moveWireEnd(rc, i, end, 5, 0) // drag the bend to a new spot
+      expect(w1ToScope2(s)).toBe(true)        // ← used to break: only the grabbed segment moved
+      expect(s.wires.some((w) => (w.x1 === 5 && w.y1 === 0) || (w.x2 === 5 && w.y2 === 0))).toBe(true)
+      expect(s.wires.some((w) => (w.x1 === 2 && w.y1 === 2) || (w.x2 === 2 && w.y2 === 2))).toBe(false) // corner gone
+    })
+  })
 })
 
 describe('SCH-15: attached wires re-route orthogonally on move (core, testable half)', () => {

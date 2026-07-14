@@ -507,31 +507,50 @@ export function orthoRoute(a: { x: number; y: number }, b: { x: number; y: numbe
 // drag the wire's BODY to slide the whole run out of the way. Both are pure; the editor supplies the
 // snapped grid target (its endpoint drag snaps magnetically to pins, as the wiring gesture does).
 
-// Move one endpoint of wire `index` to (gx,gy). Detaching an end from a pin is the POINT of the
-// gesture (you are re-routing), so nothing is bridged here — connectivity follows the endpoints, and
-// dropping the end on a pin/node connects it there. A zero-length wire is refused, not created.
+// Move the wire VERTEX at one end of wire `index` to (gx,gy). Every OTHER wire endpoint sitting on
+// that same point travels with it, so an L-bend or a junction of runs moves as one corner instead of
+// tearing apart (a wire run is a chain of segments meeting at bare points — moving only the grabbed
+// segment's end would rip the chain open).
+//
+// A pin at the old point is deliberately NOT bridged: pulling a wire end off a pin and dropping it on
+// another is exactly how you re-route a connection, and the wire is visibly seen to leave. (Sliding a
+// wire's BODY is the opposite case — see moveWireBy, which bridges so nothing breaks.)
 export function moveWireEnd(s: Schematic, index: number, end: 1 | 2, gx: number, gy: number): Schematic {
   const w = s.wires[index]
   if (!w) return s
-  const nw: Wire = end === 1 ? { ...w, x1: gx, y1: gy } : { ...w, x2: gx, y2: gy }
-  if (nw.x1 === nw.x2 && nw.y1 === nw.y2) return s
-  if (nw.x1 === w.x1 && nw.y1 === w.y1 && nw.x2 === w.x2 && nw.y2 === w.y2) return s
-  return { components: s.components, wires: s.wires.map((x, i) => (i === index ? nw : x)) }
+  const ox = end === 1 ? w.x1 : w.x2, oy = end === 1 ? w.y1 : w.y2
+  if (ox === gx && oy === gy) return s
+  const dragged: Wire = end === 1 ? { ...w, x1: gx, y1: gy } : { ...w, x2: gx, y2: gy }
+  if (dragged.x1 === dragged.x2 && dragged.y1 === dragged.y2) return s // refuse a zero-length wire
+  const wires = s.wires.map((x) => {
+    let nw = x
+    if (nw.x1 === ox && nw.y1 === oy) nw = { ...nw, x1: gx, y1: gy }
+    if (nw.x2 === ox && nw.y2 === oy) nw = { ...nw, x2: gx, y2: gy }
+    return nw
+  })
+  // A neighbouring segment can collapse onto itself as the corner travels — drop it, don't keep a
+  // zero-length ghost. (The dragged wire itself was refused above, so it survives.)
+  return { components: s.components, wires: wires.filter((x) => x.x1 !== x.x2 || x.y1 !== x.y2) }
 }
 
-// Translate the whole wire `index` by (dgx,dgy). An end that was sitting ON a component terminal is a
-// real connection, so sliding the run would silently break it — each such end gets an orthogonal
-// bridge from the pin to where the end landed. Same rule the part drag uses (bridgeWiresForMove), so
-// "the connection stretches, it does not snap" holds however you grab the drawing.
+// Translate the whole wire `index` by (dgx,dgy). An end that was CONNECTED to anything else — a
+// component pin, or another wire's endpoint (a bare corner/junction) — would silently break when the
+// run slides away, so each such end gets an orthogonal bridge from the old point to where the end
+// landed. Same rule the part drag uses (bridgeWiresForMove): the connection stretches, it never snaps.
 export function moveWireBy(s: Schematic, index: number, dgx: number, dgy: number): Schematic {
   const w = s.wires[index]
   if (!w || (dgx === 0 && dgy === 0)) return s
-  const pins = new Set<string>()
-  for (const c of s.components) for (const t of terminalsOf(c)) pins.add(key(t.gx, t.gy))
+  // Everything that shares a point with this wire's ends, EXCLUDING the wire itself.
+  const attached = new Set<string>()
+  for (const c of s.components) for (const t of terminalsOf(c)) attached.add(key(t.gx, t.gy))
+  s.wires.forEach((o, i) => {
+    if (i === index) return
+    attached.add(key(o.x1, o.y1)); attached.add(key(o.x2, o.y2))
+  })
   const moved: Wire = { x1: w.x1 + dgx, y1: w.y1 + dgy, x2: w.x2 + dgx, y2: w.y2 + dgy }
   const bridges: Wire[] = []
-  if (pins.has(key(w.x1, w.y1))) bridges.push(...orthoRoute({ x: w.x1, y: w.y1 }, { x: moved.x1, y: moved.y1 }))
-  if (pins.has(key(w.x2, w.y2))) bridges.push(...orthoRoute({ x: w.x2, y: w.y2 }, { x: moved.x2, y: moved.y2 }))
+  if (attached.has(key(w.x1, w.y1))) bridges.push(...orthoRoute({ x: w.x1, y: w.y1 }, { x: moved.x1, y: moved.y1 }))
+  if (attached.has(key(w.x2, w.y2))) bridges.push(...orthoRoute({ x: w.x2, y: w.y2 }, { x: moved.x2, y: moved.y2 }))
   return {
     components: s.components,
     wires: [...s.wires.map((x, i) => (i === index ? moved : x)), ...bridges],
