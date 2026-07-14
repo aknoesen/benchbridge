@@ -316,13 +316,17 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
     return () => ro.disconnect()
   }, [])
 
-  // Refit after the DOM holds the new content but before paint, so a load/place never flashes clipped.
-  // Deliberately NOT run mid-drag: the drag is clamped to the framed region, so the part stays in
-  // view; refitting on every mouse-move would make the canvas oscillate under the cursor. The drop
-  // (drag → null) settles the final fit.
+  // The view is re-framed when a DRAWING ARRIVES — mount, an Example, an opened file, Clear — and when
+  // the pad is resized. NOT while you draw (andre, 2026-07-13): re-fitting on every edit means placing
+  // a part re-centers the canvas under your cursor, which is intolerable ("place one component - it
+  // snaps to the center - NO"). Framing is about arriving at a drawing you can see whole; once you are
+  // editing, the view holds still and the SCH-14 clamp keeps parts inside it.
+  const [fitKey, setFitKey] = useState(0)
+  const refit = () => setFitKey((k) => k + 1)
+
   useLayoutEffect(() => {
     const content = contentRef.current
-    if (!content || drag || marquee || vp.w < GRID || vp.h < GRID) return
+    if (!content || vp.w < GRID || vp.h < GRID) return
     // getBBox measures the content group in its OWN (pre-transform) coordinates, so the fit cannot
     // feed back into what it measures — a reframe changes the viewport, never the content bbox.
     const b = sch.components.length || sch.wires.length ? content.getBBox() : null
@@ -332,7 +336,8 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
       { margin: GRID },
     )
     setView((v) => (sameView(v, next) ? v : next)) // unchanged fit → same object → React bails out
-  }, [sch, drag, marquee, vp])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitKey, vp]) // deliberately NOT `sch` — editing must not move the view
 
   const viewTransform = `translate(${view.tx.toFixed(3)} ${view.ty.toFixed(3)}) scale(${view.scale.toFixed(5)})`
   // The visible pad in world coordinates — the region the grid layer has to cover once the content
@@ -487,6 +492,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
           // migrate pre-two-terminal saves (standalone 1-/2- ports → the scope's − pin). FIT-1: the
           // opened drawing is framed, not clamped — an old save keeps its geometry exactly as drawn.
           setSch(migrateSchematic({ components: src.components, wires: src.wires }))
+          refit() // a drawing arrived
           setSelected(null)
           setSelectedWire(null)
           setSimStatus(fromLab
@@ -1087,6 +1093,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                 if (ex) {
                   snapshot()
                   setSch(JSON.parse(JSON.stringify(ex.schematic)))
+                  refit() // a drawing arrived — frame it (the one time the view is allowed to move)
                   setSelected(null); setSelectedWire(null)
                   // Drop to the Select tool so the first click on the canvas doesn't drop a resistor.
                   setTool('select'); setWireStart(null)
@@ -1108,7 +1115,7 @@ export default function SchematicEditor({ schematic, setSchematic, snapshot, und
                 </optgroup>
               ))}
             </select>
-            <button className="run-btn" onClick={() => { if (!window.confirm('Clear the entire circuit? You can undo this with Ctrl+Z.')) return; snapshot(); setSch({ components: [], wires: [] }); setSelected(null); setSelectedWire(null) }}>Clear</button>
+            <button className="run-btn" onClick={() => { if (!window.confirm('Clear the entire circuit? You can undo this with Ctrl+Z.')) return; snapshot(); setSch({ components: [], wires: [] }); refit(); setSelected(null); setSelectedWire(null) }}>Clear</button>
             <input ref={fileRef} type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={openCircuit} />
           </div>
         </div>
